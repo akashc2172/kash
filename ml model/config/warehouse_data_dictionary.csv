@@ -1,0 +1,378 @@
+Table,Column,Type,Sample Value
+bridge_lineup_athletes,gameId,VARCHAR,24
+bridge_lineup_athletes,lineupHash,VARCHAR,623-624-625-626-627
+bridge_lineup_athletes,teamId,BIGINT,115
+bridge_lineup_athletes,totalSeconds,BIGINT,2400
+bridge_lineup_athletes,pace,DOUBLE,68.5
+bridge_lineup_athletes,offenseRating,DOUBLE,123.5
+bridge_lineup_athletes,defenseRating,DOUBLE,78.6
+bridge_lineup_athletes,netRating,DOUBLE,44.9
+bridge_lineup_athletes,athleteId,INTEGER,623
+dim_conference_history,id,BIGINT,1
+dim_conference_history,sourceId,VARCHAR,3
+dim_conference_history,name,VARCHAR,Atlantic 10 Conference
+dim_conference_history,abbreviation,VARCHAR,A-10
+dim_conference_history,shortName,VARCHAR,A-10
+dim_conference_history,teams,"STRUCT(id INTEGER, sourceId VARCHAR, school VARCHAR, mascot VARCHAR, startSeason INTEGER, endSeason INTEGER)[]","[{'id': 226, 'sourceId': '213', 'school': 'Penn State', 'mascot': 'Nittany Lions', 'startSeason': 1977, 'endSeason': 1979}, {'id': 338, 'sourceId': '222', 'school': 'Villanova', 'mascot': 'Wildcats', 'startSeason': 1977, 'endSeason': 1980}, {'id': 229, 'sourceId': '221', 'school': 'Pittsburgh', 'mascot': 'Panthers', 'startSeason': 1977, 'endSeason': 1982}, {'id': 73, 'sourceId': '2184', 'school': 'Duquesne', 'mascot': 'Dukes', 'startSeason': 1977, 'endSeason': 1992}, {'id': 245, 'sourceId': '164', 'school': 'Rutgers', 'mascot': 'Scarlet Knights', 'startSeason': 1977, 'endSeason': 1995}, {'id': 347, 'sourceId': '277', 'school': 'West Virginia', 'mascot': 'Mountaineers', 'startSeason': 1977, 'endSeason': 1995}, {'id': 161, 'sourceId': '113', 'school': 'Massachusetts', 'mascot': 'Minutemen', 'startSeason': 1977, 'endSeason': 2025}, {'id': 96, 'sourceId': '45', 'school': 'George Washington', 'mascot': 'Revolutionaries', 'startSeason': 1977, 'endSeason': None}, {'id': 277, 'sourceId': '179', 'school': 'St. Bonaventure', 'mascot': 'Bonnies', 'startSeason': 1980, 'endSeason': None}, {'id': 240, 'sourceId': '227', 'school': 'Rhode Island', 'mascot': 'Rams', 'startSeason': 1981, 'endSeason': None}, {'id': 226, 'sourceId': '213', 'school': 'Penn State', 'mascot': 'Nittany Lions', 'startSeason': 1983, 'endSeason': 1991}, {'id': 289, 'sourceId': '218', 'school': 'Temple', 'mascot': 'Owls', 'startSeason': 1983, 'endSeason': 2013}, {'id': 251, 'sourceId': '2603', 'school': ""Saint Joseph's"", 'mascot': 'Hawks', 'startSeason': 1983, 'endSeason': None}, {'id': 73, 'sourceId': '2184', 'school': 'Duquesne', 'mascot': 'Dukes', 'startSeason': 1994, 'endSeason': None}, {'id': 340, 'sourceId': '259', 'school': 'Virginia Tech', 'mascot': 'Hokies', 'startSeason': 1996, 'endSeason': 2000}, {'id': 359, 'sourceId': '2752', 'school': 'Xavier', 'mascot': 'Musketeers', 'startSeason': 1996, 'endSeason': 2013}, {'id': 64, 'sourceId': '2168', 'school': 'Dayton', 'mascot': 'Flyers', 'startSeason': 1996, 'endSeason': None}, {'id': 91, 'sourceId': '2230', 'school': 'Fordham', 'mascot': 'Rams', 'startSeason': 1996, 'endSeason': None}, {'id': 137, 'sourceId': '2325', 'school': 'La Salle', 'mascot': 'Explorers', 'startSeason': 1996, 'endSeason': None}, {'id': 242, 'sourceId': '257', 'school': 'Richmond', 'mascot': 'Spiders', 'startSeason': 2002, 'endSeason': None}, {'id': 48, 'sourceId': '2429', 'school': 'Charlotte', 'mascot': '49ers', 'startSeason': 2006, 'endSeason': 2013}, {'id': 252, 'sourceId': '139', 'school': 'Saint Louis', 'mascot': 'Billikens', 'startSeason': 2006, 'endSeason': None}, {'id': 34, 'sourceId': '2086', 'school': 'Butler', 'mascot': 'Bulldogs', 'startSeason': 2013, 'endSeason': 2013}, {'id': 333, 'sourceId': '2670', 'school': 'VCU', 'mascot': 'Rams', 'startSeason': 2013, 'endSeason': None}, {'id': 95, 'sourceId': '2244', 'school': 'George Mason', 'mascot': 'Patriots', 'startSeason': 2014, 'endSeason': None}, {'id': 63, 'sourceId': '2166', 'school': 'Davidson', 'mascot': 'Wildcats', 'startSeason': 2015, 'endSeason': None}, {'id': 151, 'sourceId': '2350', 'school': 'Loyola Chicago', 'mascot': 'Ramblers', 'startSeason': 2023, 'endSeason': None}]"
+dim_conferences,id,BIGINT,1
+dim_conferences,sourceId,VARCHAR,3
+dim_conferences,name,VARCHAR,Atlantic 10 Conference
+dim_conferences,abbreviation,VARCHAR,A-10
+dim_conferences,shortName,VARCHAR,A-10
+dim_draft_positions,name,VARCHAR,Center
+dim_draft_positions,abbreviation,VARCHAR,C
+dim_draft_teams,id,BIGINT,1
+dim_draft_teams,sourceId,BIGINT,1
+dim_draft_teams,location,VARCHAR,Atlanta
+dim_draft_teams,name,VARCHAR,Hawks
+dim_draft_teams,displayName,VARCHAR,Atlanta Hawks
+dim_draft_teams,abbreviation,VARCHAR,ATL
+dim_games,id,BIGINT,24
+dim_games,sourceId,VARCHAR,401727499
+dim_games,seasonLabel,VARCHAR,20242025
+dim_games,season,BIGINT,2025
+dim_games,seasonType,VARCHAR,regular
+dim_games,startDate,TIMESTAMP WITH TIME ZONE,2024-11-04 08:00:00-08:00
+dim_games,startTimeTbd,BOOLEAN,False
+dim_games,neutralSite,BOOLEAN,False
+dim_games,conferenceGame,BOOLEAN,False
+dim_games,gameType,VARCHAR,STD
+dim_games,status,VARCHAR,final
+dim_games,attendance,DOUBLE,3716.0
+dim_games,homeTeamId,BIGINT,115
+dim_games,homeTeam,VARCHAR,IU Indianapolis
+dim_games,homeConferenceId,DOUBLE,14.0
+dim_games,homeConference,VARCHAR,Horizon
+dim_games,homePoints,DOUBLE,100.0
+dim_games,homePeriodPoints,INTEGER[],"[48, 52]"
+dim_games,homeWinner,BOOLEAN,True
+dim_games,awayTeamId,BIGINT,492
+dim_games,awayTeam,VARCHAR,IU Columbus
+dim_games,awayPoints,DOUBLE,44.0
+dim_games,awayPeriodPoints,INTEGER[],"[21, 23]"
+dim_games,awayWinner,BOOLEAN,False
+dim_games,excitement,DOUBLE,0.6
+dim_games,venueId,BIGINT,19
+dim_games,venue,VARCHAR,Corteva Coliseum
+dim_games,city,VARCHAR,Indianapolis
+dim_games,state,VARCHAR,IN
+dim_games,tournament,INTEGER,
+dim_games,gameNotes,VARCHAR,Field of 68 Showcase
+dim_games,homeSeed,INTEGER,
+dim_games,awayConferenceId,DOUBLE,12.0
+dim_games,awayConference,VARCHAR,CAA
+dim_games,awaySeed,INTEGER,
+dim_lines_providers,id,BIGINT,1
+dim_lines_providers,name,VARCHAR,ESPN BET
+dim_play_types,id,BIGINT,0
+dim_play_types,name,VARCHAR,Not Available
+dim_shot_range_map,range_value,VARCHAR,rim
+dim_shot_range_map,range_bucket,VARCHAR,rim
+dim_teams,id,BIGINT,96
+dim_teams,sourceId,VARCHAR,45
+dim_teams,school,VARCHAR,George Washington
+dim_teams,mascot,VARCHAR,Revolutionaries
+dim_teams,abbreviation,VARCHAR,GW
+dim_teams,displayName,VARCHAR,George Washington Revolutionaries
+dim_teams,shortDisplayName,VARCHAR,G Washington
+dim_teams,primaryColor,VARCHAR,002843
+dim_teams,secondaryColor,VARCHAR,e8d2a1
+dim_teams,currentVenueId,DOUBLE,136.0
+dim_teams,currentVenue,VARCHAR,Charles E. Smith Center
+dim_teams,currentCity,VARCHAR,Washington
+dim_teams,currentState,VARCHAR,DC
+dim_teams,conferenceId,DOUBLE,1.0
+dim_teams,conference,VARCHAR,A-10
+dim_venues,id,BIGINT,1237
+dim_venues,sourceId,VARCHAR,2292
+dim_venues,name,VARCHAR,Cancha Del Atletico
+dim_venues,city,VARCHAR,Tucuman
+dim_venues,state,VARCHAR,BC
+dim_venues,country,VARCHAR,Argentina
+fact_draft_picks,athleteId,DOUBLE,205.0
+fact_draft_picks,draftTeamId,BIGINT,7
+fact_draft_picks,draftTeam,VARCHAR,Dallas Mavericks
+fact_draft_picks,sourceTeamId,DOUBLE,11.0
+fact_draft_picks,sourceTeamLocation,VARCHAR,Duke
+fact_draft_picks,sourceTeamName,VARCHAR,Blue Devils
+fact_draft_picks,sourceTeamLeagueAffiliation,VARCHAR,France
+fact_draft_picks,sourceTeamCollegeId,DOUBLE,72.0
+fact_draft_picks,year,BIGINT,2025
+fact_draft_picks,overall,BIGINT,1
+fact_draft_picks,round,BIGINT,1
+fact_draft_picks,pick,BIGINT,1
+fact_draft_picks,name,VARCHAR,Cooper Flagg
+fact_draft_picks,overallRank,DOUBLE,1.0
+fact_draft_picks,positionRank,DOUBLE,1.0
+fact_draft_picks,height,DOUBLE,80.0
+fact_draft_picks,weight,DOUBLE,221.0
+fact_draft_picks,position,VARCHAR,F
+fact_lines,gameId,BIGINT,24
+fact_lines,season,BIGINT,2025
+fact_lines,seasonType,VARCHAR,regular
+fact_lines,startDate,VARCHAR,2024-11-04T16:00:00.000Z
+fact_lines,homeTeamId,BIGINT,115
+fact_lines,homeTeam,VARCHAR,IU Indianapolis
+fact_lines,homeConference,VARCHAR,Horizon
+fact_lines,homeScore,DOUBLE,100.0
+fact_lines,awayTeamId,BIGINT,492
+fact_lines,awayTeam,VARCHAR,IU Columbus
+fact_lines,awayConference,VARCHAR,CAA
+fact_lines,awayScore,DOUBLE,44.0
+fact_lines,lines,"STRUCT(provider VARCHAR, spread DOUBLE, overUnder DOUBLE, homeMoneyline INTEGER, awayMoneyline INTEGER, spreadOpen INTEGER, overUnderOpen INTEGER)[]",[]
+fact_lineup_stint_raw,teamId,BIGINT,115
+fact_lineup_stint_raw,team,VARCHAR,IU Indianapolis
+fact_lineup_stint_raw,conference,VARCHAR,Horizon
+fact_lineup_stint_raw,idHash,VARCHAR,623-624-625-626-627
+fact_lineup_stint_raw,athletes,"STRUCT(id INTEGER, ""name"" VARCHAR)[]","[{'id': 623, 'name': 'Timaris Brown'}, {'id': 624, 'name': 'Keenan Garner'}, {'id': 625, 'name': 'Sean Craig'}, {'id': 626, 'name': 'Paul Zilinskas'}, {'id': 627, 'name': 'Jarvis Walker'}]"
+fact_lineup_stint_raw,totalSeconds,BIGINT,2400
+fact_lineup_stint_raw,pace,DOUBLE,68.5
+fact_lineup_stint_raw,offenseRating,DOUBLE,123.5
+fact_lineup_stint_raw,defenseRating,DOUBLE,78.6
+fact_lineup_stint_raw,netRating,DOUBLE,44.9
+fact_lineup_stint_raw,teamStats,"STRUCT(points INTEGER, possessions INTEGER, assists INTEGER, steals INTEGER, turnovers INTEGER, blocks INTEGER, defensiveRebounds INTEGER, offensiveRebounds INTEGER, trueShooting DOUBLE, fieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), freeThrows STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), twoPointers STRUCT(made INTEGER, attempted INTEGER, pct INTEGER, tipIns STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), dunks STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), layups STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), jumpers STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE)), threePointers STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), fourFactors STRUCT(effectiveFieldGoalPct DOUBLE, turnoverRatio DOUBLE, offensiveReboundPct DOUBLE, freeThrowRate DOUBLE))","{'points': 100, 'possessions': 81, 'assists': 20, 'steals': 7, 'turnovers': 5, 'blocks': 0, 'defensiveRebounds': 39, 'offensiveRebounds': 31, 'trueShooting': 54.9, 'fieldGoals': {'made': 37, 'attempted': 81, 'pct': 45.7}, 'freeThrows': {'made': 14, 'attempted': 23, 'pct': 60.9}, 'twoPointers': {'made': 25, 'attempted': 50, 'pct': 50, 'tipIns': {'made': 0, 'attempted': 0, 'pct': 0}, 'dunks': {'made': 2, 'attempted': 2, 'pct': 100}, 'layups': {'made': 11, 'attempted': 25, 'pct': 44}, 'jumpers': {'made': 12, 'attempted': 23, 'pct': 52.2}}, 'threePointers': {'made': 12, 'attempted': 31, 'pct': 38.7}, 'fourFactors': {'effectiveFieldGoalPct': 53.1, 'turnoverRatio': 0.06, 'offensiveReboundPct': 49.2, 'freeThrowRate': 28.4}}"
+fact_lineup_stint_raw,opponentStats,"STRUCT(points INTEGER, possessions INTEGER, assists INTEGER, steals INTEGER, turnovers INTEGER, blocks INTEGER, defensiveRebounds INTEGER, offensiveRebounds INTEGER, trueShooting INTEGER, fieldGoals STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), freeThrows STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), twoPointers STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE, tipIns STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), dunks STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), layups STRUCT(made INTEGER, attempted INTEGER, pct INTEGER), jumpers STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE)), threePointers STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), fourFactors STRUCT(effectiveFieldGoalPct DOUBLE, turnoverRatio DOUBLE, offensiveReboundPct DOUBLE, freeThrowRate INTEGER))","{'points': 44, 'possessions': 56, 'assists': 7, 'steals': 3, 'turnovers': 16, 'blocks': 3, 'defensiveRebounds': 22, 'offensiveRebounds': 8, 'trueShooting': 35, 'fieldGoals': {'made': 18, 'attempted': 58, 'pct': 31}, 'freeThrows': {'made': 4, 'attempted': 11, 'pct': 36.4}, 'twoPointers': {'made': 14, 'attempted': 39, 'pct': 35.9, 'tipIns': {'made': 0, 'attempted': 0, 'pct': 0}, 'dunks': {'made': 0, 'attempted': 0, 'pct': 0}, 'layups': {'made': 8, 'attempted': 20, 'pct': 40}, 'jumpers': {'made': 6, 'attempted': 19, 'pct': 31.6}}, 'threePointers': {'made': 4, 'attempted': 19, 'pct': 21.1}, 'fourFactors': {'effectiveFieldGoalPct': 34.5, 'turnoverRatio': 0.29, 'offensiveReboundPct': 26.7, 'freeThrowRate': 19}}"
+fact_lineup_stint_raw,gameId,VARCHAR,24
+fact_play_raw,gameId,VARCHAR,24
+fact_play_raw,gameSourceId,VARCHAR,401727499
+fact_play_raw,gameStartDate,VARCHAR,2024-11-04T16:00:00.000Z
+fact_play_raw,season,BIGINT,2025
+fact_play_raw,seasonType,VARCHAR,regular
+fact_play_raw,gameType,VARCHAR,STD
+fact_play_raw,tournament,INTEGER,
+fact_play_raw,id,BIGINT,4661
+fact_play_raw,sourceId,VARCHAR,401727499101805301
+fact_play_raw,playType,VARCHAR,Lost Ball Turnover
+fact_play_raw,isHomeTeam,BOOLEAN,False
+fact_play_raw,teamId,DOUBLE,492.0
+fact_play_raw,team,VARCHAR,IU Columbus
+fact_play_raw,conference,VARCHAR,Horizon
+fact_play_raw,teamSeed,INTEGER,
+fact_play_raw,opponentId,DOUBLE,115.0
+fact_play_raw,opponent,VARCHAR,IU Indianapolis
+fact_play_raw,opponentConference,VARCHAR,Horizon
+fact_play_raw,opponentSeed,INTEGER,
+fact_play_raw,homeScore,BIGINT,0
+fact_play_raw,awayScore,BIGINT,0
+fact_play_raw,homeWinProbability,DOUBLE,0.641
+fact_play_raw,period,BIGINT,1
+fact_play_raw,clock,VARCHAR,19:46
+fact_play_raw,secondsRemaining,BIGINT,1186
+fact_play_raw,scoringPlay,BOOLEAN,False
+fact_play_raw,shootingPlay,BOOLEAN,False
+fact_play_raw,scoreValue,BIGINT,0
+fact_play_raw,wallclock,VARCHAR,2024-11-04T11:05:33.000Z
+fact_play_raw,playText,VARCHAR,Nathan Pickett Turnover.
+fact_play_raw,participants,"STRUCT(id INTEGER, ""name"" VARCHAR)[]","[{'id': 608, 'name': 'Nathan Pickett'}]"
+fact_play_raw,shotInfo,"STRUCT(shooter STRUCT(id INTEGER, ""name"" VARCHAR), made BOOLEAN, ""range"" VARCHAR, assisted BOOLEAN, assistedBy STRUCT(id INTEGER, ""name"" VARCHAR), ""location"" STRUCT(x DOUBLE, y INTEGER))","{'shooter': {'id': 625, 'name': 'Sean Craig'}, 'made': True, 'range': 'three_pointer', 'assisted': True, 'assistedBy': {'id': 626, 'name': 'Paul Zilinskas'}, 'location': {'x': 648.6, 'y': 160}}"
+fact_play_raw,onFloor,"STRUCT(id INTEGER, ""name"" VARCHAR, team VARCHAR)[]","[{'id': 605, 'name': 'Gavin Dowling', 'team': 'IU Columbus'}, {'id': 607, 'name': 'Damontae Thompson', 'team': 'IU Columbus'}, {'id': 608, 'name': 'Nathan Pickett', 'team': 'IU Columbus'}, {'id': 609, 'name': 'Deonta Luster', 'team': 'IU Columbus'}, {'id': 623, 'name': 'Timaris Brown', 'team': 'IU Indianapolis'}, {'id': 624, 'name': 'Keenan Garner', 'team': 'IU Indianapolis'}, {'id': 606, 'name': 'Owen Law', 'team': 'IU Columbus'}, {'id': 625, 'name': 'Sean Craig', 'team': 'IU Indianapolis'}, {'id': 626, 'name': 'Paul Zilinskas', 'team': 'IU Indianapolis'}, {'id': 627, 'name': 'Jarvis Walker', 'team': 'IU Indianapolis'}]"
+fact_player_game,gameId,VARCHAR,25
+fact_player_game,athleteId,INTEGER,676
+fact_player_game,teamId,DOUBLE,171.0
+fact_player_game,fga,HUGEINT,1
+fact_player_game,fgm,HUGEINT,0
+fact_player_game,pts,HUGEINT,2
+fact_player_game,assisted_att,HUGEINT,0
+fact_player_game,high_lev_att,HUGEINT,0
+fact_player_game,garbage_att,HUGEINT,1
+fact_player_game,assisted_share,FLOAT,0.0
+fact_player_game,seconds_on,HUGEINT,167
+fact_player_game,on_net_rating,DOUBLE,-58.300000000000004
+fact_player_game,on_ortg,DOUBLE,66.7
+fact_player_game,on_drtg,DOUBLE,125.0
+fact_player_game_impact,gameId,VARCHAR,24
+fact_player_game_impact,athleteId,INTEGER,623
+fact_player_game_impact,teamId,BIGINT,115
+fact_player_game_impact,seconds_on,HUGEINT,2400
+fact_player_game_impact,on_net_rating,DOUBLE,44.9
+fact_player_game_impact,on_ortg,DOUBLE,123.5
+fact_player_game_impact,on_drtg,DOUBLE,78.6
+fact_player_game_shots,gameId,VARCHAR,24
+fact_player_game_shots,teamId,DOUBLE,492.0
+fact_player_game_shots,athleteId,INTEGER,605
+fact_player_game_shots,fga,HUGEINT,10
+fact_player_game_shots,fgm,HUGEINT,4
+fact_player_game_shots,pts,HUGEINT,17
+fact_player_game_shots,assisted_att,HUGEINT,0
+fact_player_game_shots,high_lev_att,HUGEINT,0
+fact_player_game_shots,garbage_att,HUGEINT,5
+fact_player_game_shots,assisted_share,FLOAT,0.0
+fact_player_game_shots_bucketed,gameId,VARCHAR,24
+fact_player_game_shots_bucketed,teamId,DOUBLE,492.0
+fact_player_game_shots_bucketed,athleteId,INTEGER,605
+fact_player_game_shots_bucketed,range_bucket,VARCHAR,rim
+fact_player_game_shots_bucketed,att,BIGINT,4
+fact_player_game_shots_bucketed,made,HUGEINT,3
+fact_player_game_shots_bucketed,pts,HUGEINT,8
+fact_player_game_shots_bucketed,assisted_att,HUGEINT,0
+fact_player_game_shots_by_range,gameId,VARCHAR,24
+fact_player_game_shots_by_range,teamId,DOUBLE,492.0
+fact_player_game_shots_by_range,athleteId,INTEGER,609
+fact_player_game_shots_by_range,shot_range,VARCHAR,three_pointer
+fact_player_game_shots_by_range,fga,BIGINT,3
+fact_player_game_shots_by_range,fgm,HUGEINT,0
+fact_player_game_shots_by_range,pts,HUGEINT,9
+fact_player_game_shots_by_range,assisted_att,HUGEINT,0
+fact_player_game_shots_by_range,high_lev_att,HUGEINT,0
+fact_player_game_shots_by_range,garbage_att,HUGEINT,2
+fact_player_season_stats,season,BIGINT,2025
+fact_player_season_stats,seasonLabel,VARCHAR,20242025
+fact_player_season_stats,teamId,BIGINT,1
+fact_player_season_stats,team,VARCHAR,Abilene Christian
+fact_player_season_stats,conference,VARCHAR,WAC
+fact_player_season_stats,athleteId,BIGINT,6045
+fact_player_season_stats,athleteSourceId,VARCHAR,4896505
+fact_player_season_stats,name,VARCHAR,Leonardo Bettiol
+fact_player_season_stats,position,VARCHAR,F
+fact_player_season_stats,games,BIGINT,32
+fact_player_season_stats,starts,BIGINT,31
+fact_player_season_stats,minutes,BIGINT,828
+fact_player_season_stats,points,BIGINT,419
+fact_player_season_stats,turnovers,BIGINT,61
+fact_player_season_stats,fouls,BIGINT,111
+fact_player_season_stats,assists,BIGINT,37
+fact_player_season_stats,steals,BIGINT,33
+fact_player_season_stats,blocks,BIGINT,13
+fact_player_season_stats,offensiveRating,DOUBLE,107.3
+fact_player_season_stats,defensiveRating,DOUBLE,103.0
+fact_player_season_stats,netRating,DOUBLE,4.3
+fact_player_season_stats,PORPAG,DOUBLE,2.1
+fact_player_season_stats,usage,DOUBLE,26.0
+fact_player_season_stats,assistsTurnoverRatio,DOUBLE,0.61
+fact_player_season_stats,offensiveReboundPct,DOUBLE,38.1
+fact_player_season_stats,freeThrowRate,DOUBLE,40.9
+fact_player_season_stats,effectiveFieldGoalPct,DOUBLE,52.6
+fact_player_season_stats,trueShootingPct,DOUBLE,0.567
+fact_player_season_stats,fieldGoals,"STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE)","{'made': 164, 'attempted': 313, 'pct': 52.4}"
+fact_player_season_stats,twoPointFieldGoals,"STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE)","{'made': 163, 'attempted': 304, 'pct': 53.6}"
+fact_player_season_stats,threePointFieldGoals,"STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE)","{'made': 1, 'attempted': 9, 'pct': 11.1}"
+fact_player_season_stats,freeThrows,"STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE)","{'made': 90, 'attempted': 128, 'pct': 70.3}"
+fact_player_season_stats,rebounds,"STRUCT(offensive INTEGER, defensive INTEGER, total INTEGER)","{'offensive': 48, 'defensive': 78, 'total': 126}"
+fact_player_season_stats,winShares,"STRUCT(offensive DOUBLE, defensive DOUBLE, total DOUBLE, totalPer40 DOUBLE)","{'offensive': 1.5, 'defensive': 1.2, 'total': 2.7, 'totalPer40': 0.13}"
+fact_rankings,season,BIGINT,2025
+fact_rankings,seasonType,VARCHAR,regular
+fact_rankings,week,BIGINT,1
+fact_rankings,pollDate,VARCHAR,2024-10-14T00:00:00.000Z
+fact_rankings,pollType,VARCHAR,AP Top 25
+fact_rankings,teamId,BIGINT,131
+fact_rankings,team,VARCHAR,Kansas
+fact_rankings,conference,VARCHAR,Big 12
+fact_rankings,ranking,DOUBLE,1.0
+fact_rankings,points,BIGINT,1449
+fact_rankings,firstPlaceVotes,BIGINT,30
+fact_ratings_adjusted,season,BIGINT,2025
+fact_ratings_adjusted,teamId,BIGINT,72
+fact_ratings_adjusted,team,VARCHAR,Duke
+fact_ratings_adjusted,conference,VARCHAR,ACC
+fact_ratings_adjusted,offensiveRating,DOUBLE,130.3
+fact_ratings_adjusted,defensiveRating,DOUBLE,90.5
+fact_ratings_adjusted,netRating,DOUBLE,39.8
+fact_ratings_adjusted,rankings,"STRUCT(offense INTEGER, defense INTEGER, net INTEGER)","{'offense': 1, 'defense': 4, 'net': 1}"
+fact_ratings_srs,season,BIGINT,2025
+fact_ratings_srs,teamId,BIGINT,72
+fact_ratings_srs,team,VARCHAR,Duke
+fact_ratings_srs,conference,VARCHAR,ACC
+fact_ratings_srs,rating,DOUBLE,22.2
+fact_recruiting_players,id,BIGINT,34948
+fact_recruiting_players,sourceId,VARCHAR,46136894
+fact_recruiting_players,position,VARCHAR,SF
+fact_recruiting_players,schoolId,DOUBLE,121.0
+fact_recruiting_players,school,VARCHAR,Notre Dame
+fact_recruiting_players,hometown,"STRUCT(city VARCHAR, state VARCHAR, country VARCHAR, latitude DOUBLE, longitude DOUBLE, countyFips VARCHAR)","{'city': 'Sherman Oaks', 'state': 'CA', 'country': None, 'latitude': 34.1508718, 'longitude': -118.448986, 'countyFips': '06037'}"
+fact_recruiting_players,committedTo,"STRUCT(id INTEGER, ""name"" VARCHAR, conference VARCHAR)","{'id': 12, 'name': 'Arkansas', 'conference': 'SEC'}"
+fact_recruiting_players,athleteId,DOUBLE,198382.0
+fact_recruiting_players,year,BIGINT,2026
+fact_recruiting_players,name,VARCHAR,Tyran Stokes
+fact_recruiting_players,heightInches,DOUBLE,79.0
+fact_recruiting_players,weightPounds,DOUBLE,245.0
+fact_recruiting_players,stars,BIGINT,5
+fact_recruiting_players,rating,DOUBLE,0.9999
+fact_recruiting_players,ranking,BIGINT,1
+fact_substitution_raw,gameId,VARCHAR,24
+fact_substitution_raw,startDate,VARCHAR,2024-11-04T16:00:00.000Z
+fact_substitution_raw,teamId,BIGINT,115
+fact_substitution_raw,team,VARCHAR,IU Indianapolis
+fact_substitution_raw,conference,VARCHAR,Horizon
+fact_substitution_raw,athleteId,BIGINT,623
+fact_substitution_raw,athlete,VARCHAR,Timaris Brown
+fact_substitution_raw,position,VARCHAR,F
+fact_substitution_raw,opponentId,BIGINT,492
+fact_substitution_raw,opponent,VARCHAR,IU Columbus
+fact_substitution_raw,opponentConference,VARCHAR,Horizon
+fact_substitution_raw,subIn,"STRUCT(period INTEGER, secondsRemaining INTEGER, teamPoints INTEGER, opponentPoints INTEGER)","{'period': 1, 'secondsRemaining': 1200, 'teamPoints': 0, 'opponentPoints': 0}"
+fact_substitution_raw,subOut,"STRUCT(period INTEGER, secondsRemaining INTEGER, teamPoints INTEGER, opponentPoints INTEGER)","{'period': 2, 'secondsRemaining': 0, 'teamPoints': 100, 'opponentPoints': 44}"
+fact_team_game,gameId,VARCHAR,36
+fact_team_game,teamId,BIGINT,142
+fact_team_game,seconds_game,HUGEINT,2400
+fact_team_game,pace,DOUBLE,61.00058333333333
+fact_team_game,offenseRating,DOUBLE,115.33066666666666
+fact_team_game,defenseRating,DOUBLE,116.25566666666666
+fact_team_game,netRating,DOUBLE,-0.25962499999999866
+fact_team_season_stats,season,BIGINT,2025
+fact_team_season_stats,seasonLabel,VARCHAR,20242025
+fact_team_season_stats,teamId,BIGINT,1
+fact_team_season_stats,team,VARCHAR,Abilene Christian
+fact_team_season_stats,conference,VARCHAR,WAC
+fact_team_season_stats,games,BIGINT,32
+fact_team_season_stats,wins,BIGINT,16
+fact_team_season_stats,losses,BIGINT,16
+fact_team_season_stats,totalMinutes,BIGINT,1310
+fact_team_season_stats,pace,DOUBLE,66.4
+fact_team_season_stats,teamStats,"STRUCT(assists INTEGER, blocks INTEGER, steals INTEGER, possessions INTEGER, trueShooting DOUBLE, rating DOUBLE, fieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), twoPointFieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), threePointFieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), freeThrows STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), rebounds STRUCT(offensive INTEGER, defensive INTEGER, total INTEGER), turnovers STRUCT(total INTEGER, teamTotal INTEGER), fouls STRUCT(total INTEGER, technical INTEGER, flagrant INTEGER), points STRUCT(total INTEGER, inPaint INTEGER, offTurnovers INTEGER, fastBreak INTEGER), fourFactors STRUCT(effectiveFieldGoalPct DOUBLE, turnoverRatio DOUBLE, offensiveReboundPct DOUBLE, freeThrowRate DOUBLE))","{'assists': 421, 'blocks': 94, 'steals': 331, 'possessions': 2178, 'trueShooting': 52.9, 'rating': 103.8, 'fieldGoals': {'made': 819, 'attempted': 1845, 'pct': 44.4}, 'twoPointFieldGoals': {'made': 673, 'attempted': 1362, 'pct': 49.4}, 'threePointFieldGoals': {'made': 146, 'attempted': 483, 'pct': 30.2}, 'freeThrows': {'made': 476, 'attempted': 666, 'pct': 71.5}, 'rebounds': {'offensive': 356, 'defensive': 727, 'total': 1083}, 'turnovers': {'total': 476, 'teamTotal': 14}, 'fouls': {'total': 671, 'technical': 9, 'flagrant': 0}, 'points': {'total': 2260, 'inPaint': 1164, 'offTurnovers': 581, 'fastBreak': 359}, 'fourFactors': {'effectiveFieldGoalPct': 48.3, 'turnoverRatio': 0.22, 'offensiveReboundPct': 32.9, 'freeThrowRate': 36.1}}"
+fact_team_season_stats,opponentStats,"STRUCT(assists INTEGER, blocks INTEGER, steals INTEGER, possessions INTEGER, trueShooting DOUBLE, rating DOUBLE, fieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), twoPointFieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), threePointFieldGoals STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), freeThrows STRUCT(made INTEGER, attempted INTEGER, pct DOUBLE), rebounds STRUCT(offensive INTEGER, defensive INTEGER, total INTEGER), turnovers STRUCT(total INTEGER, teamTotal INTEGER), fouls STRUCT(total INTEGER, technical INTEGER, flagrant INTEGER), points STRUCT(total INTEGER, inPaint INTEGER, offTurnovers INTEGER, fastBreak INTEGER), fourFactors STRUCT(effectiveFieldGoalPct DOUBLE, turnoverRatio DOUBLE, offensiveReboundPct DOUBLE, freeThrowRate DOUBLE))","{'assists': 383, 'blocks': 143, 'steals': 259, 'possessions': 2172, 'trueShooting': 55.2, 'rating': 103.5, 'fieldGoals': {'made': 747, 'attempted': 1675, 'pct': 44.6}, 'twoPointFieldGoals': {'made': 566, 'attempted': 1098, 'pct': 51.5}, 'threePointFieldGoals': {'made': 181, 'attempted': 577, 'pct': 31.4}, 'freeThrows': {'made': 574, 'attempted': 825, 'pct': 69.6}, 'rebounds': {'offensive': 312, 'defensive': 762, 'total': 1074}, 'turnovers': {'total': 547, 'teamTotal': 28}, 'fouls': {'total': 570, 'technical': 5, 'flagrant': 0}, 'points': {'total': 2249, 'inPaint': 1032, 'offTurnovers': 459, 'fastBreak': 306}, 'fourFactors': {'effectiveFieldGoalPct': 50.0, 'turnoverRatio': 0.25, 'offensiveReboundPct': 29.1, 'freeThrowRate': 49.3}}"
+stg_lineups,gameId,VARCHAR,24
+stg_lineups,teamId,BIGINT,115
+stg_lineups,conference,VARCHAR,Horizon
+stg_lineups,lineupHash,VARCHAR,623-624-625-626-627
+stg_lineups,totalSeconds,BIGINT,2400
+stg_lineups,pace,DOUBLE,68.5
+stg_lineups,offenseRating,DOUBLE,123.5
+stg_lineups,defenseRating,DOUBLE,78.6
+stg_lineups,netRating,DOUBLE,44.9
+stg_lineups,athletes,"STRUCT(id INTEGER, ""name"" VARCHAR)[]","[{'id': 623, 'name': 'Timaris Brown'}, {'id': 624, 'name': 'Keenan Garner'}, {'id': 625, 'name': 'Sean Craig'}, {'id': 626, 'name': 'Paul Zilinskas'}, {'id': 627, 'name': 'Jarvis Walker'}]"
+stg_participants,gameId,VARCHAR,24
+stg_participants,playId,BIGINT,4661
+stg_participants,athleteId,INTEGER,608
+stg_participants,athlete_name,VARCHAR,Nathan Pickett
+stg_plays,gameId,VARCHAR,24
+stg_plays,playId,BIGINT,4661
+stg_plays,teamId,DOUBLE,492.0
+stg_plays,opponentId,DOUBLE,115.0
+stg_plays,playType,VARCHAR,Lost Ball Turnover
+stg_plays,scoringPlay,BOOLEAN,False
+stg_plays,shootingPlay,BOOLEAN,False
+stg_plays,scoreValue,BIGINT,0
+stg_plays,period,BIGINT,1
+stg_plays,secondsRemaining,BIGINT,1186
+stg_plays,homeScore,BIGINT,0
+stg_plays,awayScore,BIGINT,0
+stg_plays,homeWinProbability,DOUBLE,0.641
+stg_plays,playText,VARCHAR,Nathan Pickett Turnover.
+stg_plays,shotInfo,"STRUCT(shooter STRUCT(id INTEGER, ""name"" VARCHAR), made BOOLEAN, ""range"" VARCHAR, assisted BOOLEAN, assistedBy STRUCT(id INTEGER, ""name"" VARCHAR), ""location"" STRUCT(x DOUBLE, y INTEGER))","{'shooter': {'id': 625, 'name': 'Sean Craig'}, 'made': True, 'range': 'three_pointer', 'assisted': True, 'assistedBy': {'id': 626, 'name': 'Paul Zilinskas'}, 'location': {'x': 648.6, 'y': 160}}"
+stg_plays,participants,"STRUCT(id INTEGER, ""name"" VARCHAR)[]","[{'id': 608, 'name': 'Nathan Pickett'}]"
+stg_shots,gameId,VARCHAR,24
+stg_shots,playId,BIGINT,4662
+stg_shots,teamId,DOUBLE,115.0
+stg_shots,opponentId,DOUBLE,492.0
+stg_shots,period,BIGINT,1
+stg_shots,secondsRemaining,BIGINT,1170
+stg_shots,homeScore,BIGINT,3
+stg_shots,awayScore,BIGINT,0
+stg_shots,homeWinProbability,DOUBLE,0.729
+stg_shots,scoreValue,BIGINT,3
+stg_shots,shooterAthleteId,INTEGER,625
+stg_shots,shooter_name,VARCHAR,Sean Craig
+stg_shots,made,BOOLEAN,True
+stg_shots,shot_range,VARCHAR,three_pointer
+stg_shots,assisted,BOOLEAN,True
+stg_shots,assistAthleteId,INTEGER,626
+stg_shots,is_high_leverage,BOOLEAN,False
+stg_shots,is_garbage,BOOLEAN,False
+stg_subs,gameId,VARCHAR,24
+stg_subs,teamId,BIGINT,115
+stg_subs,athleteId,BIGINT,623
+stg_subs,athlete_name,VARCHAR,Timaris Brown
+stg_subs,subIn_secondsRemaining,INTEGER,1200
+stg_subs,subIn_period,INTEGER,1
+stg_subs,subOut_secondsRemaining,INTEGER,0
+stg_subs,subOut_period,INTEGER,2

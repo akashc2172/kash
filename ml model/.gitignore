@@ -1,0 +1,15 @@
+# Environment and Secrets
+.env
+__pycache__/
+*.pyc
+.DS_Store
+
+# Data and Logs
+data/
+logs/
+*.duckdb
+*.log
+
+# IDE specific
+.idea/
+.vscode/

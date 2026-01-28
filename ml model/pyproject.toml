@@ -1,0 +1,10 @@
+[project]
+name = "cbd-pbp"
+version = "0.1.0"
+description = "CollegeBasketballData PBP ingestion + feature store"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cbd_pbp*"]

@@ -1,0 +1,202 @@
+{
+    "version": "v1",
+    "status": "LOCKED - GPT-approved with all fixes",
+    "split_id": {
+        "type": "cross_product_plus_baseline",
+        "format": "{leverage_split}__{strength_split}",
+        "baseline_row": "ALL__ALL",
+        "note": "Every (athlete_id, season) gets ALL__ALL plus applicable cross-product rows",
+        "leverage_split": {
+            "values": [
+                "ALL",
+                "HIGH_LEVERAGE",
+                "LOW_LEVERAGE",
+                "GARBAGE"
+            ],
+            "source": "stg_shots",
+            "rules": {
+                "ALL": "no filter",
+                "HIGH_LEVERAGE": "is_high_leverage = TRUE",
+                "GARBAGE": "is_garbage = TRUE",
+                "LOW_LEVERAGE": "is_high_leverage = FALSE AND is_garbage = FALSE"
+            }
+        },
+        "strength_split": {
+            "values": [
+                "ALL",
+                "VS_TOP50",
+                "VS_TOP100",
+                "VS_OTHERS",
+                "VS_UNKNOWN"
+            ],
+            "source": "v_team_season_srs_proxy (margin-based, all seasons)",
+            "rules": {
+                "ALL": "no filter",
+                "VS_TOP50": "opp_rank <= 50",
+                "VS_TOP100": "51 <= opp_rank <= 100",
+                "VS_OTHERS": "opp_rank > 100",
+                "VS_UNKNOWN": "opp_rank IS NULL"
+            }
+        }
+    },
+    "opponent_strength": {
+        "primary_source": "v_team_season_srs_proxy (computed from dim_games margins)",
+        "fallback": "None needed - covers all seasons 2009-2025",
+        "seasons_covered": "2009-2025 (17 seasons)",
+        "teams_per_season": "500-700",
+        "join_strategy": {
+            "note": "stg_shots HAS opponentId - use direct join",
+            "join_keys": [
+                "season",
+                "opponentId"
+            ],
+            "sql": "LEFT JOIN v_team_season_srs_proxy srs ON srs.season = g.season AND srs.teamId = s.opponentId"
+        },
+        "rank_definition": "DENSE_RANK() OVER (PARTITION BY season ORDER BY srs_proxy_margin DESC)",
+        "column_name": "srs_proxy_margin"
+    },
+    "type_safety": {
+        "warning": "dim_games.id is BIGINT, stg_shots.gameId is VARCHAR",
+        "solution": "CAST(dim_games.id AS VARCHAR) = stg_shots.gameId",
+        "alternative": "Create canonical v_game_ids view that normalizes once"
+    },
+    "imperative_additions_v1": {
+        "recruiting_rank": {
+            "source": "fact_recruiting_players",
+            "columns": [
+                "recruiting_rank",
+                "recruiting_stars",
+                "recruiting_rating"
+            ],
+            "join_key": "athlete_id (fuzzy match with name/year if needed, but primarily athleteId)",
+            "missing_handling": "flag missing, fill 0 or -1"
+        },
+        "rim_decisions": {
+            "source": "stg_plays",
+            "columns": [
+                "dunk_att",
+                "dunk_made",
+                "layup_att",
+                "layup_made"
+            ],
+            "filters": {
+                "dunk": "playType ILIKE '%dunk%'",
+                "layup": "playType ILIKE '%layup%'"
+            }
+        },
+        "team_context": {
+            "source": "fact_team_season_stats",
+            "columns": [
+                "team_pace",
+                "team_eff_fg_pct",
+                "team_orb_pct",
+                "team_tov_pct"
+            ],
+            "note": "Contextualize raw stats (e.g., 'good stats on slow team')"
+        },
+        "conference_strength": {
+            "source": "fact_team_season_stats",
+            "columns": [
+                "conference",
+                "is_power_conf"
+            ],
+            "definition": "is_power_conf = conference IN ('ACC', 'Big 12', 'Big East', 'Big Ten', 'Pac-12', 'SEC')",
+            "note": "Critical context for baseline stats"
+        },
+        "assisted_unassisted_splits": {
+            "source": "stg_shots",
+            "columns": [
+                "assisted_made_rim",
+                "unassisted_made_rim",
+                "assisted_share_rim",
+                "assisted_made_dunk",
+                "unassisted_made_dunk",
+                "assisted_share_dunk",
+                "assisted_made_three",
+                "unassisted_made_three",
+                "assisted_share_three",
+                "assisted_made_mid",
+                "unassisted_made_mid",
+                "assisted_share_mid"
+            ],
+            "note": "Calculated for ALL made shots designated by shot_range or playType"
+        }
+    },
+    "shot_range_values": {
+        "locked": true,
+        "values": [
+            "three_pointer",
+            "rim",
+            "jumper",
+            "free_throw"
+        ],
+        "note": "Exact string match required"
+    },
+    "impact_outputs": {
+        "on_court_ratings": {
+            "columns": [
+                "on_ortg",
+                "on_drtg",
+                "on_net_rating",
+                "mp_total",
+                "seconds_on",
+                "poss_est"
+            ],
+            "source": "bridge_lineup_athletes",
+            "aggregation": "seconds-weighted average"
+        },
+        "ridge_apm_proxy": {
+            "label": "apm_proxy (NOT true RAPM until v2 play-level reconstruction)",
+            "columns": [
+                "apm_net_proxy",
+                "apm_off_proxy",
+                "apm_def_proxy",
+                "apm_exposure_seconds",
+                "apm_exposure_poss",
+                "apm_weight",
+                "apm_is_reliable"
+            ],
+            "solver": {
+                "type": "sparse ridge",
+                "library": "scipy.sparse.linalg.cg",
+                "ridge_penalty": "lambda_ridge * scipy.sparse.identity(n_features, format='csr')",
+                "warning": "DO NOT use np.eye() - it creates dense matrix first"
+            },
+            "opponent_indicator_formula": {
+                "description": "Game-level seconds-share weighting for opponent players",
+                "formula": "For each (game, team): opponent_indicator[player_j] = -1 * (opp_player_seconds[j] / sum(opp_player_seconds))",
+                "rationale": "Approximates opponent exposure when play-level 5v5 not reconstructed",
+                "example": "If opponent player A played 20min and B played 10min in game, indicators are A=-0.67, B=-0.33"
+            },
+            "shrinkage": {
+                "SEC_REF": 3000,
+                "POSS_REF": 300,
+                "apm_weight_formula": "min(1.0, seconds_on / SEC_REF)",
+                "apm_is_reliable": "seconds_on >= SEC_REF OR poss_est >= POSS_REF"
+            }
+        }
+    },
+    "missingness": {
+        "rule": "missing_flag = 1 if denom == 0",
+        "columns_with_missing_flags": [
+            "rim_fg_pct",
+            "three_fg_pct",
+            "mid_fg_pct",
+            "ft_pct",
+            "assisted_share_rim",
+            "assisted_share_three",
+            "apm_net_proxy",
+            "apm_off_proxy",
+            "apm_def_proxy"
+        ],
+        "note": "Do NOT replace missing with 0 without a missing flag"
+    },
+    "deliverables": [
+        "data/college_feature_store/college_features_v1.parquet",
+        "data/college_feature_store/college_impact_v1.parquet",
+        "data/college_feature_store/coverage_report_v1.csv",
+        "data/college_feature_store/college_feature_registry_v1.csv",
+        "college_scripts/build_college_feature_store_v1.py",
+        "college_scripts/README_college_feature_store_v1.md"
+    ]
+}

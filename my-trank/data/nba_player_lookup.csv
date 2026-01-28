@@ -1,0 +1,375 @@
+name,name_lower,status,pick,college
+"Johnson, Cameron","johnson, cameron",drafted,11.0,North Carolina
+"Williamson, Zion","williamson, zion",drafted,1.0,Duke
+"Clarke, Brandon","clarke, brandon",drafted,21.0,Gonzaga
+"Hunter, De'Andre","hunter, de'andre",drafted,4.0,Virginia
+"Winston, Cassius","winston, cassius",drafted,53.0,Michigan St.
+"Barrett, RJ","barrett, rj",drafted,3.0,Duke
+"Williams, Grant","williams, grant",drafted,22.0,Tennessee
+"Guy, Kyle","guy, kyle",drafted,55.0,Virginia
+"Tillman, Xavier","tillman, xavier",drafted,35.0,Michigan St.
+"Hachimura, Rui","hachimura, rui",drafted,9.0,Gonzaga
+"Washington, PJ","washington, pj",drafted,12.0,Kentucky
+"Weatherspoon, Quinndary","weatherspoon, quinndary",drafted,49.0,Mississippi St.
+"Edwards, Carsen","edwards, carsen",drafted,33.0,Purdue
+"Jerome, Ty","jerome, ty",drafted,24.0,Virginia
+"Culver, Jarrett","culver, jarrett",drafted,6.0,Texas Tech
+"Herro, Tyler","herro, tyler",drafted,13.0,Kentucky
+"Okeke, Chuma","okeke, chuma",drafted,16.0,Auburn
+"Haliburton, Tyrese","haliburton, tyrese",drafted,12.0,Iowa St.
+"Fernando, Bruno","fernando, bruno",drafted,34.0,Maryland
+"Jones, Tre","jones, tre",drafted,41.0,Duke
+"Waters, Tremont","waters, tremont",drafted,51.0,LSU
+"White, Coby","white, coby",drafted,7.0,North Carolina
+"Merrill, Sam","merrill, sam",drafted,60.0,Utah St.
+"Mann, Terance","mann, terance",drafted,48.0,Florida St.
+"Gafford, Daniel","gafford, daniel",drafted,38.0,Arkansas
+"Kabengele, Mfiondu","kabengele, mfiondu",drafted,27.0,Florida St.
+"Brazdeikis, Ignas","brazdeikis, ignas",drafted,47.0,Michigan
+"Alexander-Walker, Nickeil","alexander-walker, nickeil",drafted,17.0,Virginia Tech
+"Shayok, Marial","shayok, marial",drafted,54.0,Iowa St.
+"Schofield, Admiral","schofield, admiral",drafted,42.0,Tennessee
+"Johnson, Keldon","johnson, keldon",drafted,29.0,Kentucky
+"Nwora, Jordan","nwora, jordan",drafted,45.0,Louisville
+"Nowell, Jaylen","nowell, jaylen",drafted,43.0,Washington
+"Bone, Jordan","bone, jordan",drafted,57.0,Tennessee
+"Garza, Luka","garza, luka",drafted,52.0,Iowa
+"Hayes, Jaxson","hayes, jaxson",drafted,8.0,Texas
+"Bane, Desmond","bane, desmond",drafted,30.0,TCU
+"Livers, Isaiah","livers, isaiah",drafted,42.0,Michigan
+"Poole, Jordan","poole, jordan",drafted,28.0,Michigan
+"Claxton, Nicolas","claxton, nicolas",drafted,31.0,Georgia
+"Toppin, Obi","toppin, obi",drafted,8.0,Dayton
+"Langford, Romeo","langford, romeo",drafted,14.0,Indiana
+"Joe, Isaiah","joe, isaiah",drafted,49.0,Arkansas
+"Mays, Skylar","mays, skylar",drafted,50.0,LSU
+"Hughes, Elijah","hughes, elijah",drafted,39.0,Syracuse
+"Smith, Jalen","smith, jalen",drafted,10.0,Maryland
+"Johnson, Keyontae","johnson, keyontae",drafted,50.0,Florida
+"Bey, Tyler","bey, tyler",drafted,36.0,Colorado
+"Butler, Jared","butler, jared",drafted,40.0,Baylor
+"Paschall, Eric","paschall, eric",drafted,41.0,Villanova
+"Kispert, Corey","kispert, corey",drafted,15.0,Gonzaga
+"Wieskamp, Joe","wieskamp, joe",drafted,41.0,Iowa
+"Nembhard, Andrew","nembhard, andrew",drafted,31.0,Florida
+"Queta, Neemias","queta, neemias",drafted,39.0,Utah St.
+"Lewis Jr. , Kira","lewis jr. , kira",drafted,13.0,Alabama
+"Perry, Reggie","perry, reggie",drafted,57.0,Mississippi St.
+"Gray, RaiQuan","gray, raiquan",drafted,59.0,Florida St.
+"Wiggins, Aaron","wiggins, aaron",drafted,55.0,Maryland
+"Pritchard, Payton","pritchard, payton",drafted,26.0,Oregon
+"Thybulle, Matisse","thybulle, matisse",drafted,20.0,Washington
+"Bey, Saddiq","bey, saddiq",drafted,19.0,Villanova
+"Quickley, Immanuel","quickley, immanuel",drafted,25.0,Kentucky
+"Richards, Nick","richards, nick",drafted,42.0,Kentucky
+"Horton-Tucker, Talen","horton-tucker, talen",drafted,46.0,Iowa St.
+"Reddish, Cam","reddish, cam",drafted,10.0,Duke
+"Woodard II, Robert","woodard ii, robert",drafted,40.0,Mississippi St.
+"Little, Nassir","little, nassir",drafted,25.0,North Carolina
+"McDaniels, Jalen","mcdaniels, jalen",drafted,52.0,San Diego St.
+"Reed, Paul","reed, paul",drafted,58.0,DePaul
+"Okpala, KZ","okpala, kz",drafted,32.0,Stanford
+"Porter Jr., Kevin","porter jr., kevin",drafted,30.0,USC
+"Agbaji, Ochai","agbaji, ochai",drafted,14.0,Kansas
+"Dosunmu, Ayo","dosunmu, ayo",drafted,38.0,Illinois
+"Jones, Herbert","jones, herbert",drafted,35.0,Alabama
+"Roby, Isaiah","roby, isaiah",drafted,45.0,Nebraska
+"Zegarowski, Marcus","zegarowski, marcus",drafted,49.0,Creighton
+"Williams, Vince","williams, vince",drafted,47.0,VCU
+"Mamukelashvili, Sandro","mamukelashvili, sandro",drafted,54.0,Seton Hall
+"Miller, Jordan","miller, jordan",drafted,48.0,George Mason
+"Oturu, Daniel","oturu, daniel",drafted,33.0,Minnesota
+"Hands, Jaylen","hands, jaylen",drafted,56.0,UCLA
+"Sims, Jericho","sims, jericho",drafted,58.0,Texas
+"Lee, Saben","lee, saben",drafted,38.0,Vanderbilt
+"Nesmith, Aaron","nesmith, aaron",drafted,14.0,Vanderbilt
+"Elleby, CJ","elleby, cj",drafted,46.0,Washington St.
+"Grimes, Quentin","grimes, quentin",drafted,25.0,Kansas
+"Martin, Tyrese","martin, tyrese",drafted,51.0,Rhode Island
+"Azubuike, Udoka","azubuike, udoka",drafted,27.0,Kansas
+"Carey, Vernon","carey, vernon",drafted,32.0,Duke
+"Vassell, Devin","vassell, devin",drafted,11.0,Florida St.
+"Flynn, Malachi","flynn, malachi",drafted,29.0,San Diego St.
+"McBride, Miles","mcbride, miles",drafted,36.0,West Virginia
+"Nnaji, Zeke","nnaji, zeke",drafted,22.0,Arizona
+"Stewart, Isaiah","stewart, isaiah",drafted,16.0,Washington
+"Okongwu, Onyeka","okongwu, onyeka",drafted,6.0,USC
+"Mannion, Nico","mannion, nico",drafted,48.0,Arizona
+"Okoro, Isaac","okoro, isaac",drafted,5.0,Auburn
+"Petrusev, Filip","petrusev, filip",drafted,50.0,Gonzaga
+"Anthony, Cole","anthony, cole",drafted,15.0,North Carolina
+"Williams, Patrick","williams, patrick",drafted,4.0,Florida St.
+"Mitchell, Davion","mitchell, davion",drafted,9.0,Baylor
+"Green, Josh","green, josh",drafted,18.0,Arizona
+"Jackson-Davis, Trayce","jackson-davis, trayce",drafted,57.0,Indiana
+"Hyland, Nah'Shon","hyland, nah'shon",drafted,26.0,VCU
+"Ramsey, Jahmi'us","ramsey, jahmi'us",drafted,43.0,Texas Tech
+"Achiuwa, Precious","achiuwa, precious",drafted,20.0,Memphis
+"Robinson-Earl, Jeremiah","robinson-earl, jeremiah",drafted,32.0,Villanova
+"Braun, Christian","braun, christian",drafted,21.0,Kansas
+"Duarte, Chris","duarte, chris",drafted,13.0,Oregon
+"Terry, Tyrell","terry, tyrell",drafted,31.0,Stanford
+"Stanley, Cassius","stanley, cassius",drafted,54.0,Duke
+"Bouknight, James","bouknight, james",drafted,11.0,Connecticut
+"Moore, Wendell","moore, wendell",drafted,26.0,Duke
+"Liddell, E.J.","liddell, e.j.",drafted,41.0,Ohio St.
+"Sasser, Marcus","sasser, marcus",drafted,25.0,Houston
+"Wagner, Franz","wagner, franz",drafted,8.0,Michigan
+"Edwards, Anthony","edwards, anthony",drafted,1.0,Georgia
+"Maxey, Tyrese","maxey, tyrese",drafted,21.0,Kentucky
+"Jaquez Jr., Jaime","jaquez jr., jaime",drafted,18.0,UCLA
+"Johnson, David","johnson, david",drafted,47.0,Louisville
+"McDaniels, Jaden","mcdaniels, jaden",drafted,28.0,Washington
+"Lewis, Scottie","lewis, scottie",drafted,56.0,Florida
+"Tyson, Hunter","tyson, hunter",drafted,37.0,Clemson
+"Jones, Kai","jones, kai",drafted,19.0,Texas
+"Lundy, Seth","lundy, seth",drafted,46.0,Penn St.
+"Brown, Kobe","brown, kobe",drafted,30.0,Missouri
+"Wong, Isaiah","wong, isaiah",drafted,55.0,Miami FL
+"Mobley, Isaiah","mobley, isaiah",drafted,49.0,USC
+"Camara, Toumani","camara, toumani",drafted,52.0,Georgia
+"Mann, Tre","mann, tre",drafted,18.0,Florida
+"Mobley, Evan","mobley, evan",drafted,3.0,USC
+"Murphy III, Trey","murphy iii, trey",drafted,17.0,Virginia
+"Jackson, Isaiah","jackson, isaiah",drafted,22.0,Kentucky
+"Cooper, Sharife","cooper, sharife",drafted,48.0,Auburn
+"Moody, Moses","moody, moses",drafted,14.0,Arkansas
+"Suggs, Jalen","suggs, jalen",drafted,5.0,Gonzaga
+"Walker, Jabari","walker, jabari",drafted,57.0,Colorado
+"Barnes, Scottie","barnes, scottie",drafted,4.0,Florida St.
+"Thomas, Cameron","thomas, cameron",drafted,27.0,LSU
+"Springer, Jaden","springer, jaden",drafted,28.0,Tennessee
+"Mathurin, Bennedict","mathurin, bennedict",drafted,6.0,Arizona
+"Davis, Jonathan","davis, jonathan",drafted,10.0,Wisconsin
+"Wilson, Jalen","wilson, jalen",drafted,51.0,Kansas
+"Cunningham, Cade","cunningham, cade",drafted,1.0,Oklahoma St.
+"Koloko, Christian","koloko, christian",drafted,33.0,Arizona
+"Murray, Keegan","murray, keegan",drafted,4.0,Iowa
+"Sharpe, Day'Ron","sharpe, day'ron",drafted,29.0,North Carolina
+"Williams, Mark","williams, mark",drafted,15.0,Duke
+"Eason, Tari","eason, tari",drafted,17.0,Cincinnati
+"Brown, Greg","brown, greg",drafted,43.0,Texas
+"Williams, Jaylin","williams, jaylin",drafted,34.0,Arkansas
+"Primo, Joshua","primo, joshua",drafted,12.0,Alabama
+"Moore Jr., Wendell","moore jr., wendell",drafted,26.0,Duke
+"Terry, Dalen","terry, dalen",drafted,18.0,Arizona
+"Jones, Colby","jones, colby",drafted,34.0,Xavier
+"Williams, Ziaire","williams, ziaire",drafted,10.0,Stanford
+"Ivey, Jaden","ivey, jaden",drafted,5.0,Purdue
+"Johnson, Keon","johnson, keon",drafted,21.0,Tennessee
+"Boston Jr., Brandon","boston jr., brandon",drafted,51.0,Kentucky
+"Christopher, Josh","christopher, josh",drafted,24.0,Arizona St.
+"Johnson, Jalen","johnson, jalen",drafted,20.0,Duke
+"Banton, Dalano","banton, dalano",drafted,46.0,Nebraska
+"Thor, JT","thor, jt",drafted,37.0,Auburn
+"Jackson, Andre","jackson, andre",drafted,36.0,Connecticut
+"Bassey, Charles","bassey, charles",drafted,53.0,Western Kentucky
+"Roddy, David","roddy, david",drafted,23.0,Colorado St.
+"Preston, Jason","preston, jason",drafted,33.0,Ohio
+"Edwards, Kessler","edwards, kessler",drafted,44.0,Pepperdine
+"LaRavia, Jake","laravia, jake",drafted,19.0,Indiana St.
+"Rollins, Ryan","rollins, ryan",drafted,44.0,Toledo
+"Williams, Jalen","williams, jalen",drafted,12.0,Santa Clara
+"Aldama, Santi","aldama, santi",drafted,30.0,Loyola MD
+"Sheppard, Ben","sheppard, ben",drafted,26.0,Belmont
+"Slawson, Jalen","slawson, jalen",drafted,54.0,Furman
+"Holmgren, Chet","holmgren, chet",drafted,2.0,Gonzaga
+"Chandler, Kennedy","chandler, kennedy",drafted,38.0,Tennessee
+"Smith, Jabari","smith, jabari",drafted,3.0,Auburn
+"Kessler, Walker","kessler, walker",drafted,22.0,Auburn
+"Banchero, Paolo","banchero, paolo",drafted,1.0,Duke
+"Strawther, Julian","strawther, julian",drafted,29.0,Gonzaga
+"Washington Jr., TyTy","washington jr., tyty",drafted,29.0,Kentucky
+"Clark, Jaylen","clark, jaylen",drafted,53.0,UCLA
+"Murray, Kris","murray, kris",drafted,23.0,Iowa
+"Sochan, Jeremy","sochan, jeremy",drafted,9.0,Baylor
+"Griffin, AJ","griffin, aj",drafted,16.0,Duke
+"Keels, Trevor","keels, trevor",drafted,42.0,Duke
+"Davis, Johnny","davis, johnny",drafted,10.0,Wisconsin
+"Duren, Jalen","duren, jalen",drafted,13.0,Memphis
+"Branham, Malaki","branham, malaki",drafted,20.0,Ohio St.
+"Brown, Kendall","brown, kendall",drafted,48.0,Baylor
+"Pickett, Jalen","pickett, jalen",drafted,32.0,Penn St.
+"Davison, JD","davison, jd",drafted,54.0,Alabama
+"Prosper, Olivier-Maxence","prosper, olivier-maxence",drafted,24.0,Marquette
+"McGowens, Bryce","mcgowens, bryce",drafted,40.0,Nebraska
+"Minott, Josh","minott, josh",drafted,45.0,Memphis
+"Bates, Emoni","bates, emoni",drafted,49.0,Memphis
+"Houstan, Caleb","houstan, caleb",drafted,32.0,Michigan
+"Christie, Max","christie, max",drafted,35.0,Michigan St.
+"Diabate, Moussa","diabate, moussa",drafted,43.0,Michigan
+"Wesley, Blake","wesley, blake",drafted,25.0,Notre Dame
+"Gueye, Mouhamed","gueye, mouhamed",drafted,39.0,Washington St.
+"Watson, Peyton","watson, peyton",drafted,30.0,UCLA
+"Hawkins, Jordan","hawkins, jordan",drafted,14.0,Connecticut
+"Lewis, Maxwell","lewis, maxwell",drafted,40.0,Pepperdine
+"Baldwin, Jr., Patrick","baldwin, jr., patrick",drafted,28.0,Milwaukee
+"Miller, Brandon","miller, brandon",drafted,2.0,Alabama
+"Dick, Gradey","dick, gradey",drafted,13.0,Kansas
+"Phillips, Julian","phillips, julian",drafted,35.0,Tennessee
+"Bufkin, Kobe","bufkin, kobe",drafted,15.0,Michigan
+"Jackson Jr., Andre","jackson jr., andre",drafted,36.0,Connecticut
+"Black, Anthony","black, anthony",drafted,6.0,Arkansas
+"Clowney, Noah","clowney, noah",drafted,21.0,Alabama
+"Lively II, Dereck","lively ii, dereck",drafted,12.0,Duke
+"Walsh, Jordan","walsh, jordan",drafted,38.0,Arkansas
+"Sensabaugh, Brice","sensabaugh, brice",drafted,28.0,Ohio St.
+"George, Keyonte","george, keyonte",drafted,16.0,Baylor
+"Hood-Schifino, Jalen","hood-schifino, jalen",drafted,17.0,Indiana
+"Wallace, Cason","wallace, cason",drafted,10.0,Kentucky
+"Whitmore, Cam","whitmore, cam",drafted,20.0,Villanova
+"Bailey, Amari","bailey, amari",drafted,41.0,UCLA
+"Livingston, Chris","livingston, chris",drafted,58.0,Kentucky
+"Howard, Jett","howard, jett",drafted,11.0,Michigan
+"Smith Jr., Nick","smith jr., nick",drafted,27.0,Arkansas
+"Whitehead, Dariq","whitehead, dariq",drafted,22.0,Duke
+"Jackson II, Gregory ""GG""","jackson ii, gregory ""gg""",drafted,45.0,South Carolina
+"Podziemski, Brandin","podziemski, brandin",drafted,19.0,Santa Clara
+"Hendricks, Taylor","hendricks, taylor",drafted,9.0,UCF
+"Walker, Jarace","walker, jarace",drafted,8.0,Houston
+Bojan Dubljevic,bojan dubljevic,drafted,29.0,BUD
+Luka Mitrovic,luka mitrovic,drafted,30.0,SWIS
+Nemanja Dangubic,nemanja dangubic,drafted,24.0,SWIS
+Nemanja Nedovic,nemanja nedovic,drafted,30.0,ZVE
+Tomislav Zubcic,tomislav zubcic,drafted,26.0,CIB
+Bogdan Bogdanovic,bogdan bogdanovic,drafted,27.0,PAR
+Alpha Kaba,alpha kaba,drafted,30.0,MEG
+Jonah Bolden,jonah bolden,drafted,6.0,FMP
+Ognjen Jaramaz,ognjen jaramaz,drafted,28.0,MEG
+Vanja Marinkovic,vanja marinkovic,drafted,30.0,PAR
+Vlatko Cancar,vlatko cancar,drafted,19.0,MEG
+Ante Zizic,ante zizic,drafted,23.0,CIB
+Timothe Luwawu-Cabarrot,timothe luwawu-cabarrot,drafted,24.0,MEG
+Dario Saric,dario saric,drafted,12.0,CIB
+Jusuf Nurkic,jusuf nurkic,drafted,16.0,CED
+Nikola Jokic,nikola jokic,drafted,11.0,MEG
+Nikola Milutinov,nikola milutinov,drafted,26.0,PAR
+Vasilije Micic,vasilije micic,drafted,22.0,MEG
+Rade Zagorac,rade zagorac,drafted,5.0,MEG
+Nikola Djurisic,nikola djurisic,drafted,13.0,MEG
+Nikola Topic,nikola topic,drafted,12.0,MEG
+Dzanan Musa,dzanan musa,drafted,29.0,CED
+Goga Bitadze,goga bitadze,drafted,18.0,MEG
+Luka Samanic,luka samanic,drafted,19.0,OLI
+Bogoljub Markovic,bogoljub markovic,drafted,17.0,MEG
+Joan Beringer,joan beringer,drafted,17.0,COL
+Karlo Matkovic,karlo matkovic,drafted,22.0,MEG
+Nikola Jovic,nikola jovic,drafted,27.0,MEG
+Tristan Vukcevic,tristan vukcevic,drafted,12.0,PAR
+Filip Petrusev,filip petrusev,drafted,20.0,MEG
+Marko Simonovic,marko simonovic,drafted,14.0,MEG
+Khalifa Diop,khalifa diop,drafted,9.0,GCN
+Usman Garuba,usman garuba,drafted,23.0,RMB
+Yannick Nzosa,yannick nzosa,drafted,24.0,UNI
+Sergio Llull,sergio llull,drafted,4.0,RMB
+Ricky Rubio,ricky rubio,drafted,5.0,JOV
+Victor Claver,victor claver,drafted,22.0,VAL
+Vit Krejci,vit krejci,drafted,7.0,ZAR
+James Nnaji,james nnaji,drafted,1.0,FCB
+Juan Nunez,juan nunez,drafted,6.0,RMB
+Luka Doncic,luka doncic,drafted,3.0,RMB
+Hugo Gonzalez,hugo gonzalez,drafted,28.0,RMB
+Edy Tavares,edy tavares,drafted,13.0,GCN
+Kristaps Porzingis,kristaps porzingis,drafted,4.0,BETIS
+Marcus Eriksson,marcus eriksson,drafted,20.0,MAN
+Daniel Diez,daniel diez,drafted,24.0,GBC
+Mario Hezonja,mario hezonja,drafted,5.0,FCB
+Nikola Radicevic,nikola radicevic,drafted,27.0,BETIS
+Willy Hernangomez,willy hernangomez,drafted,5.0,BETIS
+Anzejs Pasecniks,anzejs pasecniks,drafted,25.0,GCN
+Sasha Vezenkov,sasha vezenkov,drafted,27.0,FCB
+Juancho Hernangomez,juancho hernangomez,drafted,15.0,EST
+Raulzinho Neto,raulzinho neto,drafted,17.0,GBC
+Tomas Satoransky,tomas satoransky,drafted,2.0,BETIS
+Nikola Mirotic,nikola mirotic,drafted,23.0,RMB
+Paulao Prestes,paulao prestes,drafted,15.0,MUR
+Alperen Sengun,alperen sengun,drafted,16.0,BES
+Tarik Biberovic,tarik biberovic,drafted,26.0,FEN
+Furkan Aldemir,furkan aldemir,drafted,23.0,GAL
+Ilkan Karaman,ilkan karaman,drafted,27.0,PIN
+Cedi Osman,cedi osman,drafted,1.0,EFE
+Pacome Dadiet,pacome dadiet,drafted,25.0,RUL
+Zaccharie Risacher,zaccharie risacher,drafted,1.0,JLB
+Ben Saraf,ben saraf,drafted,26.0,RUL
+Noa Essengue,noa essengue,drafted,12.0,RUL
+Saliou Niang,saliou niang,drafted,28.0,TREN
+Deividas Sirvydis,deividas sirvydis,drafted,7.0,LIE
+Theo Maledon,theo maledon,drafted,4.0,LYV
+Mohamed Diawara,mohamed diawara,drafted,21.0,PAR
+Milan Macvan,milan macvan,drafted,24.0,SWIS
+Tadija Dragicevic,tadija dragicevic,drafted,23.0,ZVE
+Killian Hayes,killian hayes,drafted,7.0,RUL
+Alessandro Gentile,alessandro gentile,drafted,23.0,TREV
+Donatas Motiejunas,donatas motiejunas,drafted,20.0,TREV
+Kevin Seraphin,kevin seraphin,drafted,17.0,CHO
+Nemanja Bjelica,nemanja bjelica,drafted,5.0,ZVE
+Tibor Pleiss,tibor pleiss,drafted,1.0,BRO
+Rudy Gobert,rudy gobert,drafted,27.0,CHO
+Sergey Karasev,sergey karasev,drafted,19.0,ZEN
+Paul Zipser,paul zipser,drafted,18.0,BAY
+Petr Cornelie,petr cornelie,drafted,23.0,LEM
+Clint Capela,clint capela,drafted,25.0,CHA
+Brandon Jennings,brandon jennings,drafted,10.0,ROM
+Emir Preldzic,emir preldzic,drafted,27.0,FEN
+Jan Vesely,jan vesely,drafted,6.0,PAR
+Omri Casspi,omri casspi,drafted,23.0,MAC
+Georgios Kalaitzakis,georgios kalaitzakis,drafted,30.0,PAN
+Rokas Jokubaitis,rokas jokubaitis,drafted,4.0,ZAL
+Deni Avdija,deni avdija,drafted,9.0,MAC
+Danilo Gallinari,danilo gallinari,drafted,6.0,MIL
+Goran Dragic,goran dragic,drafted,15.0,OLI
+Nicolas Batum,nicolas batum,drafted,25.0,LEM
+Nikola Pekovic,nikola pekovic,drafted,1.0,PAR
+Victor Wembanyama,victor wembanyama,drafted,1.0,LYV
+Arturas Gudaitis,arturas gudaitis,drafted,17.0,ZAL
+Kostas Papanikolaou,kostas papanikolaou,drafted,18.0,OLY
+Alex Abrines,alex abrines,drafted,2.0,FCB
+Marko Todorovic,marko todorovic,drafted,15.0,FCB
+Bojan Bogdanovic,bojan bogdanovic,drafted,1.0,CIB
+Jonas Valanciunas,jonas valanciunas,drafted,5.0,LIE
+Sekou Doumbouya,sekou doumbouya,drafted,15.0,CSP
+Noah Penda,noah penda,drafted,2.0,LEM
+Nolan Traore,nolan traore,drafted,19.0,SQB
+Melvin Ajinca,melvin ajinca,drafted,21.0,SQB
+Tidjane Salaun,tidjane salaun,drafted,6.0,CHO
+Elie Okobo,elie okobo,drafted,1.0,PAU
+Hugo Besson,hugo besson,drafted,28.0,CHA
+Nando De Colo,nando de colo,drafted,23.0,CHO
+Rodrigue Beaubois,rodrigue beaubois,drafted,25.0,CHO
+Bilal Coulibaly,bilal coulibaly,drafted,7.0,PLV
+Ismael Kamagate,ismael kamagate,drafted,16.0,PAR
+Evan Fournier,evan fournier,drafted,20.0,PB86
+Joffrey Lauvergne,joffrey lauvergne,drafted,25.0,CHA
+Louis Labeyrie,louis labeyrie,drafted,27.0,HYT
+Damien Inglis,damien inglis,drafted,1.0,ROA
+Guerschon Yabusele,guerschon yabusele,drafted,16.0,ROU
+Frank Ntilikina,frank ntilikina,drafted,8.0,STR
+Mathias Lessort,mathias lessort,drafted,20.0,N92
+Isaia Cordinier,isaia cordinier,drafted,14.0,DEN
+Kyshawn George,kyshawn george,drafted,24.0,CHA
+Juhann Begarin,juhann begarin,drafted,15.0,PAR
+Terrance Ferguson,terrance ferguson,drafted,21.0,ADE
+Rayan Rupert,rayan rupert,drafted,13.0,NZB
+Ariel Hukporti,ariel hukporti,drafted,28.0,MEL
+Luke Travers,luke travers,drafted,26.0,PER
+Mojave King,mojave king,drafted,17.0,ADE
+Ousmane Dieng,ousmane dieng,drafted,11.0,NZB
+LaMelo Ball,lamelo ball,drafted,3.0,ILL
+R.J. Hampton,r.j. hampton,drafted,24.0,NZB
+Josh Giddey,josh giddey,drafted,6.0,ADE
+Alex Toohey,alex toohey,drafted,22.0,SYD
+Lachlan Olbrich,lachlan olbrich,drafted,25.0,ILL
+Rocco Zikarsky,rocco zikarsky,drafted,15.0,BRI
+A.J. Johnson,a.j. johnson,drafted,23.0,ILL
+Alex Sarr,alex sarr,drafted,2.0,PER
+Bobi Klintman,bobi klintman,drafted,7.0,CRN
+Daniel Theis,daniel theis,undrafted,NA,
+Malcolm Cazalon,malcolm cazalon,undrafted,NA,
+Onuralp Bitim,onuralp bitim,undrafted,NA,
+Axel Toupane,axel toupane,undrafted,NA,
+Viacheslav Kravtsov,viacheslav kravtsov,undrafted,NA,
+Mindaugas Kuzminskas,mindaugas kuzminskas,undrafted,NA,
+Trentyn Flowers,trentyn flowers,undrafted,NA,
+Adam Mokoka,adam mokoka,undrafted,NA,
+Tim Ohlbrecht,tim ohlbrecht,undrafted,NA,
+William Howard,william howard,undrafted,NA,

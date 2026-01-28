@@ -1,0 +1,345 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Custom Stat Builder - The Wired Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.custom-stat-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.custom-stat-modal {
+    background: #000;
+    border: 1px solid #ff00ff;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 0 50px rgba(255, 0, 255, 0.3);
+}
+
+.custom-stat-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 0, 255, 0.05);
+}
+
+.custom-stat-modal .modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #ff00ff;
+    font-family: 'VT323', monospace;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+}
+
+.custom-stat-modal .close-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #aaa;
+    cursor: pointer;
+    padding: 8px;
+    transition: all 0.2s ease;
+}
+
+.custom-stat-modal .close-btn:hover {
+    border-color: #ff3366;
+    color: #ff3366;
+}
+
+.custom-stat-modal .modal-body {
+    padding: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.7rem;
+    color: #00ffff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.stat-name-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: transparent;
+    color: #fff;
+    font-size: 0.9rem;
+    font-family: 'Share Tech Mono', monospace;
+    transition: all 0.2s ease;
+}
+
+.stat-name-input:focus {
+    outline: none;
+    border-color: #ff00ff;
+    box-shadow: 0 0 15px rgba(255, 0, 255, 0.3);
+}
+
+.stat-name-input::placeholder {
+    color: #666;
+}
+
+/* Formula Builder */
+.formula-builder {
+    margin-bottom: 1.5rem;
+}
+
+.formula-builder label {
+    display: block;
+    font-size: 0.7rem;
+    color: #00ffff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.formula-component {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.operation-select {
+    width: 50px;
+    padding: 8px;
+    border: 1px solid rgba(255, 0, 255, 0.4);
+    background: transparent;
+    color: #ff00ff;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.operation-select option {
+    background: #000;
+    color: #fff;
+}
+
+.coefficient-input {
+    width: 70px;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: transparent;
+    color: #fff;
+    font-size: 0.85rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-align: center;
+}
+
+.coefficient-input:focus {
+    outline: none;
+    border-color: #00ffff;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.multiply-symbol {
+    color: #666;
+    font-size: 1rem;
+}
+
+.stat-select {
+    flex: 1;
+    min-width: 150px;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: transparent;
+    color: #fff;
+    font-size: 0.8rem;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.stat-select option {
+    background: #000;
+    color: #fff;
+}
+
+.stat-select:focus {
+    outline: none;
+    border-color: #00ffff;
+}
+
+.remove-component-btn {
+    padding: 6px 8px;
+    background: transparent;
+    border: 1px solid #ff3366;
+    color: #ff3366;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.remove-component-btn:hover {
+    background: #ff3366;
+    color: #000;
+}
+
+.add-component-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: transparent;
+    border: 1px solid rgba(0, 255, 255, 0.4);
+    color: #00ffff;
+    font-size: 0.75rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: all 0.2s ease;
+}
+
+.add-component-btn:hover {
+    background: rgba(0, 255, 255, 0.1);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+}
+
+/* Formula Preview */
+.formula-preview {
+    padding: 1rem;
+    border: 1px solid rgba(255, 0, 255, 0.2);
+    background: rgba(255, 0, 255, 0.03);
+    margin-bottom: 1.5rem;
+}
+
+.formula-preview label {
+    display: block;
+    font-size: 0.65rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+.preview-text {
+    font-size: 1rem;
+    color: #ff00ff;
+    font-family: 'VT323', monospace;
+    letter-spacing: 1px;
+}
+
+/* Existing Stats */
+.existing-stats {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.existing-stats label {
+    display: block;
+    font-size: 0.7rem;
+    color: #00ffff;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+}
+
+.stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+}
+
+.stat-item .stat-name {
+    color: #fff;
+    font-size: 0.85rem;
+}
+
+.delete-stat-btn {
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid #ff3366;
+    color: #ff3366;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.delete-stat-btn:hover {
+    background: #ff3366;
+    color: #000;
+}
+
+/* Modal Footer */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.cancel-btn {
+    padding: 10px 20px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #aaa;
+    font-size: 0.75rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+    border-color: #fff;
+    color: #fff;
+}
+
+.save-btn {
+    padding: 10px 24px;
+    background: transparent;
+    border: 1px solid #ff00ff;
+    color: #ff00ff;
+    font-size: 0.75rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.save-btn:hover:not(:disabled) {
+    background: #ff00ff;
+    color: #000;
+    box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+}
+
+.save-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

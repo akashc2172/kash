@@ -1,0 +1,8 @@
+{
+  "name": "checkthesheets",
+  "compatibility_date": "2026-01-08",
+  "assets": {
+    "directory": "./dist"
+  }
+}
+

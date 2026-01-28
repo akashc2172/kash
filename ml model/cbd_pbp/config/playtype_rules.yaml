@@ -1,0 +1,29 @@
+# Simple regex-based playType taxonomy. You can tune these once you inspect /plays/types.
+# The pipeline will also store all raw playTypes for audit.
+shot_attempt:
+  - "(?i)jumper"
+  - "(?i)layup"
+  - "(?i)dunk"
+  - "(?i)tip"
+  - "(?i)3\s*pt|three"
+  - "(?i)shot"
+free_throw:
+  - "(?i)free throw"
+turnover:
+  - "(?i)turnover"
+  - "(?i)travel"
+  - "(?i)lost ball"
+  - "(?i)bad pass"
+  - "(?i)offensive foul"
+foul:
+  - "(?i)foul"
+rebound:
+  - "(?i)rebound"
+steal:
+  - "(?i)steal"
+block:
+  - "(?i)block"
+technical:
+  - "(?i)technical"
+flagrant:
+  - "(?i)flagrant"

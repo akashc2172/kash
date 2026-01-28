@@ -1,0 +1,111 @@
+{
+  "players_2018_2025_HML.csv": {
+    "dropped_columns_count": 15,
+    "dropped_columns": [
+      "def_rtg.extraInfo",
+      "def_adj_rtg.extraInfo",
+      "def_adj_prod.extraInfo",
+      "def_adj_rapm.extraInfo",
+      "def_adj_rapm_prod.extraInfo",
+      "shotInfo.total_freq",
+      "shotInfo.info",
+      "off_adj_rapm.override",
+      "roster.lon",
+      "roster.lat",
+      "off_adj_rapm.pctile",
+      "off_adj_rapm.diff_pctile",
+      "def_adj_rapm.pctile",
+      "off_adj_rapm_prod.pctile",
+      "def_adj_rapm_prod.pctile"
+    ],
+    "kept_columns_count": 119
+  },
+  "players_2018_HML.csv": {
+    "dropped_columns_count": 0,
+    "dropped_columns": [],
+    "kept_columns_count": 119
+  },
+  "players_2019_HML.csv": {
+    "dropped_columns_count": 0,
+    "dropped_columns": [],
+    "kept_columns_count": 119
+  },
+  "players_2020_HML.csv": {
+    "dropped_columns_count": 5,
+    "dropped_columns": [
+      "def_rtg.extraInfo",
+      "def_adj_rtg.extraInfo",
+      "def_adj_prod.extraInfo",
+      "def_adj_rapm.extraInfo",
+      "def_adj_rapm_prod.extraInfo"
+    ],
+    "kept_columns_count": 119
+  },
+  "players_2021_HML.csv": {
+    "dropped_columns_count": 8,
+    "dropped_columns": [
+      "shotInfo.total_freq",
+      "shotInfo.info",
+      "def_rtg.extraInfo",
+      "def_adj_rtg.extraInfo",
+      "def_adj_prod.extraInfo",
+      "off_adj_rapm.override",
+      "def_adj_rapm.extraInfo",
+      "def_adj_rapm_prod.extraInfo"
+    ],
+    "kept_columns_count": 119
+  },
+  "players_2022_HML.csv": {
+    "dropped_columns_count": 7,
+    "dropped_columns": [
+      "shotInfo.total_freq",
+      "shotInfo.info",
+      "def_rtg.extraInfo",
+      "def_adj_rtg.extraInfo",
+      "def_adj_prod.extraInfo",
+      "def_adj_rapm.extraInfo",
+      "def_adj_rapm_prod.extraInfo"
+    ],
+    "kept_columns_count": 119
+  },
+  "players_2023_HML.csv": {
+    "dropped_columns_count": 9,
+    "dropped_columns": [
+      "shotInfo.total_freq",
+      "shotInfo.info",
+      "def_rtg.extraInfo",
+      "def_adj_rtg.extraInfo",
+      "def_adj_prod.extraInfo",
+      "roster.lon",
+      "roster.lat",
+      "def_adj_rapm.extraInfo",
+      "def_adj_rapm_prod.extraInfo"
+    ],
+    "kept_columns_count": 119
+  },
+  "players_2024_HML.csv": {
+    "dropped_columns_count": 4,
+    "dropped_columns": [
+      "shotInfo.total_freq",
+      "shotInfo.info",
+      "roster.lon",
+      "roster.lat"
+    ],
+    "kept_columns_count": 119
+  },
+  "players_2025_HML.csv": {
+    "dropped_columns_count": 9,
+    "dropped_columns": [
+      "shotInfo.total_freq",
+      "shotInfo.info",
+      "roster.lat",
+      "roster.lon",
+      "off_adj_rapm.pctile",
+      "off_adj_rapm.diff_pctile",
+      "def_adj_rapm.pctile",
+      "off_adj_rapm_prod.pctile",
+      "def_adj_rapm_prod.pctile"
+    ],
+    "kept_columns_count": 119
+  }
+}

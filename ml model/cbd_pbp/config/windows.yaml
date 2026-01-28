@@ -1,0 +1,26 @@
+# Window definitions (LONG tables)
+windows:
+  season_to_date:
+    kind: "count_games"
+    n_games: null
+  rolling10:
+    kind: "count_games"
+    n_games: 10
+  rolling5:
+    kind: "count_games"
+    n_games: 5
+  rolling15:
+    kind: "count_games"
+    n_games: 15
+  conference_only:
+    kind: "filter"
+    filter: "conference_game == true"
+  vs_top_quartile_opponents:
+    kind: "filter"
+    filter: "opp_strength_quartile == 4"
+  non_garbage_only:
+    kind: "poss_filter"
+    filter: "garbage_flag == false"
+  high_leverage_only:
+    kind: "poss_filter"
+    filter: "high_leverage_flag == true"

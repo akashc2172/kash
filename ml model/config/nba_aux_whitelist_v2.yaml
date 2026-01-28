@@ -1,0 +1,297 @@
+sources:
+  basketball_excel:
+    table: all_players.parquet
+    grain: player-season
+    keys:
+    - pid
+    - season_year
+    - season_type
+    - tid
+    null_tokens:
+    - \N
+    - ''
+    include_columns:
+    - and1
+    - and1_0_4
+    - and1_2p
+    - ast
+    - ast_pts
+    - astd_0_4
+    - astd_2p
+    - astd_3p
+    - astd_dunk
+    - astd_floating
+    - b_y
+    - bbr_pid
+    - blk
+    - blk_0_6
+    - blkd_0_4
+    - blkd_4_3p
+    - clu_fga
+    - clu_fgm
+    - clu_gp
+    - clu_mp
+    - clu_oc_poss
+    - clu_pts
+    - cty
+    - d_n
+    - d_y
+    - drb
+    - epm_mp
+    - fga_0_4
+    - fga_14_3p
+    - fga_3p
+    - fga_3p_dist
+    - fga_4_14
+    - fga_4_3p_dist
+    - fga_alley
+    - fga_c3
+    - fga_dunk
+    - fga_floating
+    - fga_sb3
+    - fgm_0_4
+    - fgm_14_3p
+    - fgm_3p
+    - fgm_4_14
+    - fgm_alley
+    - fgm_c3
+    - fgm_dunk
+    - fgm_floating
+    - fgm_sb3
+    - fta
+    - ftm
+    - gp
+    - ht
+    - lebron_mp
+    - me_bpm
+    - me_d_bpm
+    - me_d_epm
+    - me_d_lebron
+    - me_d_o_bpm
+    - me_epm
+    - me_lebron
+    - me_o_bpm
+    - me_o_epm
+    - me_o_lebron
+    - me_p_epm
+    - me_wins_bpm
+    - me_wins_epm
+    - mp
+    - nid
+    - nm
+    - of_c
+    - of_flagrant
+    - off_mp
+    - on_mp
+    - on_off_off_drtg
+    - on_off_off_ortg
+    - on_off_on_drtg
+    - on_off_on_ortg
+    - orb
+    - p_m
+    - pf
+    - pf_c
+    - pid
+    - pos
+    - pos_1_p
+    - pos_2_p
+    - pos_3_p
+    - pos_4_p
+    - pos_5_p
+    - pt_gp
+    - pt_mp
+    - pt_oc_poss
+    - pts
+    - season_type
+    - season_year
+    - sf_c
+    - sf_d
+    - st
+    - stl
+    - stl_pass
+    - sz
+    - team_gp
+    - tf_c
+    - tid
+    - tk_17_contested_shots
+    - tk_17_deflection
+    - tk_17_loose_ball_rcv
+    - tk_17_screen_ast
+    - tk_18_match_difficulty
+    - tk_ast_potential
+    - tk_ast_potential_pts
+    - tk_drb
+    - tk_drb_ch
+    - tk_drb_co
+    - tk_drb_dist
+    - tk_fga
+    - tk_fga_2p_cu
+    - tk_fga_2p_pu
+    - tk_fga_3p_0_2
+    - tk_fga_3p_2_4
+    - tk_fga_3p_4_6
+    - tk_fga_3p_6
+    - tk_fga_3p_cu
+    - tk_fga_3p_pu
+    - tk_fga_dr
+    - tk_front_ct_touches
+    - tk_gp
+    - tk_match_big
+    - tk_match_center
+    - tk_match_combo
+    - tk_match_forward
+    - tk_match_point
+    - tk_match_wing
+    - tk_mp
+    - tk_oc_poss
+    - tk_orb
+    - tk_orb_ch
+    - tk_orb_co
+    - tk_orb_dist
+    - tk_poss
+    - tk_time_of_poss
+    - tk_tov
+    - tk_tov_pass
+    - tk_tsa
+    - tov
+    - tov_lost
+    - tov_pass
+    - wt
+    include_prefixes:
+    - pt_
+    - pt_d_
+    - tk_
+    - pbp_
+    - clu_
+    - on_off_
+    notes:
+    - Keep explicit columns in include_columns plus any column whose name starts with
+      one of include_prefixes.
+    - Tracking (tk_) and play type (pt_) are historically sparse; create boolean availability
+      flags and do not impute across eras by default.
+    - If you do not want any position notions in modeling, still keep pos / pos_*
+      as optional metadata and exclude them at model-fit time.
+  dunks_threes_epm:
+    table: dunks_threes_stats_{season}.csv
+    grain: player-season
+    keys:
+    - player_id
+    - season
+    - seasontype
+    - team_id
+    include_columns:
+    - season
+    - age
+    - seasontype
+    - team_id
+    - team_alias
+    - team_alias_all
+    - player_id
+    - player_name
+    - pos_text
+    - gp
+    - roster_games
+    - start
+    - mp
+    - rookie_year
+    - inches
+    - weight
+    - mpg
+    - 'off'
+    - def
+    - tot
+    - ewins
+    - usg
+    - tspct
+    - efg
+    - fgpct_rim
+    - fgpct_mid
+    - fg2pct
+    - fg3pct
+    - ftpct
+    - orbpct
+    - drbpct
+    - astpct
+    - topct
+    - stlpct
+    - blkpct
+    - fga_rim_75
+    - fga_mid_75
+    - fg3a_75
+    - fta_75
+    - fga_75
+    null_tokens:
+    - \N
+    - ''
+    notes:
+    - 'Primary label family: tot/off/def (EPM) and ewins; plus usage/usg and shooting
+      efficiency tspct/efg/fg*%'
+    - Includes height/weight (inches/weight) which can be used to compute growth deltas
+      if you have multi-season NBA records.
+crosswalk_required:
+  table: dim_player_crosswalk
+  keys:
+  - bbr_pid
+  - pid
+  - player_id
+  notes:
+  - You will need a stable crosswalk between basketball-excel pid/bbr_pid and dunks&threes
+    player_id.
+  - Do not attempt fuzzy joins inside training; build this once and audit.
+anthropometrics_inputs:
+  table: dim_player_anthro_college_prior
+  grain: player (time-stamped measurements pre-NBA)
+  keys:
+  - athleteId
+  - measured_at
+  columns:
+  - athleteId
+  - measured_at
+  - source
+  - height_in
+  - weight_lb
+  - wingspan_in
+  - standing_reach_in
+  - body_fat_pct
+  - notes
+  derived_features:
+  - ht_prior_in, wt_prior_lb (latest pre-NBA measurement; optional baseline input)
+  - has_wingspan (wingspan_in IS NOT NULL; wingspan treated as constant once measured)
+  - growth_rate_ht_per_year (optional; slope over time if multiple pre-NBA measurements
+    exist)
+  notes:
+  - Store raw measurements with explicit timestamps; do not compute rookie-minus-predraft
+    deltas (too similar/noisy).
+  - Wingspan is treated as a constant feature once measured; include a missingness
+    indicator (has_wingspan).
+nba_anthro_growth_derived:
+  table: features_nba_anthro_growth
+  source: basketball_excel
+  input_table: nba_excel_curated (from all_players.parquet)
+  grain: player (constant features derived from multi-season NBA records)
+  keys:
+  - bbr_pid
+  - pid
+  columns:
+  - ht_first
+  - ht_max
+  - ht_peak_delta
+  - wt_first
+  - wt_max
+  - wt_peak_delta
+  - has_ht_multiseason
+  - has_wt_multiseason
+  definitions:
+    ht_first: earliest-season recorded ht for player
+    ht_max: max recorded ht across seasons for player
+    ht_peak_delta: ht_max - ht_first
+    wt_first: earliest-season recorded wt for player
+    wt_max: max recorded wt across seasons for player
+    wt_peak_delta: wt_max - wt_first
+    has_ht_multiseason: '>=2 seasons with non-null ht'
+    has_wt_multiseason: '>=2 seasons with non-null wt'
+  notes:
+  - This models 'growth potential' as baseline NBA height/weight versus peak recorded
+    in the seasonal database.
+  - 'These are derived/aux features: compute after nba_excel_curated exists; do not
+    treat as raw ingest columns.'

@@ -1,0 +1,78 @@
+File,Column,Type,Description,Example Value
+dim_player_crosswalk.parquet,nba_id,int64,Primary/Foreign Key (NBA ID),1536
+dim_player_crosswalk.parquet,player_name,object,Raw Source Column,Stephen Jackson
+dim_player_crosswalk.parquet,pid,object,Raw Source Column,stephen-jackson
+dim_player_crosswalk.parquet,bbr_id,object,Raw Source Column,jacksst02
+dim_player_nba.parquet,nba_id,int64,Primary/Foreign Key (NBA ID),1536
+dim_player_nba.parquet,player_name,object,Raw Source Column,Stephen Jackson
+dim_player_nba.parquet,pid,object,Raw Source Column,stephen-jackson
+dim_player_nba.parquet,bbr_id,object,Raw Source Column,jacksst02
+dim_player_nba.parquet,draft_year,float64,Raw Source Column,1997.0
+dim_player_nba.parquet,rookie_season_year,Int64,Raw Source Column,1998
+dim_player_nba.parquet,ht_first,float64,Raw Source Column,203.0
+dim_player_nba.parquet,ht_max,float64,Raw Source Column,203.0
+dim_player_nba.parquet,wt_first,float64,Raw Source Column,100.0
+dim_player_nba.parquet,wt_max,float64,Raw Source Column,100.0
+dim_player_nba.parquet,ht_peak_delta,float64,Peak Window Metric,0.0
+dim_player_nba.parquet,wt_peak_delta,float64,Peak Window Metric,0.0
+dim_player_nba.parquet,has_ht_multiseason,object,Raw Source Column,True
+dim_player_nba.parquet,has_wt_multiseason,object,Raw Source Column,True
+dim_player_nba.parquet,wingspan_const,float64,Raw Source Column,
+dim_player_nba.parquet,has_wingspan,float64,Raw Source Column,0.0
+fact_player_year1_epm.parquet,nba_id,int64,Primary/Foreign Key (NBA ID),1536
+fact_player_year1_epm.parquet,season,float64,Raw Source Column,2004.0
+fact_player_year1_epm.parquet,age,float64,Raw Source Column,21.0
+fact_player_year1_epm.parquet,seasontype,float64,Raw Source Column,2.0
+fact_player_year1_epm.parquet,team_id,float64,Raw Source Column,1610612737.0
+fact_player_year1_epm.parquet,team_alias,object,Raw Source Column,ATL
+fact_player_year1_epm.parquet,team_alias_all,object,Raw Source Column,ATL
+fact_player_year1_epm.parquet,player_id,float64,Raw Source Column,2564.0
+fact_player_year1_epm.parquet,player_name,object,Raw Source Column,Boris Diaw
+fact_player_year1_epm.parquet,pos_text,object,Raw Source Column,SF
+fact_player_year1_epm.parquet,gp,float64,Raw Source Column,76.0
+fact_player_year1_epm.parquet,roster_games,float64,Raw Source Column,82.0
+fact_player_year1_epm.parquet,start,float64,Raw Source Column,37.0
+fact_player_year1_epm.parquet,mp,float64,Raw Source Column,1915.27
+fact_player_year1_epm.parquet,rookie_year,float64,Raw Source Column,2003.0
+fact_player_year1_epm.parquet,inches,float64,Raw Source Column,80.0
+fact_player_year1_epm.parquet,weight,float64,Raw Source Column,250.0
+fact_player_year1_epm.parquet,mpg,float64,Raw Source Column,25.1974
+fact_player_year1_epm.parquet,off,float64,Raw Source Column,-2.46296
+fact_player_year1_epm.parquet,def,float64,Raw Source Column,-0.0940982
+fact_player_year1_epm.parquet,tot,float64,Raw Source Column,-2.55706
+fact_player_year1_epm.parquet,ewins,float64,Raw Source Column,0.581946
+fact_player_year1_epm.parquet,usg,float64,Raw Source Column,0.111594
+fact_player_year1_epm.parquet,tspct,float64,Raw Source Column,0.472376
+fact_player_year1_epm.parquet,efg,float64,Raw Source Column,0.456869
+fact_player_year1_epm.parquet,fgpct_rim,float64,Raw Source Column,0.541401
+fact_player_year1_epm.parquet,fgpct_mid,float64,Raw Source Column,0.376923
+fact_player_year1_epm.parquet,fg2pct,float64,Raw Source Column,0.466899
+fact_player_year1_epm.parquet,fg3pct,float64,Raw Source Column,0.230769
+fact_player_year1_epm.parquet,ftpct,float64,Raw Source Column,0.602151
+fact_player_year1_epm.parquet,orbpct,float64,Raw Source Column,0.0676417
+fact_player_year1_epm.parquet,drbpct,float64,Raw Source Column,0.138489
+fact_player_year1_epm.parquet,astpct,float64,Raw Source Column,0.153976
+fact_player_year1_epm.parquet,topct,float64,Raw Source Column,0.258197
+fact_player_year1_epm.parquet,stlpct,float64,Raw Source Column,0.0158219
+fact_player_year1_epm.parquet,blkpct,float64,Raw Source Column,0.014198
+fact_player_year1_epm.parquet,fga_rim_75,float64,Raw Source Column,3.179
+fact_player_year1_epm.parquet,fga_mid_75,float64,Raw Source Column,2.63229
+fact_player_year1_epm.parquet,fg3a_75,float64,Raw Source Column,0.526458
+fact_player_year1_epm.parquet,fta_75,float64,Raw Source Column,1.8831
+fact_player_year1_epm.parquet,fga_75,float64,Raw Source Column,6.33774
+fact_player_year1_epm.parquet,rookie_season_year,Int64,Raw Source Column,2004
+fact_player_year1_epm.parquet,year1_epm_tot,float64,Rookie Season Metric,-2.55706
+fact_player_year1_epm.parquet,year1_epm_off,float64,Rookie Season Metric,-2.46296
+fact_player_year1_epm.parquet,year1_epm_def,float64,Rookie Season Metric,-0.0940982
+fact_player_year1_epm.parquet,year1_epm_ewins,float64,Rookie Season Metric,0.581946
+fact_player_year1_epm.parquet,year1_usg,float64,Rookie Season Metric,0.111594
+fact_player_year1_epm.parquet,year1_tspct,float64,Rookie Season Metric,0.472376
+fact_player_year1_epm.parquet,year1_mp,float64,Rookie Season Metric,1915.27
+fact_player_year1_epm.parquet,missing_year1,int64,Rookie Season Metric,1
+fact_player_peak_rapm.parquet,nba_id,int64,Primary/Foreign Key (NBA ID),1536
+fact_player_peak_rapm.parquet,y_peak_ovr,float64,Peak Window Metric,1.64
+fact_player_peak_rapm.parquet,y_peak_off,float64,Peak Window Metric,1.61
+fact_player_peak_rapm.parquet,y_peak_def,float64,Peak Window Metric,0.03
+fact_player_peak_rapm.parquet,peak_poss,int64,Peak Window Metric,15518
+fact_player_peak_rapm.parquet,peak_end_year,int64,Peak Window Metric,2009
+fact_player_peak_rapm.parquet,peak_start_year,int64,Peak Window Metric,2007

@@ -1,0 +1,147 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   NBA Career Stats - The Wired Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.nba-career-stats {
+    margin-top: 1.5rem;
+    border: 1px solid rgba(255, 0, 255, 0.3);
+    background: transparent;
+    overflow: hidden;
+}
+
+.nba-career-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(255, 0, 255, 0.08);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 0, 255, 0.2);
+}
+
+.nba-career-header:hover {
+    background: rgba(255, 0, 255, 0.15);
+}
+
+.nba-career-header h3 {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #ff00ff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-family: 'Share Tech Mono', monospace;
+    text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+}
+
+.nba-career-header h3 svg {
+    color: #ff00ff;
+}
+
+.nba-career-toggle {
+    color: #aaa;
+    transition: transform 0.3s ease;
+}
+
+.nba-career-toggle.expanded {
+    transform: rotate(180deg);
+}
+
+.nba-career-content {
+    padding: 16px;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.nba-career-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.nba-stat-card {
+    padding: 12px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.nba-stat-card:hover {
+    border-color: #00ffff;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+}
+
+.nba-stat-label {
+    font-size: 0.6rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.nba-stat-value {
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: #00ffff;
+    font-family: 'VT323', monospace;
+    text-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+}
+
+.nba-stat-value.highlight {
+    color: #ff00ff;
+    text-shadow: 0 0 10px rgba(255, 0, 255, 0.4);
+}
+
+.br-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding: 8px 14px;
+    background: transparent;
+    border: 1px solid rgba(255, 0, 255, 0.3);
+    color: #ff00ff;
+    text-decoration: none;
+    font-size: 0.7rem;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.br-link:hover {
+    background: #ff00ff;
+    color: #000;
+    box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+}
+
+.br-link svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Empty state */
+.nba-career-empty {
+    padding: 20px;
+    text-align: center;
+    color: #666;
+    font-size: 0.8rem;
+    font-style: italic;
+}

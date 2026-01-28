@@ -1,0 +1,339 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Consensus Draft - The Wired Theme
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.consensus-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.consensus-draft-modal,
+.consensus-coming-soon-modal {
+    background: #000;
+    border: 1px solid #ff00ff;
+    width: 90%;
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 0 50px rgba(255, 0, 255, 0.3);
+}
+
+.consensus-coming-soon-modal {
+    max-width: 500px;
+    text-align: center;
+}
+
+.close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #aaa;
+    cursor: pointer;
+    padding: 8px;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.close-btn:hover {
+    border-color: #ff3366;
+    color: #ff3366;
+}
+
+/* Coming Soon Content */
+.coming-soon-content {
+    padding: 3rem 2rem;
+}
+
+.coming-soon-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    filter: grayscale(50%);
+}
+
+.coming-soon-content h2 {
+    font-size: 1.5rem;
+    color: #ff00ff;
+    font-family: 'VT323', monospace;
+    font-weight: 400;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+    margin: 0 0 0.5rem 0;
+}
+
+.coming-soon-subtitle {
+    font-size: 1rem;
+    color: #00ffff;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+}
+
+.coming-soon-description {
+    text-align: left;
+}
+
+.coming-soon-description>p {
+    color: #aaa;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.feature-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+.feature-item:hover {
+    border-color: rgba(255, 0, 255, 0.3);
+}
+
+.feature-icon {
+    font-size: 1.5rem;
+    filter: grayscale(30%);
+}
+
+.feature-item strong {
+    display: block;
+    color: #00ffff;
+    font-size: 0.8rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.feature-item p {
+    color: #888;
+    font-size: 0.75rem;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.cta-button {
+    margin-top: 2rem;
+    padding: 12px 24px;
+    background: transparent;
+    border: 1px solid #ff00ff;
+    color: #ff00ff;
+    font-size: 0.8rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cta-button:hover {
+    background: #ff00ff;
+    color: #000;
+    box-shadow: 0 0 25px rgba(255, 0, 255, 0.5);
+}
+
+/* Main Draft Modal */
+.consensus-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 0, 255, 0.05);
+}
+
+.consensus-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #ff00ff;
+    font-family: 'VT323', monospace;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+}
+
+.vote-count {
+    font-size: 0.7rem;
+    color: #00ffff;
+    margin-top: 4px;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.matchup-container {
+    padding: 2rem;
+}
+
+.matchup-prompt {
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.players-matchup {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.player-card {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 1.5rem;
+    background: transparent;
+    transition: all 0.2s ease;
+}
+
+.player-card:hover {
+    border-color: rgba(255, 0, 255, 0.4);
+}
+
+.player-info h4 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    color: #fff;
+    font-family: 'Share Tech Mono', monospace;
+}
+
+.player-meta {
+    display: flex;
+    gap: 6px;
+    color: #666;
+    font-size: 0.7rem;
+    margin-bottom: 1rem;
+}
+
+.player-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.player-stats .stat {
+    text-align: center;
+}
+
+.stat-label {
+    display: block;
+    font-size: 0.6rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 1rem;
+    color: #00ffff;
+    font-family: 'VT323', monospace;
+}
+
+/* Vote Buttons */
+.vote-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.vote-btn {
+    flex: 1;
+    padding: 10px 8px;
+    border: 1px solid;
+    background: transparent;
+    font-size: 0.7rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.vote-start {
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+.vote-start:hover {
+    background: #00ff88;
+    color: #000;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+}
+
+.vote-bench {
+    border-color: #ffaa00;
+    color: #ffaa00;
+}
+
+.vote-bench:hover {
+    background: #ffaa00;
+    color: #000;
+    box-shadow: 0 0 15px rgba(255, 170, 0, 0.4);
+}
+
+.vote-cut {
+    border-color: #ff3366;
+    color: #ff3366;
+}
+
+.vote-cut:hover {
+    background: #ff3366;
+    color: #000;
+    box-shadow: 0 0 15px rgba(255, 51, 102, 0.4);
+}
+
+.skip-btn {
+    display: block;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #888;
+    font-size: 0.7rem;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.skip-btn:hover {
+    border-color: #aaa;
+    color: #fff;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .players-matchup {
+        grid-template-columns: 1fr;
+    }
+
+    .coming-soon-content {
+        padding: 2rem 1rem;
+    }
+}
