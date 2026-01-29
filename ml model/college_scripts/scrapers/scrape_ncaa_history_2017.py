@@ -7,11 +7,11 @@ from datetime import datetime, timedelta
 from camoufox.async_api import AsyncCamoufox
 
 # --- Configuration ---
-OUTPUT_DIR = "data/scraped_history/2015"
-# Season 12700 is 2015-16
-SEASON_ID = "12700"
-START_DATE = datetime(2015, 11, 13)
-END_DATE = datetime(2016, 4, 4)
+# 2016-17 Season
+OUTPUT_DIR = "data/scraped_history/2017"
+SEASON_ID = "13100" 
+START_DATE = datetime(2016, 11, 11)
+END_DATE = datetime(2017, 4, 3)
 BASE_URL = "https://stats.ncaa.org"
 
 # --- Helper: Scrape PBP ---
@@ -20,7 +20,6 @@ async def scrape_game_pbp(page, contest_id: str, game_date_iso: str) -> list:
     url = f"{BASE_URL}/contests/{contest_id}/play_by_play"
     
     try:
-        # print(f"      Visiting PBP: {url}")
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(random.uniform(2, 4)) # Settle
         
@@ -31,7 +30,6 @@ async def scrape_game_pbp(page, contest_id: str, game_date_iso: str) -> list:
             let maxRows = 0;
             
             for (const table of tables) {
-                // Heuristic: PBP table is usually the largest one
                 const rowCount = table.rows.length;
                 if (rowCount > maxRows) {
                     maxRows = rowCount;
@@ -72,7 +70,7 @@ async def run_scraper():
         humanize=True,
         window=(1920, 1080),
     ) as browser:
-        print(f"🦊 Scraper started for Season {SEASON_ID}")
+        print(f"🦊 Scraper started for Season {SEASON_ID} (2016-17)")
         page = await browser.new_page()
         
         current_date = START_DATE
@@ -89,7 +87,6 @@ async def run_scraper():
                 await asyncio.sleep(random.uniform(3, 5))
                 
                 # 2. Extract Contest IDs
-                # Try both href and text-based locators to be robust
                 links = await page.locator("a[href*='box_score']").all()
                 if not links:
                     links = await page.locator("a", has_text=re.compile("Box Score", re.I)).all()
@@ -106,10 +103,9 @@ async def run_scraper():
                 print(f"    Found {len(contest_ids)} games.")
                 
                 if not contest_ids:
-                    # Diagnostics: Take a screenshot if we get 0 games on a day that should have them
-                    # (Jan 1 is often empty, but Jan 2+ shouldn't be)
-                    if current_date.month == 1 and current_date.day > 1:
-                        img_path = f"debug_empty_{date_str_iso}.png"
+                    # Diagnostics: Take a screenshot if we get 0 games on a non-holiday
+                    if current_date.month != 12 or current_date.day not in [24, 25]:
+                        img_path = f"debug_empty_2017_{date_str_iso}.png"
                         await page.screenshot(path=img_path)
                         print(f"    ⚠️ 0 games found. Screenshot saved to {img_path}")
                 else:
