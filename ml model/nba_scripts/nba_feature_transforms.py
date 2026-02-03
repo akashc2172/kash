@@ -104,6 +104,9 @@ def identify_percentage_columns() -> List[str]:
     return [
         'tspct', 'efg', 'fgpct_rim', 'fgpct_mid', 'fg2pct', 'fg3pct', 'ftpct',
         'year1_tspct',
+        # Phase 1 Additions: Percentages from Basketball-Excel
+        'year1_ast_rim_pct',  # Assisted rim makes / total rim makes [0,1]
+        'year1_pullup_2p_freq',  # Pull-up 2P attempts / total FGA [0,1]
         # Add more as needed from the registry
     ]
 
@@ -117,6 +120,10 @@ def identify_rate_columns() -> List[str]:
         'orbpct', 'drbpct', 'astpct', 'topct', 'stlpct', 'blkpct',
         'year1_usg', 'year1_epm_tot', 'year1_epm_off', 'year1_epm_def',
         'year1_epm_ewins',
+        # Phase 1 Additions: Rates/ratings from Basketball-Excel
+        'year1_on_ortg', 'year1_off_ortg',  # Offensive ratings (z-score by era)
+        # Note: year1_deflections, year1_corner_3_att, year1_dunk_att are counts,
+        # but will be z-scored as rates (per-minute or per-possession normalized elsewhere)
         # Add more as needed from the registry
     ]
 
@@ -131,6 +138,10 @@ def identify_aux_observation_columns() -> List[str]:
         'fgpct_rim', 'fgpct_mid', 'fg2pct', 'fg3pct', 'ftpct',
         'orbpct', 'drbpct', 'astpct', 'topct', 'stlpct', 'blkpct',
         'fga_rim_75', 'fga_mid_75', 'fg3a_75', 'fta_75', 'fga_75',
+        # Phase 1 Additions: Basketball-Excel Year-1 metrics
+        'year1_corner_3_att', 'year1_dunk_att', 'year1_dist_3p',
+        'year1_ast_rim_pct', 'year1_pullup_2p_freq',
+        'year1_deflections', 'year1_on_ortg', 'year1_off_ortg',
     ]
 
 

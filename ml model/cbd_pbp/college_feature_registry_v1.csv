@@ -57,3 +57,23 @@ paint_touch_proxy,diagnostic_only,rim_pressure,ALL,drives_or_rim_attempts per po
 coverage_shotinfo,diagnostic_only,coverage,ALL,% plays with shotInfo present,stg_plays,gp,coverage_shotinfo_missing,none,Pipeline QC
 coverage_lineups,diagnostic_only,coverage,ALL,% games with full 5-man stints,fact_lineup_stint_raw,gp,coverage_lineups_missing,none,Pipeline QC
 coverage_subs,diagnostic_only,coverage,ALL,% games with substitution events present,fact_substitution_raw,gp,coverage_subs_missing,none,Pipeline QC
+dunk_rate,X_input,athleticism,ALL,dunk_att/rim_fga (shots at rim that are dunks),stg_shots + playType,rim_fga,dunk_rate_missing,beta shrinkage,Requires dunk detection from playType or shotInfo
+dunk_freq,X_input,athleticism,ALL,dunk_att/fga_total,stg_shots + playType,fga_total,dunk_freq_missing,beta shrinkage,
+putback_rate,X_input,athleticism,ALL,putback_att/(orb+1) (shots within 2s of own OREB),stg_shots + stg_plays,orb,putback_rate_missing,poisson shrinkage,Requires timing linkage between OREB and shot
+transition_freq,X_input,athleticism,ALL,transition_att/fga_total,stg_shots + playType,fga_total,transition_freq_missing,beta shrinkage,Transition = first 7s of possession
+transition_eff,X_input,athleticism,ALL,transition_pts/transition_att,stg_shots + playType,transition_att,transition_eff_missing,beta-binomial shrinkage,
+rim_pressure_index,X_input,athleticism,ALL,(rim_fga + fta_total*0.44) / poss_est,stg_shots + fact_player_game,poss_est,rim_pressure_index_missing,gaussian shrinkage,Composite: ability to get to rim and line
+deflection_proxy,X_input,defense_activity,ALL,stl_rate * 1.5 + blk_rate * 0.5 (weighted disruption),derived,poss_est,deflection_proxy_missing,gaussian shrinkage,Proxy when deflection events unavailable
+contest_proxy,X_input,defense_activity,ALL,blk_rate / (blk_rate + foul_rate + 0.01),derived,poss_est,contest_proxy_missing,beta shrinkage,Clean contest ratio: blocks without fouling
+pressure_handle_proxy,X_input,decision_discipline,ALL,to_rate(HIGH_LEVERAGE) - to_rate(LOW_LEVERAGE),stg_plays + leverage,poss_est,pressure_handle_proxy_missing,gaussian shrinkage,Negative = handles pressure well
+clutch_shooting_delta,X_input,decision_discipline,ALL,ts_proxy(HIGH_LEVERAGE) - ts_proxy(LOW_LEVERAGE),stg_shots + leverage,tsa,clutch_shooting_delta_missing,gaussian shrinkage,Positive = rises to occasion
+self_creation_rate,X_input,shot_creation,ALL,unassisted_fga / fga_total,stg_shots,fga_total,self_creation_rate_missing,beta shrinkage,
+self_creation_eff,X_input,shot_creation,ALL,unassisted_pts / (2 * unassisted_fga),stg_shots,unassisted_fga,self_creation_eff_missing,beta-binomial shrinkage,
+rapm_standard,X_input,impact,ALL,Standard possession-weighted RAPM,calculate_historical_rapm,poss_total,rapm_standard_missing,ridge shrinkage (lambda=1000),
+rapm_leverage_weighted,X_input,impact,ALL,RAPM weighted by leverage index,calculate_historical_rapm,poss_total,rapm_leverage_weighted_missing,ridge shrinkage,
+rapm_high_leverage,X_input,impact,HIGH_LEVERAGE,RAPM from high/very_high leverage stints only,calculate_historical_rapm,poss_total,rapm_high_leverage_missing,ridge shrinkage,May be noisy due to smaller sample
+rapm_non_garbage,X_input,impact,NON_GARBAGE,RAPM excluding garbage time stints,calculate_historical_rapm,poss_total,rapm_non_garbage_missing,ridge shrinkage,
+o_rapm,X_input,impact,ALL,Offensive RAPM (points scored component),calculate_historical_rapm,poss_total,o_rapm_missing,ridge shrinkage,
+d_rapm,X_input,impact,ALL,Defensive RAPM (points allowed component inverted),calculate_historical_rapm,poss_total,d_rapm_missing,ridge shrinkage,
+rapm_rubber_adj,X_input,impact,ALL,RAPM with rubber-band effect adjustment,calculate_historical_rapm,poss_total,rapm_rubber_adj_missing,ridge shrinkage,Adjusts for coasting/trying harder bias
+leverage_poss_share,X_input,context,ALL,high_leverage_poss / total_poss,calculate_historical_rapm,poss_total,leverage_poss_share_missing,beta shrinkage,How often player is on court in clutch

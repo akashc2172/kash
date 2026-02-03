@@ -27,3 +27,13 @@ If at any row `len(on_floor) < 5`:
 
 ## 3. Data Integration
 The resulting dataset is exported as `fact_play_historical.parquet`, mimicking the schema of `fact_play_raw` (2025). This allows the RApM engine to treat 2015 and 2025 data as identical inputs.
+## 4. Advanced Feature Handling
+ 
++### Spatial Normalization
++*   **Coordinate Space**: All PBP-derived shots are mapped to a canonical **940 x 500** coordinate system (0.1 ft units).
++*   **Historical Missingness**: For 2010-2018 where raw text lacks X,Y, the pipeline exports `loc_x=NULL`, ensuring Tier 2 features (`avg_shot_dist`) stay `NaN` without breaking the regression.
++
++### Volume & Usage
++*   **Minutes Reconstruction**: Successfully derived from PBP text via sub-event timestamps for specific validation blocks (2015, 2017).
++*   **Volume Proxy**: `poss_total` (total possessions where player was on floor) is used as the universal volume denominator for Usage Rates across all eras, providing a robust box-score-independent metric.
++

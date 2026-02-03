@@ -158,6 +158,8 @@ def create_intermediate_views(con):
             s.assisted,
             s.is_high_leverage,
             s.is_garbage,
+            s.loc_x,
+            s.loc_y,
             r.team_rank AS opp_rank,
             CASE
                 WHEN r.team_rank IS NULL THEN 'VS_UNKNOWN'
@@ -193,7 +195,9 @@ def build_features(con) -> pd.DataFrame:
             strength_split,
             shot_range,
             made,
-            assisted
+            assisted,
+            loc_x,
+            loc_y
         FROM v_shots_augmented
     ),
     combos AS (
@@ -233,7 +237,70 @@ def build_features(con) -> pd.DataFrame:
         -- Assisted (by zone)
         COUNT(*) FILTER (WHERE shot_range = 'rim' AND made AND assisted) AS assisted_made_rim,
         COUNT(*) FILTER (WHERE shot_range = 'three_pointer' AND made AND assisted) AS assisted_made_three,
-        COUNT(*) FILTER (WHERE shot_range = 'jumper' AND made AND assisted) AS assisted_made_mid
+        COUNT(*) FILTER (WHERE shot_range = 'jumper' AND made AND assisted) AS assisted_made_mid,
+
+        -- SPATIAL (Tier 2) - Scale: 1 unit = 0.1 ft (0-940, 0-500)
+        -- XY Count
+        COUNT(loc_x) AS xy_shots,
+        
+        -- Distance Sum (for Avg Dist)
+        -- Hoop at (5.25, 25) and (88.75, 25)
+        SUM(
+            CASE 
+                WHEN loc_x IS NULL THEN 0
+                ELSE SQRT( 
+                    POW((loc_x/10.0 - (CASE WHEN loc_x < 470 THEN 5.25 ELSE 88.75 END)), 2) + 
+                    POW((loc_y/10.0 - 25.0), 2) 
+                )
+            END
+        ) AS sum_dist_ft,
+
+        -- Corner 3s (Logic: Dist from center > 21ft & Short Corner < 14ft)
+        COUNT(*) FILTER (
+            WHERE shot_range = 'three_pointer'
+              AND loc_x IS NOT NULL
+              AND ABS(loc_y/10.0 - 25.0) > 21.0
+              AND (CASE WHEN loc_x < 470 THEN loc_x/10.0 ELSE 94.0 - loc_x/10.0 END) < 14.0
+        ) AS corner_3_att,
+
+        COUNT(*) FILTER (
+            WHERE shot_range = 'three_pointer'
+              AND made
+              AND loc_x IS NOT NULL
+              AND ABS(loc_y/10.0 - 25.0) > 21.0
+              AND (CASE WHEN loc_x < 470 THEN loc_x/10.0 ELSE 94.0 - loc_x/10.0 END) < 14.0
+        ) AS corner_3_made,
+
+        -- Precision Counts for Gating
+        COUNT(loc_x) FILTER (WHERE shot_range = 'three_pointer') AS xy_3_shots,
+        COUNT(loc_x) FILTER (WHERE shot_range = 'rim') AS xy_rim_shots,
+
+        -- Extended Spatial: Deep 3s (> 27ft)
+        -- Logic: Dist > 27.0 AND 3PT
+        COUNT(*) FILTER (
+            WHERE shot_range = 'three_pointer'
+              AND loc_x IS NOT NULL
+              AND SQRT(POW((loc_x/10.0 - (CASE WHEN loc_x < 470 THEN 5.25 ELSE 88.75 END)), 2) + POW((loc_y/10.0 - 25.0), 2)) > 27.0
+        ) AS deep_3_att,
+
+        -- Extended Spatial: Rim Purity (< 4ft Restricted Area)
+        -- Logic: Dist < 4.0 AND Rim
+        COUNT(*) FILTER (
+            WHERE shot_range = 'rim'
+              AND loc_x IS NOT NULL
+              AND SQRT(POW((loc_x/10.0 - (CASE WHEN loc_x < 470 THEN 5.25 ELSE 88.75 END)), 2) + POW((loc_y/10.0 - 25.0), 2)) < 4.0
+        ) AS rim_rest_att,
+
+        -- For Variance: Sum of Squared Distance
+        SUM(
+            CASE 
+                WHEN loc_x IS NULL THEN 0
+                ELSE POW(SQRT( 
+                    POW((loc_x/10.0 - (CASE WHEN loc_x < 470 THEN 5.25 ELSE 88.75 END)), 2) + 
+                    POW((loc_y/10.0 - 25.0), 2) 
+                ), 2)
+            END
+        ) AS sum_dist_sq_ft
 
     FROM base b
     JOIN combos c
@@ -266,6 +333,54 @@ def build_features(con) -> pd.DataFrame:
 
     df['assisted_share_mid'] = np.where(df['mid_made'] > 0, df['assisted_made_mid'] / df['mid_made'], np.nan)
     df['assisted_share_mid_missing'] = (df['mid_made'] == 0).astype(int)
+
+    # --- Tier 2 Spatial Features (Gated) --- 
+    # Threshold: 25 shots with coordinates
+    # For General Stats (Avg Dist, Dispersion)
+    tier2_mask = df['xy_shots'] >= 25
+    
+    # For 3PT Stats (Corner, Deep)
+    tier2_3pt_mask = df['xy_3_shots'] >= 15  # Lower threshold for subset? Or keep 25? Let's say 20.
+    
+    # For Rim Stats (Purity)
+    tier2_rim_mask = df['xy_rim_shots'] >= 20
+
+    # Avg Shot Distance
+    df['avg_shot_dist'] = np.where(tier2_mask, df['sum_dist_ft'] / df['xy_shots'], np.nan)
+    
+    # Shot Distance Variance (Dispersion)
+    # Var = E[X^2] - (E[X])^2
+    # sum_sq / N - avg^2
+    mean_sq = df['sum_dist_sq_ft'] / df['xy_shots']
+    mean_val = df['avg_shot_dist']
+    df['shot_dist_var'] = np.where(tier2_mask, mean_sq - (mean_val ** 2), np.nan)
+
+    # Corner 3 Rate (Corner Att / Total 3 Att)
+    # Use xy_3_shots as denominator to be safe? Or total three_att? 
+    # If we assume missingness is random, we can use (Corner XY / Total XY 3s).
+    # This prevents bias if we only have coords for half the games.
+    # So: corner_3_rate = corner_3_att / xy_3_shots
+    df['corner_3_rate'] = np.where(tier2_3pt_mask & (df['xy_3_shots'] > 0), 
+                                   df['corner_3_att'] / df['xy_3_shots'], 
+                                   np.nan)
+    
+    # Corner 3 PCT (Efficiency) - Uses actual makes/att
+    df['corner_3_pct'] = np.where(tier2_3pt_mask & (df['corner_3_att'] > 0),
+                                  df['corner_3_made'] / df['corner_3_att'],
+                                  np.nan)
+
+    # Deep 3 Rate (Deep Att / XY 3 Att)
+    df['deep_3_rate'] = np.where(tier2_3pt_mask & (df['xy_3_shots'] > 0),
+                                 df['deep_3_att'] / df['xy_3_shots'],
+                                 np.nan)
+
+    # Rim Purity (Restricted Att / XY Rim Att)
+    df['rim_purity'] = np.where(tier2_rim_mask & (df['xy_rim_shots'] > 0),
+                                df['rim_rest_att'] / df['xy_rim_shots'],
+                                np.nan)
+                                  
+    # Export coverage
+    df['xy_coverage'] = np.where(df['shots_total'] > 0, df['xy_shots'] / df['shots_total'], 0.0)
 
     return df
 
@@ -331,8 +446,30 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
         FROM fact_team_season_stats
     """).df()
 
-    # Box Score Stats (AST, REB, STL, BLK, TOV)
-    # User requested: ast_total, orb_total, stl_total, blk_total, tov_total
+    # Box Score Stats (Derived from PBP and Shots)
+    # Replaces missing fact_player_season_stats for 2006-2024
+    
+    # 1. Turnovers from stg_plays
+    # Box Score Stats (Derived from PBP and Shots)
+    # Replaces missing fact_player_season_stats for 2006-2024
+    
+    # 1. Turnovers from stg_plays (JSON parsing)
+    # participants format: [{'id': 123, 'name': '...'}]
+    # We use DuckDB's json extraction to get the ID of the first participant
+    tov_df = con.execute("""
+        SELECT 
+            g.season,
+            CAST(json_extract(p.participants, '$[0].id') AS BIGINT) as athlete_id,
+            COUNT(*) as tov_total_derived
+        FROM stg_plays p
+        JOIN v_games_canon g ON g.gameId = p.gameId
+        WHERE p.playType ILIKE '%Turnover%'
+          AND p.participants IS NOT NULL
+          AND p.participants != '[]'
+        GROUP BY 1, 2
+    """).df()
+    
+    # 2. Existing fact fallback (only has 2005/2025)
     box_stats = con.execute("""
         SELECT
             season,
@@ -347,6 +484,19 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
             minutes AS minutes_total
         FROM fact_player_season_stats
     """).df()
+    
+    # Merge Logic: Use fact table if available, else derived
+    df = df_features.merge(athlete_team, on=['season', 'athlete_id'], how='left')
+    df = df.merge(team_stats, on=['season', 'teamId'], how='left')
+    
+    # Join both box sources
+    df = df.merge(box_stats, on=['season', 'athlete_id'], how='left')
+    df = df.merge(tov_df, on=['season', 'athlete_id'], how='left')
+    
+    # Coalesce TOV: Prefer fact (official), fallback to derived
+    df['tov_total'] = df['tov_total'].fillna(df['tov_total_derived']).fillna(0).astype(int)
+    # Drop temp column
+    df = df.drop(columns=['tov_total_derived'])
 
     df = df_features.merge(athlete_team, on=['season', 'athlete_id'], how='left')
     df = df.merge(team_stats, on=['season', 'teamId'], how='left')

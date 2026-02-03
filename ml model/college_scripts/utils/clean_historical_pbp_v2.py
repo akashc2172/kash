@@ -227,11 +227,13 @@ def main():
     SOURCE_DIRS = []
     
     if os.path.exists(base_scrape_dir):
-        # Find all 4-digit year folders
+        # Find all year folders (supports both YYYY and YYYY-YYYY formats)
         for item in os.listdir(base_scrape_dir):
             full_path = os.path.join(base_scrape_dir, item)
-            if os.path.isdir(full_path) and item.isdigit() and len(item) == 4:
-                SOURCE_DIRS.append(full_path)
+            if os.path.isdir(full_path):
+                # Check if it's a valid season folder (YYYY or YYYY-YYYY)
+                if (item.isdigit() and len(item) == 4) or re.match(r'^\d{4}-\d{4}$', item):
+                    SOURCE_DIRS.append(full_path)
     
     SOURCE_DIRS.sort() # Process in order
     print(f"🌍 Found {len(SOURCE_DIRS)} historical seasons to process: {SOURCE_DIRS}")
@@ -254,7 +256,12 @@ def main():
                     # Fuzzy match IDs (Simplified for speed - usually we'd cache this)
                     # For now just passing names is fine as per schema, IDs are explicit in next step if we want.
                     
-                    season = int(os.path.basename(folder))
+                    # Extract season from folder name (handle both YYYY and YYYY-YYYY formats)
+                    folder_name = os.path.basename(folder)
+                    if '-' in folder_name:
+                        season = int(folder_name.split('-')[0])  # 2012-2013 -> 2012
+                    else:
+                        season = int(folder_name)  # 2012 -> 2012
                     solver = GameSolver(cid, game_rows['raw_text'].tolist(), h_team, a_team, season)
                     solver.parse_rows()
                     solver.solve_timeline()

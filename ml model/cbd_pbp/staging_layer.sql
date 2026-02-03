@@ -59,8 +59,10 @@ SELECT
     json_extract_string(p.shotInfo, '$.range') AS shot_range,
     CAST(json_extract(p.shotInfo, '$.assisted') AS BOOLEAN) AS assisted,
     CAST(json_extract_string(p.shotInfo, '$.assistedBy.id') AS INT) AS assistAthleteId,
-    CAST(json_extract(p.shotInfo, '$.location.x') AS FLOAT) AS loc_x,
-    CAST(json_extract(p.shotInfo, '$.location.y') AS FLOAT) AS loc_y,
+    -- NOTE: use TRY_CAST because older seasons may contain JSON null/non-numeric placeholders.
+    -- TRY_CAST yields SQL NULL (clean missingness) rather than NaN / cast errors.
+    TRY_CAST(json_extract(p.shotInfo, '$.location.x') AS FLOAT) AS loc_x,
+    TRY_CAST(json_extract(p.shotInfo, '$.location.y') AS FLOAT) AS loc_y,
     
     CASE 
         WHEN p.period >= 2 AND p.secondsRemaining < 300 AND ABS(p.homeScore - p.awayScore) <= 5 

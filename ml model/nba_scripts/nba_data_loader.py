@@ -69,6 +69,11 @@ FORBIDDEN_FEATURE_COLUMNS = {
     'fgpct_rim', 'fgpct_mid', 'fg2pct', 'fg3pct', 'ftpct',
     'orbpct', 'drbpct', 'astpct', 'topct', 'stlpct', 'blkpct',
     'fga_rim_75', 'fga_mid_75', 'fg3a_75', 'fta_75', 'fga_75',
+    # Phase 1 Additions: All Year-1 Basketball-Excel stats are post-draft (auxiliary only)
+    'year1_corner_3_att', 'year1_dunk_att', 'year1_dist_3p',
+    'year1_ast_rim_pct', 'year1_pullup_2p_freq',
+    'year1_deflections', 'year1_on_ortg', 'year1_off_ortg',
+    'has_year1_be',  # Flag column (not a feature)
 }
 
 
@@ -223,6 +228,10 @@ def get_feature_columns() -> dict:
             'fgpct_rim', 'fgpct_mid', 'fg2pct', 'fg3pct', 'ftpct',
             'orbpct', 'drbpct', 'astpct', 'topct', 'stlpct', 'blkpct',
             'fga_rim_75', 'fga_mid_75', 'fg3a_75', 'fta_75', 'fga_75',
+            # Phase 1 Additions (Basketball-Excel)
+            'year1_corner_3_att', 'year1_dunk_att', 'year1_dist_3p',
+            'year1_ast_rim_pct', 'year1_pullup_2p_freq', 
+            'year1_deflections', 'year1_on_ortg', 'year1_off_ortg',
         ],
         
         'aux_targets': [

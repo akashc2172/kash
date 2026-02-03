@@ -12,7 +12,7 @@ OUT_DIR = DATA_DIR / "warehouse_v2"
 EPM_DIR = DATA_DIR / "epm "  # Note the space in the directory name if preserved from previous steps
 BE_DIR = DATA_DIR / "basketball_excel"
 RAPM_PATH = DATA_DIR / "nba_six_factor_rapm_clean.csv"
-WHITELIST_PATH = BASE_DIR / "nba_aux_whitelist_v2.yaml"
+WHITELIST_PATH = BASE_DIR / "config" / "nba_aux_whitelist_v2.yaml"
 
 def load_config():
     with open(WHITELIST_PATH, "r") as f:
@@ -283,29 +283,15 @@ def build_dim_player_nba(raw_be, crosswalk, config):
 
 # --- Step D: Facts ---
 
-def build_fact_year1_epm(raw_epm, dim_player):
-    """Build Year-1 EPM stats."""
+def build_fact_year1_epm(raw_epm, raw_be, dim_player):
+    """Build Year-1 EPM stats and extended Basketball-Excel metrics."""
     print("Building fact_player_year1_epm...")
     
+    # 1. EPM Base Layer
     target_players = dim_player[['nba_id', 'rookie_season_year']].dropna()
     merged = pd.merge(raw_epm, target_players, left_on='player_id', right_on='nba_id', how='inner')
     
-    # Filter: season match + regular season
-    # EPM 'seasontype' usually 'Regular', 'Playoffs'
-    # Whitelist says 'seasontype' column exists. dunks_threes_stats usually has it?
-    # Checking load_raw_epm: it loads it.
-    
-    # If seasontype col exists, use it. Else assume file is regular?
-    # Files are named "Dunks & Threes Stats {year}.csv". Usually regular season.
-    # But let's check col.
-    
     y1_data = merged[merged['season'] == merged['rookie_season_year']].copy()
-    
-    # Dedup: if multiple rows (e.g. traded), take total or weighted?
-    # EPM usually has 'team_id' or 'Tm'. If multiple, usually a 'TOT' row exists?
-    # EPM export usually has one row per player-season if it's the main leaderboard.
-    # If traded, it might have separate.
-    # We'll take the row with max MP if duplicates exist.
     
     if 'mp' in y1_data.columns:
         y1_data = y1_data.sort_values('mp', ascending=False)
@@ -333,8 +319,71 @@ def build_fact_year1_epm(raw_epm, dim_player):
             fact[dst] = np.nan
             
     fact['missing_year1'] = fact['year1_epm_tot'].isna().astype(int)
+
+    # 2. Basketball-Excel Extension (Project Phase 1)
+    print("  Merging extended Basketball-Excel Year-1 stats...")
     
-    print(f"  Year 1 Facts: {len(fact)} rows. Missing Year 1: {fact['missing_year1'].sum()}")
+    # Filter BE for rookie seasons
+    be_merged = pd.merge(raw_be, target_players, on='nba_id', how='inner')
+    be_y1 = be_merged[be_merged['season_year'] == be_merged['rookie_season_year']].copy()
+    
+    # Dedup multi-team seasons by taking max Minutes
+    # CURSOR NOTE: This handles traded players correctly (takes team with most minutes)
+    if 'mp' in be_y1.columns:
+        be_y1['mp'] = pd.to_numeric(be_y1['mp'], errors='coerce').fillna(0)
+        be_y1 = be_y1.sort_values('mp', ascending=False).drop_duplicates(subset=['nba_id'])
+    else:
+        be_y1 = be_y1.drop_duplicates(subset=['nba_id'])
+
+    # Extract & Rename Columns
+    be_extract = be_y1[['nba_id']].copy()
+    
+    # Helper to safe-get column
+    # CURSOR NOTE: Returns Series (not scalar) to maintain DataFrame alignment
+    def safe_get(df, col):
+        if col in df.columns:
+            return pd.to_numeric(df[col], errors='coerce')
+        else:
+            return pd.Series(np.nan, index=df.index)
+
+    # A. Role Traces (Raw counts/attempts - will be z-scored by era)
+    be_extract['year1_corner_3_att'] = safe_get(be_y1, 'fga_sb3')
+    be_extract['year1_dunk_att'] = safe_get(be_y1, 'fga_dunk')
+    be_extract['year1_dist_3p'] = safe_get(be_y1, 'fga_3p_dist')
+    
+    # B. Creation Context (Percentages - will be logit transformed)
+    # Assisted Rim % = astd_0_4 / fgm_0_4
+    # CURSOR NOTE: Using fgm_0_4 (makes) not fga_0_4 (attempts) as denominator - correct per plan
+    rim_makes = safe_get(be_y1, 'fgm_0_4')
+    rim_ast = safe_get(be_y1, 'astd_0_4')
+    # CURSOR FIX: Handle case where rim_makes is Series of all NaN (avoid comparison warning)
+    rim_makes_valid = rim_makes.fillna(0)
+    be_extract['year1_ast_rim_pct'] = np.where(rim_makes_valid > 0, rim_ast / rim_makes_valid, np.nan)
+    
+    # Pull-up Freq = tk_fga_2p_pu / Total FGA
+    # Total FGA from zones to match BE denominator logic
+    # CURSOR NOTE: This matches the plan's denominator calculation
+    fga_zones = ['fga_0_4', 'fga_4_14', 'fga_14_3p', 'fga_3p']
+    total_fga = pd.Series(0.0, index=be_y1.index)
+    for z in fga_zones:
+        total_fga = total_fga + safe_get(be_y1, z).fillna(0)
+    pu_atts = safe_get(be_y1, 'tk_fga_2p_pu')
+    # CURSOR FIX: Ensure total_fga comparison works correctly
+    be_extract['year1_pullup_2p_freq'] = np.where(total_fga > 0, pu_atts / total_fga, np.nan)
+    
+    # C. Defense & Impact (Rates/ratings - will be z-scored by era)
+    be_extract['year1_deflections'] = safe_get(be_y1, 'tk_17_deflection')
+    be_extract['year1_on_ortg'] = safe_get(be_y1, 'on_off_on_ortg')
+    be_extract['year1_off_ortg'] = safe_get(be_y1, 'on_off_off_ortg')
+
+    # Merge into main fact table
+    fact = pd.merge(fact, be_extract, on='nba_id', how='left')
+    
+    # Flag for BE data availability
+    # CURSOR NOTE: Using corner_3_att as proxy for BE data presence (reasonable)
+    fact['has_year1_be'] = fact['year1_corner_3_att'].notna().astype(int)
+    
+    print(f"  Year 1 Facts: {len(fact)} rows. Missing EPM: {fact['missing_year1'].sum()}. Missing BE: {(fact['has_year1_be']==0).sum()}")
     return fact
 
 def build_fact_peak_rapm(raw_rapm, dim_player):
@@ -382,7 +431,44 @@ def validate_warehouse(dim, fact_y1, fact_rapm):
     print(f"Height Growth Fill Rate: {growth_fill:.2%}")
     
     missing_y1 = fact_y1['missing_year1'].mean()
-    print(f"Missing Year 1 Rate: {missing_y1:.2%}")
+    print(f"Missing Year 1 EPM Rate: {missing_y1:.2%}")
+    
+    if 'has_year1_be' in fact_y1.columns:
+        be_fill = fact_y1['has_year1_be'].mean()
+        print(f"Year 1 Basketball-Excel Fill Rate: {be_fill:.2%}")
+        
+        # Coverage validation
+        if be_fill < 0.65:
+            print(f"⚠️  WARNING: BE coverage below 65% threshold")
+        
+        # Era breakdown (if rookie_season_year available)
+        if 'rookie_season_year' in fact_y1.columns:
+            # Merge with dim to get rookie_season_year if not in fact_y1
+            if 'rookie_season_year' not in fact_y1.columns and 'rookie_season_year' in dim.columns:
+                fact_y1 = fact_y1.merge(dim[['nba_id', 'rookie_season_year']], on='nba_id', how='left')
+            
+            if 'rookie_season_year' in fact_y1.columns:
+                try:
+                    era_bins = [0, 2005, 2010, 2015, 2020, 2030]
+                    era_labels = ['Pre-2005', '2005-2010', '2010-2015', '2015-2020', '2020+']
+                    fact_y1['era'] = pd.cut(fact_y1['rookie_season_year'], bins=era_bins, labels=era_labels, include_lowest=True)
+                    era_coverage = fact_y1.groupby('era', observed=True)['has_year1_be'].agg(['mean', 'count'])
+                    print("\nBE Coverage by Era:")
+                    print(era_coverage)
+                except Exception as e:
+                    print(f"  (Could not compute era breakdown: {e})")
+        
+        # Data quality checks for Phase 1 columns
+        pct_cols = ['year1_ast_rim_pct', 'year1_pullup_2p_freq']
+        for col in pct_cols:
+            if col in fact_y1.columns:
+                valid = fact_y1[col].dropna()
+                if len(valid) > 0:
+                    out_of_bounds = valid[(valid < 0) | (valid > 1)]
+                    if len(out_of_bounds) > 0:
+                        print(f"⚠️  WARNING: {col} has {len(out_of_bounds)} values outside [0,1] range")
+                    else:
+                        print(f"✓ {col}: All values in valid [0,1] range ({len(valid)} valid)")
 
 # --- Main ---
 
@@ -403,8 +489,8 @@ def main():
     dim_player = build_dim_player_nba(raw_be, crosswalk, config)
     dim_player.to_parquet(OUT_DIR / "dim_player_nba.parquet", index=False)
     
-    # Facts
-    fact_y1 = build_fact_year1_epm(raw_epm, dim_player)
+    # Facts - Update: Pass raw_be to fact_year1
+    fact_y1 = build_fact_year1_epm(raw_epm, raw_be, dim_player)
     fact_y1.to_parquet(OUT_DIR / "fact_player_year1_epm.parquet", index=False)
     
     fact_rapm = build_fact_peak_rapm(raw_rapm, dim_player)

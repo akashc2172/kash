@@ -8,8 +8,32 @@ and materializes:
 - derived fact tables:
   - `fact_player_game`, `fact_team_game`
   - windowed long tables: `fact_player_window`, `fact_team_window`
-- optional: RAPM (ridge APM) from lineup stints
+- **Enhanced RAPM** (7 variants including leverage-weighted, O/D split, rubber-band adjusted)
 - optional: xPts + over/under expectation + passing value-over-exp
+
+## New Features (Jan 2025)
+
+### Enhanced RAPM Variants
+The `calculate_historical_rapm.py` script now computes 7 RAPM variants:
+- `rapm_standard`: Possession-weighted (original)
+- `rapm_leverage_weighted`: Weights stints by leverage index (clutch signal)
+- `rapm_high_leverage`: Only high/very_high leverage stints
+- `rapm_non_garbage`: Excludes garbage time
+- `o_rapm` / `d_rapm`: Offensive/Defensive split
+- `rapm_rubber_adj`: Rubber-band effect correction
+
+### Win Probability & Leverage Model
+- `compute_win_probability()`: Time-weighted logistic model
+- `compute_leverage_index()`: Expected WP swing from possession outcomes (pbpstats methodology)
+- Leverage buckets: `garbage`, `low`, `medium`, `high`, `very_high`
+
+### New Feature Blocks
+See `college_scripts/compute_enhanced_features.py`:
+- **Athleticism**: `dunk_rate`, `putback_rate`, `transition_freq`, `rim_pressure_index`
+- **Defense Activity**: `deflection_proxy`, `contest_proxy`
+- **Decision Discipline**: `pressure_handle_proxy`, `clutch_shooting_delta`
+- **Shot Creation**: `self_creation_rate`, `self_creation_eff`
+- **Context**: `leverage_poss_share`
 
 ## Quickstart
 
@@ -46,3 +70,8 @@ python -m cbd_pbp.cli export-wide --season 2025 --season-type regular --out data
 - Windowed tables are LONG: key = (athleteId, season, teamId, asOfGameId, window_id).
   Export wide on demand.
 - PlayType taxonomy is configurable in `cbd_pbp/config/playtype_rules.yaml`.
+
+## Docs Index
+
+- `docs/INDEX.md`
+- `docs/WORKSPACE_STATUS.md`
