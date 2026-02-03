@@ -1227,8 +1227,12 @@ const ComparisonSection = ({ players, historyData, statsDistribution }) => {
 function App() {
   // --- URL ROUTING INITIALIZATION ---
   const getInitialMode = () => {
-    // UPDATED: Better handling of slashes to avoid crashes on /season/
-    const path = window.location.pathname.replace(/^\/|\/$/g, '');
+    // UPDATED: Robust handling of path segments
+    // e.g. "/career" -> ["", "career"] -> "career"
+    // e.g. "/career/" -> ["", "career", ""] -> "career"
+    const segments = window.location.pathname.split('/');
+    const path = segments[1] ? segments[1].toLowerCase() : 'season';
+
     return ['season', 'career', 'compare', 'about'].includes(path) ? path : 'season';
   };
 
