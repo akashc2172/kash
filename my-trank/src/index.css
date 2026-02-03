@@ -1,68 +1,154 @@
+/* Google Fonts - IBM Plex Mono + Space Grotesk (KPRverse-inspired) */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Core Palettes - CPUBenchmark + KPRverse hybrid */
+  --bg-primary: #f1f4f9;
+  --bg-secondary: #e8eef5;
+  --bg-glass: rgba(255, 255, 255, 0.95);
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Navy/Teal accent palette */
+  --accent-primary: #1a3a5c;
+  --accent-primary-glow: rgba(26, 58, 92, 0.15);
+  --accent-teal: #008bba;
+  --accent-secondary: #b6203c;
+  --accent-tertiary: #0c7c59;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Text colors */
+  --text-primary: #1a2d42;
+  --text-secondary: #3d5066;
+  --text-muted: #6b7d8f;
+
+  /* Borders - thin, clean grid style */
+  --border-subtle: #d5dce6;
+  --border-table: #dddddd;
+  --border-accent: rgba(0, 139, 186, 0.3);
+
+  /* Table-specific colors */
+  --table-header-bg: #b8c9dc;
+  --table-header-text: #1a2d42;
+  --table-row-even: #eff3f8;
+  --table-row-odd: #ffffff;
+  --table-hover: #e3eaf3;
+
+  /* KPRverse folder radius */
+  --folder-radius: 10px 10px 0 10px;
+  --folder-radius-sm: 6px 6px 0 6px;
+
+  /* Effects - minimal for data-dense look */
+  --glass-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --transition-smooth: all 0.15s ease;
+  --transition-hover: all 0.25s ease-out;
+
+  --sidebar-width: 280px;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Space Grotesk', 'Roboto', Arial, Helvetica, sans-serif;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  font-family: 'Space Grotesk', 'Roboto', Arial, Helvetica, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+#root {
+  height: 100%;
+  width: 100%;
 }
 
+code,
+pre {
+  font-family: 'IBM Plex Mono', 'Courier New', Courier, monospace;
+}
+
+/* Base interactive elements - compact, flat styling */
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  border: none;
+  background: none;
+  transition: var(--transition-smooth);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+input,
+select {
+  font-family: 'IBM Plex Mono', monospace;
+  background: white;
+  border: 1px solid #cccccc;
+  color: var(--text-primary);
+  border-radius: 3px;
+  padding: 5px 8px;
+  font-size: 0.8125rem;
+  transition: var(--transition-smooth);
+  box-shadow: none;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: none;
+}
+
+/* Scrollbar Styling - Clean & Minimal */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e8eef5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #b8c9dc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9fb3c9;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KPRVERSE SCROLL FADE ANIMATIONS (GPU-accelerated)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.fade-in-element {
+  opacity: 0;
+  transform: translateY(16px) translateZ(0);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  will-change: opacity, transform;
+}
+
+.fade-in-element.fade-in-visible {
+  opacity: 1;
+  transform: translateY(0) translateZ(0);
+}
+
+/* Staggered delays for multiple elements */
+.fade-in-element:nth-child(1) {
+  transition-delay: 0s;
+}
+
+.fade-in-element:nth-child(2) {
+  transition-delay: 0.08s;
+}
+
+.fade-in-element:nth-child(3) {
+  transition-delay: 0.16s;
+}
+
+.fade-in-element:nth-child(4) {
+  transition-delay: 0.24s;
 }

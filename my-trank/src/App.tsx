@@ -4,6 +4,7 @@ import nerdBall from './assets/nerd_ball.png';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import _ from 'lodash';
+import { TableVirtuoso } from 'react-virtuoso';
 import { CustomStatBuilder } from './components/CustomStatBuilder';
 import type { CustomStat } from './components/CustomStatBuilder';
 import { ConsensusDraft } from './components/ConsensusDraft';
@@ -141,6 +142,8 @@ const METRIC_DEFINITIONS: Record<string, string> = {
   "midfga/100": "Midrange FGA per 100 offensive possessions (attempts).",
   "rimfga/100": "Rim/finish FGA per 100 offensive possessions (attempts).",
   "dunkfga/100": "Dunk attempts per 100 offensive possessions (attempts).",
+  "gbpm": "Game Box Plus-Minus (Torvik)",
+  "per": "Player Efficiency Rating (PER)",
 };
 
 // --- STAT CONFIG ---
@@ -153,13 +156,14 @@ const STAT_CONFIG = [
       { key: 'defensive rapm', source: 'H' },
       { key: 'porpag', source: 'B' },
       { key: 'dporpag', source: 'B' },
-      { key: 'bpm', source: 'B' },
       { key: 'obpm', source: 'B' },
       { key: 'dbpm', source: 'B' },
+      { key: 'gbpm', label: 'BPM', source: 'B' },
       { key: 'ortg', source: 'B' },
       { key: 'drtg', source: 'B' },
       { key: 'adj_oe', source: 'B' },
       { key: 'adj_de', source: 'B' },
+      { key: 'per', label: 'PER', source: 'B' },
     ]
   },
   {
@@ -300,7 +304,7 @@ const STAT_CONFIG = [
 
 // defaults
 const DEFAULT_VISIBLE = new Set([
-  'porpag', 'bpm', 'total RAPM',
+  'porpag', 'obpm', 'dbpm', 'gbpm', 'total RAPM', 'per',
   'fg_pct', 'ts', 'ft_pct',
   '2p%', '3p%', 'rim%',
   'dunk_m',
@@ -361,9 +365,9 @@ const formatValue = (val, key) => {
   if (conf?.isPct) {
     let num = val;
     if (Math.abs(num) <= 1.0 && num !== 0) num = num * 100;
-    return num.toFixed(1);
+    return num.toFixed(2);
   }
-  return Number.isInteger(val) ? val : val.toFixed(1);
+  return Number.isInteger(val) ? val : val.toFixed(2);
 };
 
 const expBucket = (exp) => {
@@ -389,6 +393,41 @@ const cleanNumeric = (val) => {
   const cleaned = String(val).replace(/[^0-9.-]/g, '');
   const n = parseFloat(cleaned);
   return isNaN(n) ? null : n;
+};
+
+const dedupeInternationalRows = (rows) => {
+  const keyFor = (r) => `${r.key}|${r.team}|${r.league}|${r.torvik_year}`;
+  const scoreRow = (r) => {
+    const preferred = ['ast', 'stl', 'ast_to', 'blk'];
+    let score = 0;
+    preferred.forEach(k => {
+      const v = r[k];
+      if (v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && Number.isNaN(v))) {
+        score += 10;
+      }
+    });
+    // Tie-breaker: count total non-null numeric fields
+    let nonNull = 0;
+    Object.keys(r).forEach(k => {
+      const v = r[k];
+      if (v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && Number.isNaN(v))) nonNull += 1;
+    });
+    return score * 1000 + nonNull;
+  };
+
+  const bestByKey = new Map();
+  rows.forEach(r => {
+    if (!r.isInternational || Number(r.torvik_year) !== 2026) return;
+    const k = keyFor(r);
+    const prev = bestByKey.get(k);
+    if (!prev || scoreRow(r) > scoreRow(prev)) bestByKey.set(k, r);
+  });
+
+  return rows.filter(r => {
+    if (!r.isInternational || Number(r.torvik_year) !== 2026) return true;
+    const k = keyFor(r);
+    return bestByKey.get(k) === r;
+  });
 };
 
 const fetchCsv = (file) => new Promise((resolve) => {
@@ -627,20 +666,20 @@ const LeagueMultiSelect = ({ options, selected, onChange }) => {
       </button>
 
       {isOpen && (
-        <div className="league-dropdown">
-          <div className="league-dropdown-header">
-            <span onClick={selectAll} className="select-all-btn">
+        <div className="league-dropdown" style={{ background: 'white', border: '1px solid var(--border-subtle)', boxShadow: 'var(--glass-shadow)', borderRadius: '12px', padding: '12px', zindex: 1000 }}>
+          <div className="league-dropdown-header" style={{ marginBottom: '10px', paddingBottom: '8px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <span onClick={selectAll} className="select-all-btn" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', fontWeight: 600, cursor: 'pointer' }}>
               {selected.size === options.length ? "Deselect All" : "Select All"}
             </span>
           </div>
           {options.map(opt => (
-            <label key={opt} className="league-option">
+            <label key={opt} className="league-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={selected.has(opt)}
                 onChange={() => toggleOption(opt)}
               />
-              <span style={{ color: opt === 'NCAA D1' ? 'inherit' : '#dc2626', fontWeight: opt === 'NCAA D1' ? 600 : 500 }}>
+              <span style={{ color: opt === 'NCAA D1' ? 'var(--text-primary)' : 'var(--accent-secondary)', fontWeight: opt === 'NCAA D1' ? 600 : 500, fontSize: '0.875rem' }}>
                 {opt}
               </span>
             </label>
@@ -654,15 +693,22 @@ const LeagueMultiSelect = ({ options, selected, onChange }) => {
 
 // --- SINGLE PLAYER MODAL (Updated to respect visibleCols) ---
 const PlayerDetailModal = ({ player, historyData, statConfig, visibleCols, brStats, onClose }) => {
-  const [customStat, setCustomStat] = useState('bpm');
+  const [customStat, setCustomStat] = useState('gbpm');
   const dropdownOptions = getDropdownOptions();
+
+  const effectiveVisibleCols = useMemo(() => {
+    if (!player?.isInternational) {
+      return new Set([...visibleCols].filter(k => k !== 'per'));
+    }
+    return visibleCols;
+  }, [player, visibleCols]);
 
   // Filter the stat config to only show cols that are currently visible in the main table
   const filteredConfig = useMemo(() => (
     statConfig
-      .map(g => ({ ...g, stats: g.stats.filter(s => visibleCols.has(s.key)) }))
+      .map(g => ({ ...g, stats: g.stats.filter(s => effectiveVisibleCols.has(s.key)) }))
       .filter(g => g.stats.length > 0)
-  ), [statConfig, visibleCols]);
+  ), [statConfig, effectiveVisibleCols]);
 
   if (!player) return null;
 
@@ -704,16 +750,16 @@ const PlayerDetailModal = ({ player, historyData, statConfig, visibleCols, brSta
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <button className="close-button" onClick={onClose}><X size={20} /></button>
-        <div className="modal-header">
+        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
           <div>
-            <h2 className="player-title" style={{ color: player.isInternational ? 'red' : 'inherit' }}>{player.key}</h2>
-            <div className="player-meta">
+            <h2 className="player-title" style={{ fontSize: '2rem', fontWeight: 800, color: player.isInternational ? 'var(--accent-secondary)' : 'var(--text-primary)' }}>{player.key}</h2>
+            <div className="player-meta" style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
               {player.league} • {player.team} • {player.pos} • {player.height} • {player.weight ? `${player.weight}lbs` : ''} • BMI: {player.bmi || '-'}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.8rem', color: '#999', textTransform: 'uppercase' }}>Latest RAPM</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: player['total RAPM'] > 0 ? '#16a34a' : '#dc2626' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Latest RAPM</div>
+            <div style={{ fontSize: '2rem', fontWeight: 800, color: player['total RAPM'] > 0 ? 'var(--accent-tertiary)' : 'var(--accent-secondary)' }}>
               {typeof player['total RAPM'] === 'number' ? player['total RAPM']?.toFixed(1) : '-'}
             </div>
           </div>
@@ -751,20 +797,20 @@ const PlayerDetailModal = ({ player, historyData, statConfig, visibleCols, brSta
           </div>
 
           <div className="chart-card">
-            <div className="chart-header"><span className="chart-title">RAPM Impact (Off vs Def)</span></div>
+            <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}><span className="chart-title" style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-secondary)' }}>RAPM Impact (Off vs Def)</span></div>
             <ResponsiveContainer width="100%" height={250}>
               {playerHistory.some(r => r['offensive rapm'] !== undefined) ? (
                 <BarChart data={playerHistory}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                  <XAxis dataKey="torvik_year" tick={{ fontSize: 12 }} />
-                  <YAxis domain={[-15, 15]} tick={{ fontSize: 12 }} />
-                  <RechartsTooltip cursor={{ fill: 'transparent' }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle)" />
+                  <XAxis dataKey="torvik_year" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                  <YAxis domain={[-15, 15]} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                  <RechartsTooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-subtle)', boxShadow: 'var(--glass-shadow)' }} />
                   <Legend iconType="circle" />
-                  <ReferenceLine y={0} stroke="#666" />
-                  <Bar dataKey="offensive rapm" name="Offense" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="defensive rapm" name="Defense" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <ReferenceLine y={0} stroke="var(--text-muted)" />
+                  <Bar dataKey="offensive rapm" name="Offense" fill="var(--accent-primary)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="defensive rapm" name="Defense" fill="var(--accent-secondary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
-              ) : <div style={{ padding: 20, color: '#999' }}>No RAPM Data</div>}
+              ) : <div style={{ padding: 20, color: 'var(--text-muted)', fontSize: '0.875rem' }}>No RAPM Data</div>}
             </ResponsiveContainer>
           </div>
 
@@ -831,8 +877,8 @@ const PlayerDetailModal = ({ player, historyData, statConfig, visibleCols, brSta
 // --- MULTI-PLAYER COMPARISON SECTION ---
 const ComparisonSection = ({ players, historyData, statsDistribution }) => {
   // ... (Same as before) ...
-  const [customStat, setCustomStat] = useState('bpm');
-  const [radarConfig, setRadarConfig] = useState(['bpm', 'usg', 'ts', 'ast', 'oreb_rate', 'dreb_rate']);
+  const [customStat, setCustomStat] = useState('gbpm');
+  const [radarConfig, setRadarConfig] = useState(['gbpm', 'usg', 'ts', 'ast', 'oreb_rate', 'dreb_rate']);
   const [showRadarConfig, setShowRadarConfig] = useState(false);
 
   const [scatterX, setScatterX] = useState('usg');
@@ -973,21 +1019,21 @@ const ComparisonSection = ({ players, historyData, statsDistribution }) => {
   };
 
   return (
-    <div style={{ margin: '20px 0', padding: '20px', border: '1px solid #e5e7eb', borderRadius: '12px', background: '#fdfdfd' }}>
-      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+    <div style={{ margin: '2rem 0', padding: '2rem', border: '1px solid var(--border-subtle)', borderRadius: '24px', background: 'white', boxShadow: 'var(--glass-shadow)' }}>
+      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
         <div>
-          <h2 className="player-title" style={{ fontSize: '1.8rem' }}>Comparison Visualization</h2>
-          <div className="player-meta">
+          <h2 className="player-title" style={{ fontSize: '2rem', fontWeight: 800 }}>Comparison Visualization</h2>
+          <div className="player-meta" style={{ marginTop: '0.5rem' }}>
             {players.map((p, i) => (
-              <span key={p.id} style={{ color: COMPARE_COLORS[i % COMPARE_COLORS.length], marginRight: '15px', fontWeight: 'bold' }}>
+              <span key={p.id} style={{ color: COMPARE_COLORS[i % COMPARE_COLORS.length], marginRight: '1.25rem', fontWeight: 700, fontSize: '1rem' }}>
                 {p.key}
               </span>
             ))}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '15px', background: '#f3f4f6', padding: '8px 12px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}>
-          <span style={{ color: '#666', marginRight: '5px' }}>Visualizations:</span>
+        <div style={{ display: 'flex', gap: '12px', background: 'var(--bg-secondary)', padding: '6px 12px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600, border: '1px solid var(--border-subtle)' }}>
+          <span style={{ color: 'var(--text-muted)', marginRight: '4px' }}>Visualizations:</span>
           <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
             <input type="checkbox" checked={visibleViz.headToHead} onChange={() => toggleViz('headToHead')} /> Head-to-Head
           </label>
@@ -1233,48 +1279,18 @@ function App() {
   const [showConsensusDraft, setShowConsensusDraft] = useState(false);
   const [brAdvancedData, setBrAdvancedData] = useState<Map<string, any>>(new Map());
 
-  // ===== ANTI-SCRAPING PROTECTION =====
+  // Ensure BPM/OBPM/DBPM defaults are always present on initial load
   useEffect(() => {
-    // Disable right-click
-    const disableRightClick = (e: MouseEvent) => {
-      e.preventDefault();
-      return false;
-    };
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      ['gbpm', 'obpm', 'dbpm'].forEach(k => next.add(k));
+      return next;
+    });
+  }, []);
 
-    // Disable text selection on tables
-    const disableSelection = (e: Event) => {
-      if ((e.target as HTMLElement).closest('.data-table')) {
-        e.preventDefault();
-        return false;
-      }
-    };
-
-    // Detect devtools (basic detection)
-    const checkDevTools = () => {
-      const threshold = 160;
-      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-
-      if (widthThreshold || heightThreshold) {
-        console.clear();
-        console.log('%cStop!', 'color: red; font-size: 40px; font-weight: bold;');
-        console.log('%cThis is a browser feature intended for developers.', 'font-size: 16px;');
-      }
-    };
-
-    // Add listeners
-    document.addEventListener('contextmenu', disableRightClick);
-    document.addEventListener('selectstart', disableSelection);
-
-    // Check for devtools on resize
-    window.addEventListener('resize', checkDevTools);
-    checkDevTools();
-
-    return () => {
-      document.removeEventListener('contextmenu', disableRightClick);
-      document.removeEventListener('selectstart', disableSelection);
-      window.removeEventListener('resize', checkDevTools);
-    };
+  // ===== DEVTOOLS LOG =====
+  useEffect(() => {
+    console.log('%cCheck the Sheets %cAnalytics Mode', 'color: #6366f1; font-size: 20px; font-weight: bold;', 'color: #94a3b8; font-size: 16px;');
   }, []);
 
   // ===== LOAD CUSTOM STATS FROM LOCALSTORAGE =====
@@ -1354,7 +1370,12 @@ function App() {
       }
       setNbaLookup(lookupMap);
 
-      const allStats = [...processedStats, ...processedArchive, ...processedInternational, ...processedIntl26];
+      const allStats = dedupeInternationalRows([
+        ...processedStats,
+        ...processedArchive,
+        ...processedInternational,
+        ...processedIntl26
+      ]);
       setSeasonData(allStats);
     });
   }, []);
@@ -1419,9 +1440,23 @@ function App() {
           !HIDDEN_COLS.has(k) &&
           !['key', 'id', '_nameLower', 'isInternational', 'league', 'team'].includes(k)
         );
+
+        // Ensure stats in STAT_CONFIG are available even if the first row lacks them
+        const statKeys = STAT_CONFIG.flatMap(g => g.stats.map(s => s.key));
+        const hasValue = (row, key) => {
+          const v = row[key];
+          return v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && Number.isNaN(v));
+        };
+        statKeys.forEach(k => {
+          if (!allowed.includes(k)) {
+            const existsInAny = rawCombinedStats.some(r => hasValue(r, k));
+            if (existsInAny) allowed.push(k);
+          }
+        });
+
         setAvailableStats(allowed);
       }
-      setData(rawCombinedStats);
+      setData(dedupeInternationalRows(rawCombinedStats));
       setLoading(false);
     });
   }, [datasetMode, compareType]);
@@ -1543,15 +1578,55 @@ function App() {
     })).filter(g => g.stats.length > 0);
   }, [availableStats]);
 
+  // --- CUSTOM STAT CALCULATION ---
+  const computedData = useMemo(() => {
+    if (!data || data.length === 0 || customStats.length === 0) return data;
+
+    return data.map(row => {
+      const rowWithCustom = { ...row };
+      customStats.forEach(cs => {
+        let result = 0;
+        cs.formula.forEach((f, idx) => {
+          const val = Number(row[f.stat]) || 0;
+          const weightedVal = val * f.coefficient;
+          if (idx === 0) {
+            result = weightedVal;
+          } else {
+            if (f.operation === '+') result += weightedVal;
+            else if (f.operation === '-') result -= weightedVal;
+            else if (f.operation === '*') result *= weightedVal;
+            else if (f.operation === '/') result /= (weightedVal || 1);
+          }
+        });
+        rowWithCustom[cs.id] = result;
+      });
+      return rowWithCustom;
+    });
+  }, [data, customStats]);
+
+  // --- SYNC CUSTOM STATS TO AVAILABLE STATS ---
+  const allAvailableStats = useMemo(() => {
+    const customIds = customStats.map(s => s.id);
+    return [...availableStats, ...customIds];
+  }, [availableStats, customStats]);
+
+  // --- SYNC CUSTOM STATS TO VISIBLE COLS ---
+  useEffect(() => {
+    if (customStats.length > 0) {
+      const newVisible = new Set(visibleCols);
+      customStats.forEach(s => newVisible.add(s.id));
+      setVisibleCols(newVisible);
+    }
+  }, [customStats.length]);
 
   // --- DYNAMIC DISTRIBUTION LOGIC ---
   // The universe of players used for calculating mean/std dev depends on selected leagues
   const statsDistribution = useMemo<StatsDistribution>(() => {
     // Universe = players in currently selected leagues
-    const validUniverse = data.filter(d => selectedLeagues.has(d.league));
+    const validUniverse = computedData.filter(d => selectedLeagues.has(d.league));
 
     const dist: StatsDistribution = {};
-    availableStats.forEach(stat => {
+    allAvailableStats.forEach(stat => {
       const values = validUniverse
         .map(d => Number(d[stat]))
         .filter(v => !isNaN(v) && v !== null);
@@ -1562,14 +1637,14 @@ function App() {
       }
     });
     return dist;
-  }, [data, availableStats, selectedLeagues]);
+  }, [computedData, allAvailableStats, selectedLeagues]);
 
   const filteredData = useMemo(() => {
     if (datasetMode === 'compare') return compareList;
     if (datasetMode === 'about') return [];
 
     // Filter universe first based on league selection
-    let filtered = data.filter(d => selectedLeagues.has(d.league));
+    let filtered = computedData.filter(d => selectedLeagues.has(d.league));
 
     if (datasetMode === 'season') {
       if (selectedYear !== 'All') filtered = filtered.filter(p => String(p.torvik_year) === String(selectedYear));
@@ -1867,8 +1942,19 @@ function App() {
       }
     });
 
+    // Add Custom Stats Group
+    if (customStats.length > 0) {
+      const customCols = customStats.map((s, idx) => ({
+        key: s.id,
+        label: s.name,
+        tooltip: `Custom formula: ${s.formula.map(f => `${f.operation}${f.coefficient}*${f.stat}`).join(' ')}`,
+        isGroupEnd: idx === customStats.length - 1
+      }));
+      headers.push({ group: 'Custom Stats', cols: customCols });
+    }
+
     return headers;
-  }, [groupedStats, visibleCols, datasetMode, compareType, isPer40]);
+  }, [groupedStats, visibleCols, datasetMode, compareType, isPer40, customStats]);
 
 
   const flattenedCols: TableCol[] = tableHeaders.flatMap(g => g.cols);
@@ -1876,6 +1962,9 @@ function App() {
 
   return (
     <div className={`app-container ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${datasetMode === 'career' ? 'career-mode' : ''}`}>
+
+      {/* KPRverse-style vignette glow overlay */}
+      <div className="vignette-glow" />
 
       {/* --- FIXED TWITTER LINK --- */}
       <a
@@ -1885,16 +1974,13 @@ function App() {
         className="twitter-float-btn"
       >
         <Twitter size={14} fill="#fff" />
-        Follow @checkthesheets
       </a>
-
 
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <img
               src={nerdBall}
-              style={{ width: '48px', height: '45px', borderRadius: '999px', objectFit: 'cover' }}
               className="nerd-logo"
               alt="Nerd Ball Logo"
             />
@@ -1938,13 +2024,13 @@ function App() {
 
               {/* SPECIAL COMPARISON NOTICES */}
               {compareType === 'career' && (
-                <div style={{ padding: '10px', background: '#eef2ff', borderRadius: '8px', marginBottom: '15px', border: '1px solid #c7d2fe', fontSize: '0.8rem', color: '#3730a3' }}>
-                  Career comparison function for players who graduated before 2019 will be rolling out soon.
+                <div style={{ padding: '0.75rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '8px', marginBottom: '1rem', border: '1px solid var(--border-accent)', fontSize: '0.75rem', color: 'var(--accent-primary)' }}>
+                  Career data coverage starts from 2019.
                 </div>
               )}
               {compareType === 'season' && (
-                <div style={{ padding: '10px', background: '#ecfdf5', borderRadius: '8px', marginBottom: '15px', border: '1px solid #a7f3d0', fontSize: '0.8rem', color: '#065f46' }}>
-                  You can search any season on BartTorvik, even before 2019.
+                <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', marginBottom: '1rem', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.75rem', color: 'var(--accent-tertiary)' }}>
+                  Search any season from the data pool.
                 </div>
               )}
 
@@ -2391,6 +2477,15 @@ function App() {
           </div>
         ) : (
           <>
+            <div className="mega-intro">
+              <h2>Season Data (2026)</h2>
+              <div>
+                This table lists all player seasons in the current dataset. Click column headers to sort, use the
+                filters on the left to refine, and search by player name to jump to specific rows.
+              </div>
+              <div className="updated">Last updated: 3rd of February 2026</div>
+            </div>
+
             {/* COMPARISON VIZ AT THE TOP */}
             {datasetMode === 'compare' && compareList.length > 0 && (
               <ErrorBoundary onClose={() => { }}>
@@ -2404,27 +2499,35 @@ function App() {
 
             <div className="table-container">
               {loading ? (
-                <div className="limit-msg">Loading data...</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  Loading Player Data...
+                </div>
               ) : (
-                <>
-                  <table>
-                    <thead>
-                      <tr className="category-header">
+                <TableVirtuoso
+                  style={{ height: '100%' }}
+                  data={filteredData}
+                  components={{
+                    Table: (props) => <table {...props} style={{ borderCollapse: 'separate', tableLayout: 'fixed', width: 'max-content', minWidth: '100%' }} />,
+                  }}
+                  fixedHeaderContent={() => (
+                    <>
+                      <tr className="table-section-header">
                         {tableHeaders.map((group, i) => (
-                          <th key={i} colSpan={group.cols.length} className="group-end">
+                          <th key={i} colSpan={group.cols.length}>
                             {group.group || <span dangerouslySetInnerHTML={{ __html: '&nbsp;' }} />}
                           </th>
                         ))}
                       </tr>
-                      <tr className="col-header">
+                      <tr>
                         {flattenedCols.map(col => (
                           <th
                             key={col.key}
                             onClick={() => handleSort(col.key)}
                             data-tooltip={col.tooltip || METRIC_DEFINITIONS[col.key] || METRIC_DEFINITIONS[col.label] || "Click to sort"}
-                            className={col.isGroupEnd ? 'group-end' : ''}
+                            title={col.label}
+                            className={col.key === 'key' ? 'col-name' : col.key === 'team' ? 'col-team' : 'col-num'}
                           >
-                            <div className="th-content">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               {col.label}
                               {sortConfig?.key === col.key && (
                                 sortConfig.direction === 'asc'
@@ -2435,101 +2538,98 @@ function App() {
                           </th>
                         ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {filteredData.slice(0, 300).map((row, i) => (
-                        <tr key={`${row.id}-${row.torvik_year}-${i}`} onClick={() => setSelectedPlayer(row)} className="player-row">
-                          {flattenedCols.map(col => {
-                            const val = row[col.key];
-                            const isNum = typeof val === 'number';
-                            const isText = TEXT_COLS.has(col.key);
-                            let style = {};
-                            if (isNum && !NO_COLOR_STATS.has(col.key)) {
-                              style = { backgroundColor: getColor(val, statsDistribution[col.key], col.key) };
-                            }
-
-                            // Highlight international player names in red
-                            if (col.key === 'key' && row.isInternational) {
-                              style = { ...style, color: 'red', fontWeight: 'bold' };
-                            }
-
-                            // PER 40 CALCULATION LOGIC
-                            let displayVal = val;
-                            if (isPer40 && isNum && val !== null) {
-                              const mpg = row['mpg'] || 0;
-                              const games = row['g'] || 0;
-
-                              if (mpg > 0) {
-                                if (PER40_FROM_TOTALS.has(col.key)) {
-                                  // (Total / Games) * (40 / MPG) -> (Total * 40) / (G * MPG)
-                                  if (games > 0) {
-                                    displayVal = (val * 40) / (games * mpg);
-                                  }
-                                } else if (PER40_FROM_PER_GAME.has(col.key)) {
-                                  // (PerGame * 40) / MPG
-                                  displayVal = (val * 40) / mpg;
-                                }
-                              }
-                            }
-
-                            // Format
-                            const formattedVal = isNum ? formatValue(displayVal, col.key) : displayVal;
-
-                            return (
-                              <td
-                                key={col.key}
-                                style={style}
-                                className={`${!isText ? 'num' : ''} ${col.isGroupEnd ? 'group-end' : ''}`}
-                              >
-                                {formattedVal}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {filteredData.length > 300 && (
-                    <div className="limit-msg">Showing top 300 results...</div>
+                    </>
                   )}
-                </>
+                  itemContent={(index, row) => (
+                    <>
+                      {flattenedCols.map(col => {
+                        const val = row[col.key];
+                        const isNum = typeof val === 'number';
+                        const isText = TEXT_COLS.has(col.key);
+                        let style = {};
+                        if (isNum && !NO_COLOR_STATS.has(col.key)) {
+                          style = { backgroundColor: getColor(val, statsDistribution[col.key], col.key) };
+                        }
+
+                        if (col.key === 'key' && row.isInternational) {
+                          style = { ...style, color: 'var(--accent-secondary)', fontWeight: 'bold' };
+                        }
+
+                        let displayVal = val;
+                        if (col.key === 'per' && !row.isInternational) {
+                          displayVal = null;
+                        }
+                        if (isPer40 && isNum && val !== null) {
+                          const mpg = row['mpg'] || 0;
+                          const games = row['g'] || 0;
+                          if (mpg > 0 && games > 0) {
+                            if (PER40_FROM_TOTALS.has(col.key)) {
+                              displayVal = (val * 40) / (games * mpg);
+                            } else if (PER40_FROM_PER_GAME.has(col.key)) {
+                              displayVal = (val * 40) / mpg;
+                            }
+                          }
+                        }
+
+                        const formattedVal = isNum ? formatValue(displayVal, col.key) : displayVal;
+
+                        return (
+                          <td
+                            key={col.key}
+                            style={style}
+                            onClick={() => setSelectedPlayer(row)}
+                            className={`${col.key === 'key' ? 'col-name' : col.key === 'team' ? 'col-team' : 'col-num'} ${!isText ? 'num' : ''}`}
+                          >
+                            {formattedVal}
+                          </td>
+                        );
+                      })}
+                    </>
+                  )}
+                />
               )}
             </div>
           </>
         )}
       </div>
 
-      {selectedPlayer && (
-        <ErrorBoundary onClose={() => setSelectedPlayer(null)}>
-          <PlayerDetailModal
-            player={selectedPlayer}
-            historyData={modalHistoryData}
-            statConfig={groupedStats}
-            visibleCols={visibleCols}
-            brStats={brAdvancedData}
-            onClose={() => setSelectedPlayer(null)}
-          />
-        </ErrorBoundary>
-      )}
+      {
+        selectedPlayer && (
+          <ErrorBoundary onClose={() => setSelectedPlayer(null)}>
+            <PlayerDetailModal
+              player={selectedPlayer}
+              historyData={modalHistoryData}
+              statConfig={groupedStats}
+              visibleCols={visibleCols}
+              brStats={brAdvancedData}
+              onClose={() => setSelectedPlayer(null)}
+            />
+          </ErrorBoundary>
+        )
+      }
 
       {/* Custom Stat Builder Modal */}
-      {showCustomStatBuilder && (
-        <CustomStatBuilder
-          availableStats={availableStats}
-          onSave={handleSaveCustomStat}
-          onClose={() => setShowCustomStatBuilder(false)}
-          existingStats={customStats}
-        />
-      )}
+      {
+        showCustomStatBuilder && (
+          <CustomStatBuilder
+            availableStats={availableStats}
+            onSave={handleSaveCustomStat}
+            onClose={() => setShowCustomStatBuilder(false)}
+            existingStats={customStats}
+          />
+        )
+      }
 
       {/* Consensus Draft Modal */}
-      {showConsensusDraft && (
-        <ConsensusDraft
-          players={filteredData}
-          onClose={() => setShowConsensusDraft(false)}
-        />
-      )}
-    </div>
+      {
+        showConsensusDraft && (
+          <ConsensusDraft
+            players={filteredData}
+            onClose={() => setShowConsensusDraft(false)}
+          />
+        )
+      }
+    </div >
   );
 }
 
