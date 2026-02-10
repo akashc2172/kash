@@ -1,0 +1,30 @@
+{
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/.venv/**": true,
+        "**/__pycache__/**": true,
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/data/**": true,
+        "**/logs/**": true,
+        "**/*.duckdb": true,
+        "**/*.log": true,
+        "**/*.parquet": true,
+        "**/*.csv": true,
+        "**/*.xlsx": true,
+        "**/dist/**": true,
+        "**/build/**": true,
+        "**/tmp/**": true
+    },
+    "search.exclude": {
+        "**/node_modules/**": true,
+        "**/.venv/**": true,
+        "**/__pycache__/**": true,
+        "**/.git/**": true,
+        "**/*.duckdb": true,
+        "**/dist/**": true,
+        "**/build/**": true
+    },
+    "git.autorefresh": false,
+    "git.untrackedChanges": "hidden"
+}

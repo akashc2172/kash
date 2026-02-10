@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Custom Stat Builder - CPUBenchmark + KPRverse Hybrid Style
+   Custom Stat Builder - Premium Light Mode
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .custom-stat-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(26, 45, 66, 0.5);
+    background: rgba(15, 23, 42, 0.4);
     backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
@@ -21,194 +21,168 @@
     max-height: 90vh;
     overflow-y: auto;
     position: relative;
-    border-radius: var(--folder-radius);
-    box-shadow: 0 20px 40px rgba(26, 45, 66, 0.25);
-    animation: modalSlideIn 0.3s ease-out;
-}
-
-@keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.98);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+    border-radius: 24px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
 .custom-stat-modal .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.25rem 1.5rem;
+    padding: 1.5rem 2rem;
     border-bottom: 1px solid var(--border-subtle);
-    background: var(--accent-primary);
+    background: var(--bg-secondary);
 }
 
 .custom-stat-modal .modal-header h3 {
-    font-family: 'Space Grotesk', sans-serif;
     margin: 0;
-    font-size: 1.1rem;
-    color: white;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: -0.01em;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    font-weight: 800;
+    letter-spacing: -0.04em;
 }
 
 .custom-stat-modal .close-btn {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
+    background: #f1f5f9;
+    border: none;
+    color: var(--text-muted);
     cursor: pointer;
     padding: 8px;
-    border-radius: var(--folder-radius-sm);
-    transition: var(--transition-hover);
+    border-radius: 50%;
+    transition: var(--transition-smooth);
 }
 
 .custom-stat-modal .close-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
-    transform: scale(1.05);
+    background: #e2e8f0;
+    color: var(--text-primary);
 }
 
 .custom-stat-modal .modal-body {
-    padding: 1.5rem;
+    padding: 2rem;
 }
 
 .form-group {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
 }
 
 .form-group label {
     display: block;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 .stat-name-input {
     width: 100%;
-    padding: 10px 12px;
+    padding: 12px 16px;
     border: 1px solid var(--border-subtle);
     background: white;
     color: var(--text-primary);
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 0.9375rem;
-    border-radius: var(--folder-radius-sm);
-    transition: var(--transition-hover);
+    font-size: 1rem;
+    border-radius: 12px;
+    transition: var(--transition-smooth);
 }
 
 .stat-name-input:focus {
     outline: none;
-    border-color: var(--accent-teal);
-    box-shadow: 0 0 0 3px rgba(0, 139, 186, 0.1);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-primary-glow);
 }
 
 /* Formula Builder */
 .formula-builder {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
 }
 
 .formula-builder label {
     display: block;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .formula-component {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-    padding: 10px;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 12px;
     background: var(--bg-secondary);
-    border-radius: var(--folder-radius-sm);
+    border-radius: 12px;
     border: 1px solid var(--border-subtle);
-    transition: var(--transition-hover);
-}
-
-.formula-component:hover {
-    border-color: var(--accent-teal);
 }
 
 .operation-select {
-    width: 55px;
-    padding: 6px;
+    width: 60px;
+    padding: 8px;
     border: 1px solid var(--border-subtle);
     background: white;
     color: var(--accent-primary);
-    font-family: 'IBM Plex Mono', monospace;
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 1.125rem;
     text-align: center;
-    border-radius: 3px;
+    border-radius: 8px;
 }
 
 .operation-select:focus {
     outline: none;
-    border-color: var(--accent-teal);
+    border-color: var(--accent-primary);
 }
 
 .coefficient-input {
-    width: 70px;
-    padding: 6px;
+    width: 80px;
+    padding: 8px;
     border: 1px solid var(--border-subtle);
     background: white;
     color: var(--text-primary);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
     font-weight: 600;
     text-align: center;
-    border-radius: 3px;
+    border-radius: 8px;
 }
 
 .coefficient-input:focus {
     outline: none;
-    border-color: var(--accent-teal);
+    border-color: var(--accent-primary);
 }
 
 .multiply-symbol {
     color: var(--text-muted);
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: 1rem;
 }
 
 .stat-select {
     flex: 1;
-    min-width: 140px;
-    padding: 6px 10px;
+    min-width: 150px;
+    padding: 8px 12px;
     border: 1px solid var(--border-subtle);
     background: white;
     color: var(--text-primary);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.78rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    border-radius: 3px;
+    border-radius: 8px;
 }
 
 .stat-select:focus {
     outline: none;
-    border-color: var(--accent-teal);
+    border-color: var(--accent-primary);
 }
 
 .remove-component-btn {
-    padding: 6px;
+    padding: 8px;
     background: #fef2f2;
     border: 1px solid #fee2e2;
     color: #ef4444;
-    border-radius: 3px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: var(--transition-hover);
+    transition: var(--transition-smooth);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -218,180 +192,170 @@
     background: #dc2626;
     color: white;
     border-color: #dc2626;
-    transform: scale(1.05);
 }
 
 .add-component-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
+    gap: 8px;
+    padding: 10px 20px;
     background: white;
-    border: 1px solid var(--accent-teal);
-    color: var(--accent-teal);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
+    border: 1px solid var(--border-accent);
+    color: var(--accent-primary);
+    font-size: 0.8125rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     cursor: pointer;
-    margin-top: 8px;
-    border-radius: var(--folder-radius-sm);
-    transition: var(--transition-hover);
+    margin-top: 10px;
+    border-radius: 12px;
+    transition: var(--transition-smooth);
 }
 
 .add-component-btn:hover {
-    background: var(--accent-teal);
+    background: var(--accent-primary);
     color: white;
-    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px var(--accent-primary-glow);
 }
 
-/* Formula Preview - Gradient Effect Preserved */
+/* Formula Preview */
 .formula-preview {
-    padding: 1rem;
-    border: 1px solid var(--accent-teal);
-    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-    margin-bottom: 1.5rem;
-    border-radius: var(--folder-radius);
+    padding: 1.25rem;
+    border: 1px solid var(--border-accent);
+    background: var(--bg-secondary);
+    margin-bottom: 2rem;
+    border-radius: 16px;
 }
 
 .formula-preview label {
     display: block;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
+    font-size: 0.625rem;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    font-weight: 600;
-    margin-bottom: 6px;
+    font-weight: 700;
+    margin-bottom: 8px;
 }
 
 .preview-text {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1rem;
+    font-size: 1.125rem;
     color: var(--accent-primary);
-    font-weight: 700;
+    font-weight: 800;
+    letter-spacing: -0.01em;
 }
 
 /* Existing Stats */
 .existing-stats {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
     border-top: 1px solid var(--border-subtle);
 }
 
 .existing-stats label {
     display: block;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .stats-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
 }
 
 .stat-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 14px;
+    padding: 12px 16px;
     border: 1px solid var(--border-subtle);
     background: var(--bg-secondary);
-    border-radius: var(--folder-radius-sm);
-    transition: var(--transition-hover);
+    border-radius: 12px;
+    transition: var(--transition-smooth);
 }
 
 .stat-item:hover {
-    border-color: var(--accent-teal);
+    border-color: var(--border-accent);
     background: white;
-    transform: translateX(2px);
 }
 
 .stat-item .stat-name {
-    font-family: 'Space Grotesk', sans-serif;
     color: var(--text-primary);
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
 }
 
 .delete-stat-btn {
-    padding: 5px;
+    padding: 6px;
     background: #fef2f2;
     border: 1px solid #fee2e2;
     color: #ef4444;
-    border-radius: 3px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: var(--transition-hover);
+    transition: var(--transition-smooth);
 }
 
 .delete-stat-btn:hover {
     background: #dc2626;
     color: white;
-    transform: scale(1.05);
 }
 
 /* Modal Footer */
 .modal-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
-    padding: 1.25rem 1.5rem;
+    gap: 12px;
+    padding: 1.5rem 2rem;
     border-top: 1px solid var(--border-subtle);
     background: var(--bg-secondary);
 }
 
 .cancel-btn {
-    padding: 8px 20px;
+    padding: 10px 24px;
     background: white;
     border: 1px solid var(--border-subtle);
     color: var(--text-secondary);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     cursor: pointer;
-    border-radius: var(--folder-radius-sm);
-    transition: var(--transition-hover);
+    border-radius: 99px;
+    transition: var(--transition-smooth);
 }
 
 .cancel-btn:hover {
-    background: var(--bg-primary);
+    background: #f1f5f9;
     color: var(--text-primary);
     border-color: var(--text-muted);
-    transform: translateY(-1px);
 }
 
 .save-btn {
-    padding: 8px 28px;
+    padding: 10px 32px;
     background: var(--accent-primary);
     color: white;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     cursor: pointer;
-    border-radius: var(--folder-radius-sm);
-    transition: var(--transition-hover);
-    border: none;
+    border-radius: 99px;
+    transition: var(--transition-smooth);
+    box-shadow: 0 4px 6px -1px var(--accent-primary-glow);
 }
 
 .save-btn:hover:not(:disabled) {
-    background: #15304d;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(26, 58, 92, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 15px -3px var(--accent-primary-glow);
 }
 
 .save-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     background: var(--text-muted);
+    box-shadow: none;
 }

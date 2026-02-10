@@ -2,10 +2,12 @@ from __future__ import annotations
 import typer
 from typing import List
 from .warehouse import Warehouse
-from .ingest import ingest_static, ingest_season, ingest_play_types, ingest_games_only
+from .ingest import ingest_static, ingest_play_types, ingest_games_only, fetch_and_ingest_season
+from .ingest import ingest_player_season_stats
 from .derive import build_derived_sql
 from .windows import build_windows_player, build_windows_team
 from .export import export_player_asof_wide
+from .bridges import build_scrape_bridges
 
 app = typer.Typer(add_completion=False)
 
@@ -13,12 +15,13 @@ app = typer.Typer(add_completion=False)
 def ingest_season_cmd(
     season: int = typer.Option(...),
     season_type: str = typer.Option("regular", help="regular/postseason/tournament depending on API"),
+    include_lineups: bool = typer.Option(True, help="Fetch /lineups/game/{gameId} for missing games"),
     out: str = typer.Option("data/warehouse.duckdb"),
 ):
     wh = Warehouse(out)
     ingest_static(wh)
     ingest_play_types(wh)
-    ingest_season(wh, season=season, season_type=season_type)
+    fetch_and_ingest_season(wh, season=season, season_type=season_type, include_lineups=include_lineups)
     wh.close()
     typer.echo("OK: ingested season")
 
@@ -26,13 +29,65 @@ def ingest_season_cmd(
 def resume_ingest(
     season: int = typer.Option(...),
     season_type: str = typer.Option("regular", help="regular/postseason/tournament depending on API"),
+    include_lineups: bool = typer.Option(False, help="Enable lineup backfill (can be expensive on older seasons)"),
     out: str = typer.Option("data/warehouse.duckdb"),
 ):
     """Resume per-game ingest (skips static dims and bulk tables)."""
     wh = Warehouse(out)
-    ingest_games_only(wh, season=season, season_type=season_type)
+    ingest_games_only(wh, season=season, season_type=season_type, include_lineups=include_lineups)
     wh.close()
     typer.echo("OK: resumed ingest")
+
+@app.command()
+def fetch_ingest(
+    season: int = typer.Option(...),
+    season_type: str = typer.Option("regular", help="regular/postseason/tournament"),
+    include_lineups: bool = typer.Option(False, help="Enable lineup backfill"),
+    out: str = typer.Option("data/warehouse.duckdb"),
+):
+    """
+    Fetch games for a season/type and ingest per-game data.
+    Unlike ingest-season-cmd, this does NOT re-ingest static dimension tables,
+    avoiding schema mismatch issues. Use this for adding new seasons/postseasons.
+    """
+    wh = Warehouse(out)
+    fetch_and_ingest_season(wh, season=season, season_type=season_type, include_lineups=include_lineups)
+    wh.close()
+    typer.echo("OK: fetched games and ingested per-game data")
+
+
+@app.command()
+def ingest_player_season(
+    season: int = typer.Option(...),
+    season_type: str = typer.Option("regular", help="regular/postseason"),
+    team: str = typer.Option(None, help="Optional team filter"),
+    conference: str = typer.Option(None, help="Optional conference filter"),
+    out: str = typer.Option("data/warehouse.duckdb"),
+):
+    """Ingest player season stats with explicit seasonType + normalized table output."""
+    wh = Warehouse(out)
+    ingest_player_season_stats(
+        wh,
+        season=season,
+        season_type=season_type,
+        team=team,
+        conference=conference,
+    )
+    wh.close()
+    typer.echo("OK: ingested player season stats")
+
+
+@app.command()
+def build_bridges(
+    scrape_root: str = typer.Option("data/manual_scrapes", help="Root folder for manual NCAA scrape CSVs"),
+    max_files: int = typer.Option(None, help="Optional limit for debug runs"),
+    out: str = typer.Option("data/warehouse.duckdb"),
+):
+    """Build persistent game/player bridge tables linking CBD ids to manual scrape ids/names."""
+    wh = Warehouse(out)
+    build_scrape_bridges(wh, scrape_root=scrape_root, max_files=max_files)
+    wh.close()
+    typer.echo("OK: built scrape bridges")
 
 @app.command()
 def build_derived(

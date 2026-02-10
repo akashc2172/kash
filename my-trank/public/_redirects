@@ -1,5 +1,0 @@
-# Cloudflare Pages SPA redirects - Specific routes to avoid explicit wildcard loops
-/season /index.html 200
-/career /index.html 200
-/compare /index.html 200
-/about /index.html 200

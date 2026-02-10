@@ -475,6 +475,7 @@ const processRows = (rawData, weightData = [], isInternationalData = false, over
   return temp.map(({ row, index, fixedName, torvikId, baseId }) => {
     const pickVal = cleanNumeric(row['pick']);
     const rankVal = cleanNumeric(row['recruit rank']);
+    const draftedFlag = pickVal !== null && pickVal !== undefined && !Number.isNaN(Number(pickVal)) ? 1 : 0;
 
     const toRate = (v) => {
       if (v === null || v === undefined) return null;
@@ -554,6 +555,7 @@ const processRows = (rawData, weightData = [], isInternationalData = false, over
       bmi: bmi ? parseFloat(bmi) : null,
       exp: row['exp'] || '-',
       pick: pickVal || row['pick'],
+      drafted: draftedFlag,
       'recruit rank': rankVal || row['recruit rank'],
       rim_makes_calc: rimMakesCalc,
       middy_makes_calc: middyMakesCalc,
@@ -562,7 +564,10 @@ const processRows = (rawData, weightData = [], isInternationalData = false, over
       isInternational: isInternationalData,
       league: league,
       team: teamName,
-      torvik_year: year
+      torvik_year: year,
+      // Optional multi-row split identifier for competition filters.
+      // When not present in exports, we default to ALL.
+      split_id: row['split_id'] || row['split'] || 'ALL',
     };
 
     // FIX: Calculate MPG for career mode if missing but total minutes exists
@@ -1227,13 +1232,9 @@ const ComparisonSection = ({ players, historyData, statsDistribution }) => {
 function App() {
   // --- URL ROUTING INITIALIZATION ---
   const getInitialMode = () => {
-    // UPDATED: Robust handling of path segments
-    // e.g. "/career" -> ["", "career"] -> "career"
-    // e.g. "/career/" -> ["", "career", ""] -> "career"
-    const segments = window.location.pathname.split('/');
-    const path = segments[1] ? segments[1].toLowerCase() : 'season';
-
-    return ['season', 'career', 'compare', 'about'].includes(path) ? path : 'season';
+    // UPDATED: Better handling of slashes to avoid crashes on /season/
+    const path = window.location.pathname.replace(/^\/|\/$/g, '');
+    return ['explore', 'season', 'career', 'compare', 'about'].includes(path) ? path : 'season';
   };
 
   const [datasetMode, setDatasetMode] = useState(getInitialMode());
@@ -1270,6 +1271,10 @@ function App() {
   const [minLength, setMinLength] = useState('');
   const [maxLength, setMaxLength] = useState('');
 
+  // Draft + competition filters (first-party site UX)
+  const [draftStatus, setDraftStatus] = useState<'All' | 'Drafted' | 'Undrafted'>('All');
+  const [competition, setCompetition] = useState<'ALL' | 'VS_TOP50' | 'VS_TOP100'>('ALL');
+
   const [filters, setFilters] = useState({});
   const [visibleCols, setVisibleCols] = useState(DEFAULT_VISIBLE);
   const [availableStats, setAvailableStats] = useState([]);
@@ -1282,6 +1287,10 @@ function App() {
   const [showCustomStatBuilder, setShowCustomStatBuilder] = useState(false);
   const [showConsensusDraft, setShowConsensusDraft] = useState(false);
   const [brAdvancedData, setBrAdvancedData] = useState<Map<string, any>>(new Map());
+
+  // About tab: stat dictionary (loaded from /public/data/stat_dictionary.json)
+  const [statDict, setStatDict] = useState<any>(null);
+  const [statDictQuery, setStatDictQuery] = useState('');
 
   // Ensure BPM/OBPM/DBPM defaults are always present on initial load
   useEffect(() => {
@@ -1345,6 +1354,43 @@ function App() {
     window.history.pushState(null, '', `/${datasetMode}`);
   }, [datasetMode]);
 
+  // Load stat dictionary for About page (best-effort; falls back to in-code defs)
+  useEffect(() => {
+    if (datasetMode !== 'about') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/data/stat_dictionary.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`stat_dictionary fetch failed: ${res.status}`);
+        const js = await res.json();
+        if (!cancelled) setStatDict(js);
+      } catch (_e) {
+        if (cancelled) return;
+        // Fallback minimal dictionary from current STAT_CONFIG + METRIC_DEFINITIONS.
+        const entries = STAT_CONFIG.flatMap(g => g.stats.map(s => ({
+          key: s.key,
+          name: s.label || s.key,
+          definition: (METRIC_DEFINITIONS[s.key] || ''),
+          formula: '',
+          notes: '',
+          source: 'Computed (first-party)',
+          category: g.group,
+        })));
+        setStatDict({
+          version: 'fallback',
+          generated_at: new Date().toISOString(),
+          credits: [
+            { name: 'Hoop-Explorer', url: 'https://hoop-explorer.com' },
+            { name: 'BartTorvik', url: 'https://barttorvik.com' },
+            { name: 'RealGM (International)', url: 'https://basketball.realgm.com' },
+          ],
+          entries,
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [datasetMode]);
+
   // Handle browser back button
   useEffect(() => {
     const onPopState = () => setDatasetMode(getInitialMode());
@@ -1357,13 +1403,11 @@ function App() {
     Promise.all([
       fetchCsv(FILES.season),
       fetchCsv(FILES.weights),
-      fetchCsv(FILES.archive),
       fetchCsv(FILES.international), // index 3
       fetchCsv(FILES.intl_2026),     // index 4
       fetchCsv('/data/nba_lookup.csv') // index 5
-    ]).then(([stats, weights, archive, international, intl26, lookup]) => {
+    ]).then(([stats, weights, international, intl26, lookup]) => {
       const processedStats = processRows(stats || [], weights || [], false);
-      const processedArchive = processRows(archive || [], weights || [], false);
       const processedInternational = processRows(international || [], weights || [], true);
       const processedIntl26 = processRows(intl26 || [], weights || [], true, 2026);
 
@@ -1376,7 +1420,6 @@ function App() {
 
       const allStats = dedupeInternationalRows([
         ...processedStats,
-        ...processedArchive,
         ...processedInternational,
         ...processedIntl26
       ]);
@@ -1396,16 +1439,16 @@ function App() {
       if (compareType === 'career') {
         filePromises = [fetchCsv(FILES.career)];
       } else {
-        // Season Compare: Season + Archive + Intl + Intl2026
+        // Season Compare: Season + Intl + Intl2026
         filePromises = [
           fetchCsv(FILES.season),
-          fetchCsv(FILES.archive),
           fetchCsv(FILES.international),
           fetchCsv(FILES.intl_2026)
         ];
       }
     } else if (datasetMode === 'career') {
-      filePromises = [fetchCsv(FILES.career)];
+      // Include season for deriving career length (years played) without mutating source files.
+      filePromises = [fetchCsv(FILES.career), fetchCsv(FILES.season)];
     } else {
       // Season mode: Season + Intl + Intl2026
       filePromises = [
@@ -1417,21 +1460,103 @@ function App() {
 
     Promise.all([...filePromises, fetchCsv(FILES.weights)]).then((results) => {
       const weights = results.pop();
+
+      // Career mode: use career rows only, but enrich length from season history.
+      if (datasetMode === 'career') {
+        const careerRaw = results[0] || [];
+        const seasonRawForLength = results[1] || [];
+
+        const processedCareer = processRows(careerRaw, weights || [], false);
+        const processedSeason = processRows(seasonRawForLength, weights || [], false);
+
+        const lengthByTorvikId = new Map<string, number>();
+        const lengthByName = new Map<string, number>();
+
+        processedSeason.forEach((r) => {
+          const year = Number(r.torvik_year);
+          if (!Number.isFinite(year)) return;
+
+          if (r.torvik_id !== null && r.torvik_id !== undefined && String(r.torvik_id) !== '') {
+            const key = String(r.torvik_id);
+            if (!lengthByTorvikId.has(key)) lengthByTorvikId.set(key, 0);
+          }
+          const nameKey = (r._nameLower || '').trim();
+          if (nameKey) {
+            if (!lengthByName.has(nameKey)) lengthByName.set(nameKey, 0);
+          }
+        });
+
+        // Count distinct years by id and by normalized name.
+        const yearsById = new Map<string, Set<number>>();
+        const yearsByName = new Map<string, Set<number>>();
+        processedSeason.forEach((r) => {
+          const year = Number(r.torvik_year);
+          if (!Number.isFinite(year)) return;
+
+          if (r.torvik_id !== null && r.torvik_id !== undefined && String(r.torvik_id) !== '') {
+            const k = String(r.torvik_id);
+            if (!yearsById.has(k)) yearsById.set(k, new Set<number>());
+            yearsById.get(k)!.add(year);
+          }
+
+          const nameKey = (r._nameLower || '').trim();
+          if (nameKey) {
+            if (!yearsByName.has(nameKey)) yearsByName.set(nameKey, new Set<number>());
+            yearsByName.get(nameKey)!.add(year);
+          }
+        });
+
+        const enrichedCareer = processedCareer.map((r) => {
+          let length = r.length;
+          const tid = r.torvik_id !== null && r.torvik_id !== undefined ? String(r.torvik_id) : '';
+          const byId = tid ? yearsById.get(tid)?.size : undefined;
+          const byName = (r._nameLower || '').trim() ? yearsByName.get((r._nameLower || '').trim())?.size : undefined;
+          const resolved = byId || byName || length || 1;
+          return { ...r, length: resolved };
+        });
+
+        if (enrichedCareer.length > 0) {
+          const keys = Object.keys(enrichedCareer[0]);
+          const allowed = keys.filter(k =>
+            (typeof enrichedCareer[0][k] === 'number' || k === 'pick' || k === 'recruit rank') &&
+            !HIDDEN_COLS.has(k) &&
+            !['key', 'id', '_nameLower', 'isInternational', 'league', 'team'].includes(k)
+          );
+
+          const statKeys = STAT_CONFIG.flatMap(g => g.stats.map(s => s.key));
+          const hasValue = (row, key) => {
+            const v = row[key];
+            return v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && Number.isNaN(v));
+          };
+          statKeys.forEach(k => {
+            if (!allowed.includes(k)) {
+              const existsInAny = enrichedCareer.some(r => hasValue(r, k));
+              if (existsInAny) allowed.push(k);
+            }
+          });
+          setAvailableStats(allowed);
+        }
+
+        setData(dedupeInternationalRows(enrichedCareer));
+        setLoading(false);
+        return;
+      }
+
       // Combine all loaded stats files (everything except weights)
       const rawCombinedStats = results.flatMap((res, index) => {
         // Identify if the chunk is international.
         let isIntl = false;
         let overrideYear = null;
 
-        if (datasetMode === 'season') {
+        if (datasetMode === 'season' || datasetMode === 'explore') {
           // 0=season, 1=intl, 2=intl_26
           if (index === 1 || index === 2) isIntl = true;
           if (index === 2) overrideYear = 2026;
         }
         else if (datasetMode === 'compare' && compareType === 'season') {
-          // 0=season, 1=archive, 2=intl, 3=intl_26
-          if (index === 2 || index === 3) isIntl = true;
-          if (index === 3) overrideYear = 2026;
+          // 0=season, 1=intl, 2=intl_26
+          if (index === 1 || index === 2) isIntl = true;
+          if (index === 2) overrideYear = 2026;
         }
 
         return processRows(res, weights || [], isIntl, overrideYear);
@@ -1650,7 +1775,7 @@ function App() {
     // Filter universe first based on league selection
     let filtered = computedData.filter(d => selectedLeagues.has(d.league));
 
-    if (datasetMode === 'season') {
+    if (datasetMode === 'season' || datasetMode === 'explore') {
       if (selectedYear !== 'All') filtered = filtered.filter(p => String(p.torvik_year) === String(selectedYear));
       else if (sinceYear) filtered = filtered.filter(p => (p.torvik_year || 0) >= Number(sinceYear));
     }
@@ -1683,6 +1808,20 @@ function App() {
         const bucket = expBucket(p.exp);
         if (expFilter === 'FrSo') return bucket === 'Fr' || bucket === 'So';
         return bucket === expFilter;
+      });
+    }
+
+    // Competition splits (when exports include split_id).
+    // Keep options intentionally limited to ALL / VS_TOP50 / VS_TOP100.
+    if ((datasetMode === 'season' || datasetMode === 'explore') && competition !== 'ALL') {
+      filtered = filtered.filter(p => String(p.split_id || 'ALL') === competition);
+    }
+
+    // Draft status (1st-party drafted flag derived from pick)
+    if (draftStatus !== 'All') {
+      filtered = filtered.filter(p => {
+        const drafted = Number(p.drafted) === 1 || (p.pick && p.pick !== 'NA' && p.pick !== '');
+        return draftStatus === 'Drafted' ? drafted : !drafted;
       });
     }
 
@@ -1774,13 +1913,14 @@ function App() {
     data, selectedYear, sinceYear, playerSearch, selectedTeam,
     minGames, minHeight, maxHeight, minWeight, maxWeight,
     minBmi, maxBmi, minLength, maxLength, nbaFilter, nbaLookup,
-    expFilter, filters, sortConfig, datasetMode, compareList, selectedLeagues, brAdvancedData
+    expFilter, filters, sortConfig, datasetMode, compareList, selectedLeagues, brAdvancedData,
+    draftStatus, competition
   ]);
 
   const activeFilters = useMemo(() => {
     if (datasetMode === 'compare' || datasetMode === 'about') return [];
     const list = [];
-    if (datasetMode === 'season') {
+    if (datasetMode === 'season' || datasetMode === 'explore') {
       if (selectedYear !== 'All') list.push({ label: 'Year', val: selectedYear });
       if (sinceYear) list.push({ label: 'Since', val: sinceYear });
     }
@@ -1794,6 +1934,8 @@ function App() {
     if (minBmi) list.push({ label: 'Min BMI', val: minBmi });
     if (maxBmi) list.push({ label: 'Max BMI', val: maxBmi });
     if (nbaFilter !== 'All') list.push({ label: 'NBA', val: nbaFilter });
+    if (draftStatus !== 'All') list.push({ label: 'Draft', val: draftStatus });
+    if (competition !== 'ALL') list.push({ label: 'Competition', val: competition === 'VS_TOP50' ? 'Vs Top 50' : 'Vs Top 100' });
 
     if (datasetMode === 'career') {
       if (minLength) list.push({ label: 'Min Len', val: minLength });
@@ -1815,7 +1957,7 @@ function App() {
       if (rule.value) list.push({ label: stat, val: `${rule.operator} ${rule.value}` });
     });
     return list;
-  }, [datasetMode, selectedYear, sinceYear, selectedTeam, playerSearch, minGames, minHeight, expFilter, filters, selectedLeagues, isPer40]);
+  }, [datasetMode, selectedYear, sinceYear, selectedTeam, playerSearch, minGames, minHeight, expFilter, filters, selectedLeagues, isPer40, nbaFilter, draftStatus, competition, minWeight, maxWeight, minBmi, maxBmi]);
 
   const toggleGroup = (groupName) => {
     const group = groupedStats.find(g => g.group === groupName);
@@ -1891,6 +2033,8 @@ function App() {
     setExpFilter('All');
     setSelectedLeagues(new Set(['NCAA D1']));
     setIsPer40(false);
+    setDraftStatus('All');
+    setCompetition('ALL');
   };
 
   const handleSaveCustomStat = (customStat: CustomStat) => {
@@ -1964,11 +2108,81 @@ function App() {
   const flattenedCols: TableCol[] = tableHeaders.flatMap(g => g.cols);
   const modalHistoryData = seasonData.length > 0 ? seasonData : data;
 
+  // Explore helpers (friendly landing)
+  const hasCompetitionSplits = useMemo(() => {
+    return computedData.some(d => d.split_id && d.split_id !== 'ALL');
+  }, [computedData]);
+
+  const exploreFeatured = useMemo(() => {
+    // Default to NCAA D1 in selected year, min games, and "ALL" competition
+    const year = selectedYear === 'All' ? null : String(selectedYear);
+    const base = computedData
+      .filter(d => d.league === 'NCAA D1')
+      .filter(d => (year ? String(d.torvik_year) === year : true))
+      .filter(d => String(d.split_id || 'ALL') === 'ALL')
+      .filter(d => (d.g || 0) >= Math.max(10, Number(minGames || 0)));
+
+    const topImpact = [...base]
+      .filter(d => typeof d['total RAPM'] === 'number')
+      .sort((a, b) => (b['total RAPM'] ?? -999) - (a['total RAPM'] ?? -999))
+      .slice(0, 8);
+
+    const topShooters = [...base]
+      .filter(d => typeof d['ts'] === 'number')
+      .sort((a, b) => (b['ts'] ?? -999) - (a['ts'] ?? -999))
+      .slice(0, 8);
+
+    const topDef = [...base]
+      .filter(d => typeof d['stl%'] === 'number' || typeof d['blk%'] === 'number')
+      .sort((a, b) => ((b['stl%'] ?? 0) + (b['blk%'] ?? 0)) - ((a['stl%'] ?? 0) + (a['blk%'] ?? 0)))
+      .slice(0, 8);
+
+    return { topImpact, topShooters, topDef };
+  }, [computedData, selectedYear, minGames]);
+
+  const openExplorePreset = (preset: 'impact' | 'shooting' | 'defense' | 'vs_top50' | 'vs_top100') => {
+    const presets: Record<string, { cols: string[]; sort?: SortConfig; competition?: 'ALL' | 'VS_TOP50' | 'VS_TOP100' }> = {
+      impact: {
+        cols: ['total RAPM', 'offensive rapm', 'defensive rapm', 'porpag', 'gbpm', 'per', 'usg', 'ts'],
+        sort: { key: 'total RAPM', direction: 'desc' },
+        competition: 'ALL',
+      },
+      shooting: {
+        cols: ['ts', 'efg', '3p%', '3pr', 'ft_pct', 'ftr', '3pa/100', 'midfga/100', 'rimfga/100'],
+        sort: { key: 'ts', direction: 'desc' },
+        competition: 'ALL',
+      },
+      defense: {
+        cols: ['stl%', 'blk%', 'stops/100', 'dporpag', 'dbpm', 'defensive rapm', 'drtg', 'adj_de'],
+        sort: { key: 'defensive rapm', direction: 'desc' },
+        competition: 'ALL',
+      },
+      vs_top50: {
+        cols: ['total RAPM', 'ts', 'usg', 'ast', 'to', 'stl%', 'blk%', 'per'],
+        sort: { key: 'total RAPM', direction: 'desc' },
+        competition: 'VS_TOP50',
+      },
+      vs_top100: {
+        cols: ['total RAPM', 'ts', 'usg', 'ast', 'to', 'stl%', 'blk%', 'per'],
+        sort: { key: 'total RAPM', direction: 'desc' },
+        competition: 'VS_TOP100',
+      },
+    };
+
+    const cfg = presets[preset];
+    if (!cfg) return;
+    setVisibleCols(prev => {
+      const next = new Set(prev);
+      cfg.cols.forEach(k => next.add(k));
+      return next;
+    });
+    if (cfg.sort) setSortConfig(cfg.sort);
+    if (cfg.competition) setCompetition(cfg.competition);
+    setDatasetMode('season');
+  };
+
   return (
     <div className={`app-container ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${datasetMode === 'career' ? 'career-mode' : ''}`}>
-
-      {/* KPRverse-style vignette glow overlay */}
-      <div className="vignette-glow" />
 
       {/* --- FIXED TWITTER LINK --- */}
       <a
@@ -1978,7 +2192,9 @@ function App() {
         className="twitter-float-btn"
       >
         <Twitter size={14} fill="#fff" />
+        Follow @checkthesheets
       </a>
+
 
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
@@ -2111,6 +2327,60 @@ function App() {
             <div style={{ padding: '20px', color: '#666', fontSize: '0.9rem' }}>
               Select other tabs to view stats.
             </div>
+          ) : datasetMode === 'explore' ? (
+            <>
+              <div className="filter-group">
+                <label>Quick Search</label>
+                <div className="input-icon-wrap">
+                  <Search size={14} />
+                  <input
+                    type="text"
+                    placeholder="Type a player name..."
+                    value={playerSearch}
+                    onChange={e => setPlayerSearch(e.target.value)}
+                  />
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  Tip: hit Table for full filters + sortable columns.
+                </div>
+              </div>
+
+              <div className="filter-group row-group">
+                <div>
+                  <label>Year</label>
+                  <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="year-select">
+                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                    <option value="All">All</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Competition</label>
+                  <select value={competition} onChange={e => setCompetition(e.target.value as any)}>
+                    <option value="ALL">All Games</option>
+                    <option value="VS_TOP50">Vs Top 50</option>
+                    <option value="VS_TOP100">Vs Top 100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="filter-group">
+                <label>Draft Status</label>
+                <select value={draftStatus} onChange={e => setDraftStatus(e.target.value as any)}>
+                  <option value="All">All</option>
+                  <option value="Drafted">Drafted</option>
+                  <option value="Undrafted">Undrafted</option>
+                </select>
+              </div>
+
+              <div className="filter-group" style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn-secondary" onClick={() => { setDatasetMode('season'); }}>
+                  Open Table
+                </button>
+                <button className="btn-clear" onClick={clearAllFilters}>
+                  Reset
+                </button>
+              </div>
+            </>
           ) : (
             <>
               {datasetMode === 'season' && (
@@ -2258,6 +2528,55 @@ function App() {
               </div>
 
               <div className="filter-group">
+                <label>Draft Status</label>
+                <select value={draftStatus} onChange={e => setDraftStatus(e.target.value as any)}>
+                  <option value="All">All</option>
+                  <option value="Drafted">Drafted</option>
+                  <option value="Undrafted">Undrafted</option>
+                </select>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  Uses `pick` when present; otherwise treated as undrafted/unknown.
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setSortConfig({ key: 'pick', direction: 'asc' })}
+                    title="Sort by NBA pick (ascending)"
+                  >
+                    Pick ↑
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setSortConfig({ key: 'pick', direction: 'desc' })}
+                    title="Sort by NBA pick (descending)"
+                  >
+                    Pick ↓
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setSortConfig({ key: 'drafted', direction: 'desc' })}
+                    title="Group drafted players first"
+                  >
+                    Drafted First
+                  </button>
+                </div>
+              </div>
+
+              {datasetMode === 'season' && (
+                <div className="filter-group">
+                  <label>Competition</label>
+                  <select value={competition} onChange={e => setCompetition(e.target.value as any)}>
+                    <option value="ALL">All Games</option>
+                    <option value="VS_TOP50">Vs Top 50</option>
+                    <option value="VS_TOP100">Vs Top 100</option>
+                  </select>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                    Only works when exports include `split_id` rows.
+                  </div>
+                </div>
+              )}
+
+              <div className="filter-group">
                 <label>NBA Status</label>
                 <select value={nbaFilter} onChange={e => setNbaFilter(e.target.value)}>
                   <option value="All">All Players</option>
@@ -2398,6 +2717,7 @@ function App() {
 
             <div>
               <h1 style={{ marginBottom: '4px' }}>
+                {datasetMode === 'explore' && 'Explore'}
                 {datasetMode === 'season' && `Season Data ${selectedYear !== 'All' ? `(${selectedYear})` : '(All Years)'}`}
                 {datasetMode === 'career' && '2019-Present Career Data'}
                 {datasetMode === 'compare' && `Comparison (${compareType === 'season' ? 'Season' : 'Career'})`}
@@ -2407,17 +2727,18 @@ function App() {
               {datasetMode !== 'about' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#666', marginTop: '-2px' }}>
                   <img src={nerdBall} style={{ width: '20px', height: '20px', borderRadius: '50%' }} alt="" />
-                  Generated by <strong style={{ color: '#2563eb' }}>checkthesheets.com</strong>
+                  Generated by <strong style={{ color: 'var(--accent)' }}>checkthesheets.com</strong>
                 </div>
               )}
             </div>
           </div>
 
-          {datasetMode !== 'about' && (
+          {datasetMode !== 'about' && datasetMode !== 'explore' && (
             <span className="count-badge">{filteredData.length} Results</span>
           )}
         </div>
 
+        {loading && <div className="hydrating-bar"><div /></div>}
 
         {datasetMode !== 'about' && activeFilters.length > 0 && (
           <div className="active-filters-bar">
@@ -2431,65 +2752,199 @@ function App() {
           </div>
         )}
 
-        {/* --- ABOUT PAGE CONTENT --- */}
-        {datasetMode === 'about' ? (
-          <div style={{ padding: '30px', maxWidth: '800px', margin: '0 auto', lineHeight: '1.6', color: '#333' }}>
-            <div style={{ background: 'white', padding: '30px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-              <h2 style={{ fontSize: '1.8rem', marginTop: 0, color: '#111' }}>Welcome to Check The Sheets</h2>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
-                <img src={nerdBall} alt="Nerd Ball" style={{ width: '60px', height: '60px', borderRadius: '50%' }} />
+        {/* --- MAIN CONTENT ROUTING --- */}
+        {datasetMode === 'explore' ? (
+          <div className="explore-container">
+            <div className="window explore-hero">
+              <div className="explore-hero-header">
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Akash</div>
-                  <a href="https://x.com/checkthesheets" style={{ color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Twitter size={14} /> @checkthesheets
-                  </a>
+                  <div className="explore-title">Find a player. Learn a profile.</div>
+                  <div className="explore-subtitle">
+                    CTS is the friendly layer on top of a dense scouting spreadsheet. Explore here, then jump into Table when you want to go full nerd.
+                  </div>
+                </div>
+                <div className="explore-hero-actions">
+                  <button className="btn-secondary" onClick={() => setDatasetMode('season')}>Open Table</button>
+                  <button className="btn-clear" onClick={() => setDatasetMode('about')}>About + Glossary</button>
                 </div>
               </div>
 
-              <h3>Data Sources</h3>
-              <p>
-                The data provided on this platform is aggregated from multiple trusted basketball analytics sources:
-              </p>
-              <ul style={{ paddingLeft: '20px' }}>
-                <li><strong>Hoop-Explorer:</strong> Primary source for RAPM (Regularized Adjusted Plus-Minus) and other advanced impact metrics.</li>
-                <li><strong>BartTorvik:</strong> Comprehensive box score stats, efficiency metrics, and player comparisons.</li>
-                <li><strong>RealGM:</strong> International prospect statistics.</li>
-                <li><strong>ESPN:</strong> BMI/Weight.</li>
-              </ul>
-
-              <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #2563eb', margin: '20px 0' }}>
-                <strong>Note on Data Coverage:</strong> Season and Career data on this platform generally covers the <strong>2019 season onwards</strong>. While historical data exists on source sites, this dashboard focuses on the modern analytics era.
+              <div className="explore-search">
+                <div className="input-icon-wrap explore-search-input">
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    placeholder='Search: "cam johnson" / "rob dillingham" / "austin reaves"'
+                    value={playerSearch}
+                    onChange={e => setPlayerSearch(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <h3>How to Use</h3>
-              <p>
-                <strong>Season Mode:</strong> Filter individual player seasons by year, team, or physical attributes. Use the "Stat Options" in the sidebar to toggle advanced metrics like RAPM, dunk rates, and rim finishing percentages.
-              </p>
-              <p>
-                <strong>Career Mode:</strong> Aggregated stats for players' careers (post-2019). Useful for identifying long-term production and consistency.
-              </p>
-              <p>
-                <strong>Comparison:</strong> Select multiple players to view head-to-head charts, scatter plots, and trajectory graphs. This tool is perfect for scouting and debating player value.
-              </p>
+              {playerSearch.trim().length >= 2 && (
+                <div className="explore-results">
+                  <div className="explore-section-title">Matches</div>
+                  <div className="explore-result-list">
+                    {filteredData.slice(0, 10).map((p: any) => (
+                      <button
+                        key={p.id}
+                        className="explore-result"
+                        onClick={() => setSelectedPlayer(p)}
+                        title="Open player card"
+                      >
+                        <div className="explore-result-main">
+                          <div className="explore-result-name">{p.key}</div>
+                          <div className="explore-result-sub">{p.torvik_year} • {p.team} • {p.pos || '-'}</div>
+                        </div>
+                        <div className="explore-result-metrics">
+                          <div className="chip">RAPM: {formatValue(p['total RAPM'], 'total RAPM')}</div>
+                          <div className="chip">TS: {formatValue(p['ts'], 'ts')}</div>
+                          <div className="chip">USG: {formatValue(p['usg'], 'usg')}</div>
+                        </div>
+                      </button>
+                    ))}
+                    {filteredData.length === 0 && (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', padding: '12px 0' }}>
+                        No matches found. Try fewer tokens.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
-              <p style={{ marginTop: '30px', borderTop: '1px solid #eee', paddingTop: '20px', fontSize: '0.9rem', color: '#666' }}>
-                Built by <strong>checkthesheets.com</strong>. <br />
-                Follow on Twitter for updates.
-              </p>
+            <div className="window explore-grid">
+              <div className="explore-section-title">Quick Launch</div>
+              <div className="explore-card-grid">
+                <button className="explore-card" onClick={() => openExplorePreset('impact')}>
+                  <div className="explore-card-title">Top Impact</div>
+                  <div className="explore-card-desc">RAPM-first view + supporting context.</div>
+                  <div className="explore-card-mini">
+                    {exploreFeatured.topImpact.slice(0, 3).map((p: any) => (
+                      <div key={p.id} className="mini-row">
+                        <span>{p.key}</span>
+                        <span>{formatValue(p['total RAPM'], 'total RAPM')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+
+                <button className="explore-card" onClick={() => openExplorePreset('shooting')}>
+                  <div className="explore-card-title">Shooters</div>
+                  <div className="explore-card-desc">TS/3P/FT, plus shot diet context.</div>
+                  <div className="explore-card-mini">
+                    {exploreFeatured.topShooters.slice(0, 3).map((p: any) => (
+                      <div key={p.id} className="mini-row">
+                        <span>{p.key}</span>
+                        <span>{formatValue(p['ts'], 'ts')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+
+                <button className="explore-card" onClick={() => openExplorePreset('defense')}>
+                  <div className="explore-card-title">Defensive Playmakers</div>
+                  <div className="explore-card-desc">Stocks + defensive impact, not just blocks.</div>
+                  <div className="explore-card-mini">
+                    {exploreFeatured.topDef.slice(0, 3).map((p: any) => (
+                      <div key={p.id} className="mini-row">
+                        <span>{p.key}</span>
+                        <span>{formatValue((p['stl%'] ?? 0) + (p['blk%'] ?? 0), 'stl%')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+
+                <button
+                  className="explore-card"
+                  disabled={!hasCompetitionSplits}
+                  onClick={() => openExplorePreset('vs_top50')}
+                  title={!hasCompetitionSplits ? 'Top-50 splits not available in current exports yet.' : 'Open Vs Top 50 view'}
+                >
+                  <div className="explore-card-title">Vs Top 50</div>
+                  <div className="explore-card-desc">Same player, tougher context.</div>
+                  {!hasCompetitionSplits && <div className="explore-card-note">Coming soon (needs split exports)</div>}
+                </button>
+
+                <button
+                  className="explore-card"
+                  disabled={!hasCompetitionSplits}
+                  onClick={() => openExplorePreset('vs_top100')}
+                  title={!hasCompetitionSplits ? 'Top-100 splits not available in current exports yet.' : 'Open Vs Top 100 view'}
+                >
+                  <div className="explore-card-title">Vs Top 100</div>
+                  <div className="explore-card-desc">Broad “quality competition” slice.</div>
+                  {!hasCompetitionSplits && <div className="explore-card-note">Coming soon (needs split exports)</div>}
+                </button>
+
+                <button className="explore-card" onClick={() => setDatasetMode('career')}>
+                  <div className="explore-card-title">Career View</div>
+                  <div className="explore-card-desc">Multi-season profile + progression.</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : datasetMode === 'about' ? (
+          <div className="about-container">
+            <div className="window about-window">
+              <div className="about-header">
+                <div className="about-title">About Check The Sheets</div>
+                <div className="about-subtitle">Definitions, formulas, and source credits.</div>
+              </div>
+
+              <div className="about-block">
+                <div className="about-kicker">Sources</div>
+                <ul className="about-list">
+                  <li><strong>Hoop-Explorer:</strong> player impact metrics (RAPM and related lineup-based measures) and supporting shot-type/rate stats where available.</li>
+                  <li><strong>BartTorvik:</strong> box score + tempo-free stats (BPM/PORPAG family) and team-context metrics.</li>
+                  <li><strong>RealGM:</strong> international stats and league history (kept separate from NCAA pipeline).</li>
+                  <li><strong>Basketball-Reference:</strong> NBA career summaries (WS/VORP/BPM/PER/etc) where available.</li>
+                </ul>
+              </div>
+
+              <div className="about-block">
+                <div className="about-kicker">Stat Dictionary</div>
+                <div className="input-icon-wrap about-search">
+                  <Search size={14} />
+                  <input
+                    type="text"
+                    placeholder="Search a stat: RAPM, TS, 3PR, OREB%, ..."
+                    value={statDictQuery}
+                    onChange={e => setStatDictQuery(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  Download: <a href="/data/stat_dictionary.json" target="_blank" rel="noreferrer">stat_dictionary.json</a>
+                </div>
+
+                <div className="about-dict">
+                  {(statDict?.entries || [])
+                    .filter((e: any) => {
+                      const q = statDictQuery.trim().toLowerCase();
+                      if (!q) return true;
+                      const hay = `${e.key} ${e.name || ''} ${e.definition || ''}`.toLowerCase();
+                      return hay.includes(q);
+                    })
+                    .slice(0, 250)
+                    .map((e: any) => (
+                      <div key={e.key} className="about-dict-row">
+                        <div className="about-dict-head">
+                          <div className="about-dict-key">{e.key}</div>
+                          <div className="about-dict-name">{e.name || e.key}</div>
+                          {e.source && <div className="about-dict-source">{e.source}</div>}
+                        </div>
+                        {e.definition && <div className="about-dict-def">{e.definition}</div>}
+                        {e.formula && <div className="about-dict-formula"><span>Formula:</span> {e.formula}</div>}
+                        {e.notes && <div className="about-dict-notes">{e.notes}</div>}
+                      </div>
+                    ))}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
           <>
-            <div className="mega-intro">
-              <h2>Season Data (2026)</h2>
-              <div>
-                This table lists all player seasons in the current dataset. Click column headers to sort, use the
-                filters on the left to refine, and search by player name to jump to specific rows.
-              </div>
-              <div className="updated">Last updated: 3rd of February 2026</div>
-            </div>
-
             {/* COMPARISON VIZ AT THE TOP */}
             {datasetMode === 'compare' && compareList.length > 0 && (
               <ErrorBoundary onClose={() => { }}>
@@ -2499,6 +2954,16 @@ function App() {
                   statsDistribution={statsDistribution}
                 />
               </ErrorBoundary>
+            )}
+
+            {datasetMode === 'season' && competition !== 'ALL' && !hasCompetitionSplits && (
+              <div className="window" style={{ margin: '1.5rem', marginBottom: 0 }}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>Competition Splits Not Available Yet</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                  Your current exports don&apos;t include `split_id` rows for <strong>Vs Top 50</strong> / <strong>Vs Top 100</strong>.
+                  We&apos;ll light this up as soon as the new-trank pipeline starts exporting those splits.
+                </div>
+              </div>
             )}
 
             <div className="table-container">
@@ -2597,43 +3062,37 @@ function App() {
         )}
       </div>
 
-      {
-        selectedPlayer && (
-          <ErrorBoundary onClose={() => setSelectedPlayer(null)}>
-            <PlayerDetailModal
-              player={selectedPlayer}
-              historyData={modalHistoryData}
-              statConfig={groupedStats}
-              visibleCols={visibleCols}
-              brStats={brAdvancedData}
-              onClose={() => setSelectedPlayer(null)}
-            />
-          </ErrorBoundary>
-        )
-      }
+      {selectedPlayer && (
+        <ErrorBoundary onClose={() => setSelectedPlayer(null)}>
+          <PlayerDetailModal
+            player={selectedPlayer}
+            historyData={modalHistoryData}
+            statConfig={groupedStats}
+            visibleCols={visibleCols}
+            brStats={brAdvancedData}
+            onClose={() => setSelectedPlayer(null)}
+          />
+        </ErrorBoundary>
+      )}
 
       {/* Custom Stat Builder Modal */}
-      {
-        showCustomStatBuilder && (
-          <CustomStatBuilder
-            availableStats={availableStats}
-            onSave={handleSaveCustomStat}
-            onClose={() => setShowCustomStatBuilder(false)}
-            existingStats={customStats}
-          />
-        )
-      }
+      {showCustomStatBuilder && (
+        <CustomStatBuilder
+          availableStats={availableStats}
+          onSave={handleSaveCustomStat}
+          onClose={() => setShowCustomStatBuilder(false)}
+          existingStats={customStats}
+        />
+      )}
 
       {/* Consensus Draft Modal */}
-      {
-        showConsensusDraft && (
-          <ConsensusDraft
-            players={filteredData}
-            onClose={() => setShowConsensusDraft(false)}
-          />
-        )
-      }
-    </div >
+      {showConsensusDraft && (
+        <ConsensusDraft
+          players={filteredData}
+          onClose={() => setShowConsensusDraft(false)}
+        />
+      )}
+    </div>
   );
 }
 

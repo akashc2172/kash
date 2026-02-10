@@ -25,7 +25,8 @@ get_repo_root <- function() {
 REPO_ROOT <- get_repo_root()
 HOOP_DIR  <- file.path(REPO_ROOT, "data", "cleaned_csvs")
 TORVIK_BASE_FILE <- file.path(REPO_ROOT, "data", "torvik", "torvik_base_2019_2025.csv")
-BART_2026_FILE <- file.path(REPO_ROOT, "data", "bart", "2026trank_data.csv")
+# Preferred 2026 source (downloaded from Bart Torvik)
+BART_2026_FILE <- file.path(REPO_ROOT, "data", "torvik_raw", "torvik_advstats_2026.csv")
 
 OUT_SEASON <- file.path(REPO_ROOT, "public", "data", "season.csv")
 OUT_CAREER <- file.path(REPO_ROOT, "public", "data", "career.csv")

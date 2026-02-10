@@ -11,20 +11,33 @@ library(readr)
 # 1. PATH CONFIGURATION
 # If running in RStudio/RMarkdown, set your root directory manually here
 # to match your repo location.
-# Example: setwd("/Users/akashc/my-trank") 
+# Example: setwd("/Users/akashc/my-trank")
 # Or rely on the script logic below:
 
 get_repo_root <- function() {
   # If running interactively, assume we are at the root or need to set it
-  return(getwd()) 
+  return(getwd())
 }
 
 REPO_ROOT <- get_repo_root()
 
 # Define Paths based on your structure
-HOOP_DIR         <- file.path(REPO_ROOT, "data", "cleaned_csvs")
+HOOP_DIR <- file.path(REPO_ROOT, "data", "cleaned_csvs")
 TORVIK_BASE_FILE <- file.path(REPO_ROOT, "data", "torvik", "torvik_base_2019_2025.csv")
-BART_2026_FILE   <- file.path(REPO_ROOT, "data", "torvik_raw", "torvik_advstats_2026.csv")
+BART_2026_CANDIDATES <- c(
+  file.path(REPO_ROOT, "data", "torvik_raw", "torvik_advstats_2026.csv"),
+  # Legacy/alt path kept for backwards compatibility
+  file.path(REPO_ROOT, "data", "bart", "2026trank_data.csv")
+)
+
+pick_latest_file <- function(paths) {
+  existing <- paths[file.exists(paths)]
+  if (length(existing) == 0) return(NA_character_)
+  info <- file.info(existing)
+  existing[which.max(info$mtime)]
+}
+
+BART_2026_FILE <- pick_latest_file(BART_2026_CANDIDATES)
 TEAM_DICT_FILE <- file.path(REPO_ROOT, "data", "team_dict.rds")
 team_dict <- readRDS(TEAM_DICT_FILE)
 
@@ -44,11 +57,15 @@ clean_player <- function(x) {
 cat("[config] REPO_ROOT:      ", REPO_ROOT, "\n")
 cat("[config] HOOP_DIR:       ", HOOP_DIR, "\n")
 cat("[config] TORVIK_BASE:    ", TORVIK_BASE_FILE, "\n")
-cat("[config] TORVIK_2026:    ", BART_2026_FILE, "\n")
+cat("[config] TORVIK_2026:    ", ifelse(is.na(BART_2026_FILE), "(missing)", BART_2026_FILE), "\n")
 
 # 2. HELPER FUNCTIONS
 clean_name <- function(x) {
-  x %>% as.character() %>% str_to_lower() %>% str_replace_all("[^a-z\\s]", " ") %>% str_squish()
+  x %>%
+    as.character() %>%
+    str_to_lower() %>%
+    str_replace_all("[^a-z\\s]", " ") %>%
+    str_squish()
 }
 
 lastfirst_to_firstlast <- function(x) {
@@ -65,7 +82,9 @@ feet_in_to_inches <- function(x) {
 
 pick_first <- function(df, candidates, default = NA) {
   hit <- candidates[candidates %in% names(df)][1]
-  if (is.na(hit)) return(rep(default, nrow(df)))
+  if (is.na(hit)) {
+    return(rep(default, nrow(df)))
+  }
   df[[hit]]
 }
 
@@ -73,7 +92,9 @@ wavg <- function(x, w) {
   x <- suppressWarnings(as.numeric(x))
   w <- suppressWarnings(as.numeric(w))
   ok <- !is.na(x) & !is.na(w) & w > 0
-  if (!any(ok)) return(NA_real_)
+  if (!any(ok)) {
+    return(NA_real_)
+  }
   sum(x[ok] * w[ok], na.rm = TRUE) / sum(w[ok], na.rm = TRUE)
 }
 
@@ -87,16 +108,15 @@ hoop_raw <- hoop_files %>%
   set_names() %>%
   map_dfr(~ read_csv(.x, show_col_types = FALSE) %>% clean_names())
 
-hoop2 <- hoop_raw %>% 
-  mutate( 
-    year = as.integer(year), 
-    team_raw = team, 
-    team = unname(team_dict[team_raw]) %>% coalesce(team_raw), 
-    player_raw = key, # Hoop Explorer usually uses key as player name; change if yours differs 
-    player = clean_player(player_raw) 
+hoop2 <- hoop_raw %>%
+  mutate(
+    year = as.integer(year),
+    team_raw = team,
+    team = unname(team_dict[team_raw]) %>% coalesce(team_raw),
+    player_raw = key, # Hoop Explorer usually uses key as player name; change if yours differs
+    player = clean_player(player_raw)
   )
 cat("[success] HOOP2 created with", nrow(hoop2), "rows.\n")
-
 
 
 ## ----pressure, echo=FALSE-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -105,22 +125,21 @@ torvik2 <- read_csv(TORVIK_BASE_FILE)
 # FUNCTION: Convert Raw Bart CSV -> Torvik2 Format
 # ---------------------------------------------------------
 process_bart_2026 <- function(filepath) {
-  
   # 1. Define Headers Manually
   bart_headers <- c(
-    "player_name", "team", "conf", "GP", "Min_per", "ORtg", "usg", "eFG", "TS_per", 
-    "ORB_per", "DRB_per", "AST_per", "TO_per", "FTM", "FTA", "FT_per", "twoPM", "twoPA", "twoP_per", 
-    "TPM", "TPA", "TP_per", "blk_per", "stl_per", "ftr", "yr", "ht", "num", 
-    "porpag", "adjoe", "pfr", "year", "pid", "type", "Rec Rank", "ast/tov", 
-    "rimmade", "rimmade+rimmiss", "midmade", "midmade+midmiss", "rimmade/(rimmade+rimmiss)", 
-    "midmade/(midmade+midmiss)", "dunksmade", "dunksmiss+dunksmade", "dunksmade/(dunksmade+dunksmiss)", 
-    "pick", "drtg", "adrtg", "dporpag", "stops", "bpm", "obpm", "dbpm", "gbpm", "mp", "ogbpm", "dgbpm", 
-    "oreb", "dreb", "treb", "ast", "stl", "blk", "pts", "role", "3p/100?"
+    "player_name", "team", "conf", "GP", "Min_per", "ORtg", "usg", "eFG", "TS_per",
+    "ORB_per", "DRB_per", "AST_per", "TO_per", "FTM", "FTA", "FT_per", "twoPM", "twoPA", "twoP_per",
+    "TPM", "TPA", "TP_per", "blk_per", "stl_per", "ftr", "yr", "ht", "num",
+    "porpag", "adjoe", "pfr", "year", "pid", "hometown", "Rec Rank", "ast/tov",
+    "rimmade", "rimmade+rimmiss", "midmade", "midmade+midmiss", "rimmade/(rimmade+rimmiss)",
+    "midmade/(midmade+midmiss)", "dunksmade", "dunksmiss+dunksmade", "dunksmade/(dunksmade+dunksmiss)",
+    "pick", "drtg", "adrtg", "dporpag", "stops", "bpm", "obpm", "dbpm", "gbpm", "mp", "ogbpm", "dgbpm",
+    "oreb", "dreb", "treb", "ast", "stl", "blk", "pts", "role", "3p/100?", "birthdate"
   )
 
   # 2. Read file
-  raw <- read_csv(filepath, col_names = bart_headers, show_col_types = FALSE) 
-  
+  raw <- read_csv(filepath, col_names = bart_headers, show_col_types = FALSE)
+
   # 3. STRICT Mapping
   df_final <- raw %>%
     transmute(
@@ -128,35 +147,32 @@ process_bart_2026 <- function(filepath) {
       player = player_name,
       pos = role,
       exp = yr,
-      
+
       # *** FIX: Force num to numeric ***
-      num = suppressWarnings(as.numeric(num)), 
-      
+      num = suppressWarnings(as.numeric(num)),
       hgt = ht,
       team = team,
       conf = conf,
-      
+
       # --- Minutes & Games ---
       g = GP,
-      min = Min_per,          
+      min = Min_per,
       mpg = mp,
-      
-      
-      
+
+
       # --- Basic Stats ---
       ppg = pts,
       oreb = oreb,
       dreb = dreb,
-      rpg = treb,             
+      rpg = treb,
       apg = ast,
-      
+
       # Derived TOV
       tov = ifelse(`ast/tov` > 0, ast / `ast/tov`, 0),
-      
       ast_to = `ast/tov`,
       spg = stl,
       bpg = blk,
-      
+
       # --- Advanced Rates & Metrics ---
       usg = usg,
       ortg = ORtg,
@@ -164,33 +180,28 @@ process_bart_2026 <- function(filepath) {
       ts = TS_per,
       year = year,
       torvik_id = pid,
-      
+
       # --- Shooting Totals ---
-      fgm = twoPM + TPM,      
+      fgm = twoPM + TPM,
       ftm = FTM,
       fta = FTA,
       ft_pct = FT_per,
-      
       two_m = twoPM,
       two_a = twoPA,
       two_pct = twoP_per,
-      
       three_m = TPM,
       three_a = TPA,
       three_pct = TP_per,
-      
       dunk_m = dunksmade,
       dunk_a = `dunksmiss+dunksmade`,
       dunk_pct = `dunksmade/(dunksmade+dunksmiss)`,
-      
       rim_m = rimmade,
       rim_a = `rimmade+rimmiss`,
       rim_pct = `rimmade/(rimmade+rimmiss)`,
-      
       mid_m = midmade,
       mid_a = `midmade+midmiss`,
       mid_pct = `midmade/(midmade+midmiss)`,
-      
+
       # --- Advanced Metrics II ---
       porpag = porpag,
       dporpag = dporpag,
@@ -201,7 +212,8 @@ process_bart_2026 <- function(filepath) {
       obpm = obpm,
       dbpm = dbpm,
       bpm = bpm,
-      
+      gbpm = gbpm,
+
       # --- Advanced Rates II ---
       oreb_rate = ORB_per,
       dreb_rate = DRB_per,
@@ -213,16 +225,16 @@ process_bart_2026 <- function(filepath) {
       pfr = pfr,
       rec = `Rec Rank`,
       pick = pick,
-      
+
       # --- Calculated Fields ---
       fga = twoPA + TPA,
       fg_pct = ifelse((twoPA + TPA) > 0, (twoPM + TPM) / (twoPA + TPA), 0),
-      
+
       # --- Raw Dupes ---
       team_raw = team,
       player_raw = player_name
     )
-  
+
   return(df_final)
 }
 
@@ -234,43 +246,41 @@ process_bart_2026 <- function(filepath) {
 custom_path <- BART_2026_FILE
 
 # 2. Process and Merge
-if(file.exists(custom_path)) {
+if (!is.na(custom_path) && file.exists(custom_path)) {
   message(paste("Processing custom file:", custom_path))
-  
+
   # Process the new file
   torvik_2026 <- process_bart_2026(custom_path)
-  
+
   # =========================================================
   # NEW: MANUAL TEAM NAME FIXES (2026)
   # =========================================================
   # Define mappings: "Bad Name in 2026 CSV" = "Standard Name in torvik2"
   team_fix_2026 <- c(
-    "Charleston"   = "College of Charleston",
-    "Purdue Fort Wayne"="Fort Wayne",
-    "LIU"="LIU Brooklyn",
-    "Detroit Mercy"="Detroit",
-    "Louisiana"="Louisiana Lafayette",
-    "Saint Francis"="St. Francis PA"
-    
+    "Charleston" = "College of Charleston",
+    "Purdue Fort Wayne" = "Fort Wayne",
+    "LIU" = "LIU Brooklyn",
+    "Detroit Mercy" = "Detroit",
+    "Louisiana" = "Louisiana Lafayette",
+    "Saint Francis" = "St. Francis PA"
   )
-  
+
   # Apply fixes to the 2026 data BEFORE merging
   torvik_2026 <- torvik_2026 %>%
     mutate(team = dplyr::recode(team, !!!team_fix_2026))
-    
+
   message("Applied 2026 team name fixes.")
   # =========================================================
-  
+
   # Merge with existing 'torvik2' (from previous chunks) if it exists
-  if(exists("torvik2")) {
+  if (exists("torvik2")) {
     torvik2 <- bind_rows(torvik2, torvik_2026)
     message("Success: Merged 2026 data with historical data.")
   } else {
     torvik2 <- torvik_2026
     message("Success: Loaded 2026 data (No historical data found).")
   }
-  
-} 
+}
 
 ## ----save-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -302,68 +312,65 @@ feet_in_to_inches <- function(x) {
 }
 
 
-
 # -----------------------------
 # Team-name mapping (Hoop -> Bart)
 # -----------------------------
 # Hoop team_key -> Bart team_key
 team_fix <- c(
-  "South Fla."         = "South Florida",
+  "South Fla." = "South Florida",
   "A&M-Corpus Christi" = "Texas A&M Corpus Chris",
-  "Alcorn"             = "Alcorn St.",
-  "Ark.-Pine Bluff" = "Arkansas Pine Bluff",  
-  "Boston U."          = "Boston University",
+  "Alcorn" = "Alcorn St.",
+  "Ark.-Pine Bluff" = "Arkansas Pine Bluff",
+  "Boston U." = "Boston University",
   "Dixie St." = "Utah Tech",
-  "Central Ark."       = "Central Arkansas",
-  "Central Conn. St."  = "Central Connecticut",
-  "Central Mich."      = "Central Michigan",
+  "Central Ark." = "Central Arkansas",
+  "Central Conn. St." = "Central Connecticut",
+  "Central Mich." = "Central Michigan",
   "Col. of Charleston" = "College of Charleston",
-  
-  "CSU Bakersfield"    = "Cal St. Bakersfield",
+  "CSU Bakersfield" = "Cal St. Bakersfield",
   "Charleston So." = "Charleston Southern",
-  "Eastern Ill."       = "Eastern Illinois",
-  "Eastern Ky."        = "Eastern Kentucky",
-  "Eastern Mich."      = "Eastern Michigan",
-  "Eastern Wash."      = "Eastern Washington",
-  "Fla. Atlantic"      = "Florida Atlantic",
-  "Ga. Southern"       = "Georgia Southern",
-  "Houston Baptist"    = "Houston Christian",
-  "Lamar University"   = "Lamar",
-  "LMU (CA)"           = "Loyola Marymount",
-  "Middle Tenn."       = "Middle Tennessee",
-  "Mississippi Val."   = "Mississippi Valley St.",
-  "N.C. A&T"           = "North Carolina A&T",
-  "N.C. Central"       = "North Carolina Central",
-  "Northern Ariz."     = "Northern Arizona",
-  "Northern Colo."     = "Northern Colorado",
+  "Eastern Ill." = "Eastern Illinois",
+  "Eastern Ky." = "Eastern Kentucky",
+  "Eastern Mich." = "Eastern Michigan",
+  "Eastern Wash." = "Eastern Washington",
+  "Fla. Atlantic" = "Florida Atlantic",
+  "Ga. Southern" = "Georgia Southern",
+  "Houston Baptist" = "Houston Christian",
+  "Lamar University" = "Lamar",
+  "LMU (CA)" = "Loyola Marymount",
+  "Middle Tenn." = "Middle Tennessee",
+  "Mississippi Val." = "Mississippi Valley St.",
+  "N.C. A&T" = "North Carolina A&T",
+  "N.C. Central" = "North Carolina Central",
+  "Northern Ariz." = "Northern Arizona",
+  "Northern Colo." = "Northern Colorado",
   "North Ala." = "North Alabama",
-  "North Carolina St."="N.C. State",
-  "Northern Ill."      = "Northern Illinois",
+  "North Carolina St." = "N.C. State",
+  "Northern Ill." = "Northern Illinois",
   "Southern Ind." = "Southern Indiana",
-  "Northern Ky."       = "Northern Kentucky",
-  "South Fla."         = "South Florida",
-  "Southeast Mo. St."  = "Southeast Missouri St.",
-  "Southeastern La."   = "Southeastern Louisiana",
-  "Southern Ill."      = "Southern Illinois",
-  "Southern U."        = "Southern",
+  "Northern Ky." = "Northern Kentucky",
+  "South Fla." = "South Florida",
+  "Southeast Mo. St." = "Southeast Missouri St.",
+  "Southeastern La." = "Southeastern Louisiana",
+  "Southern Ill." = "Southern Illinois",
+  "Southern U." = "Southern",
   "St. Thomas (MN)" = "St. Thomas",
   "Texas A&M Corpus Chr" = "Texas A&M Corpus Chris",
   "Tex. A&M-Commerce" = "Texas A&M Commerce",
-  "East Texas A&M"="Texas A&M Commerce",
-  "Western Caro."      = "Western Carolina",
-  "Western Ill."       = "Western Illinois",
-  "Western Ky."        = "Western Kentucky",
-  "Western Mich."      = "Western Michigan",
+  "East Texas A&M" = "Texas A&M Commerce",
+  "Western Caro." = "Western Carolina",
+  "Western Ill." = "Western Illinois",
+  "Western Ky." = "Western Kentucky",
+  "Western Mich." = "Western Michigan",
   "Ark.-Pine Bluff" = "Arkansas Pine Bluff",
   "West Ga." = "West Georgia"
-  
 )
 
 # expects columns literally named: "hoop name" and "bart name"
 
 
 map_team_key <- function(x) {
-  k <- clean_name(x)                 # -> cleaned team key
+  k <- clean_name(x) # -> cleaned team key
   dplyr::coalesce(unname(team_map[k]), k)
 }
 
@@ -409,7 +416,9 @@ torvik_keep <- torvik3 %>% select(-any_of(drop_from_torvik))
 merged1 <- hoop3 %>% left_join(torvik_keep, by = join_keys)
 
 cat("Matched rows after strict join (non-NA mpg): ",
-    sum(!is.na(merged1$mpg)), " / ", nrow(merged1), "\n", sep="")
+  sum(!is.na(merged1$mpg)), " / ", nrow(merged1), "\n",
+  sep = ""
+)
 
 # -----------------------------
 # 3) Cross-validation flags
@@ -418,7 +427,7 @@ merged1 <- merged1 %>%
   mutate(
     num_match = !is.na(roster_number) & !is.na(num) & roster_number == num,
     hgt_match = !is.na(hoop_hgt_in) & !is.na(torvik_hgt_in) &
-                abs(hoop_hgt_in - torvik_hgt_in) <= 1
+      abs(hoop_hgt_in - torvik_hgt_in) <= 1
   )
 
 # -----------------------------
@@ -427,22 +436,21 @@ merged1 <- merged1 %>%
 need_fix <- merged1 %>% filter(is.na(mpg))
 
 if (nrow(need_fix) > 0) {
-
   x <- need_fix %>%
     transmute(
       id,
       year, team_key,
       hoop_name = player_key,
-      hoop_num  = roster_number,
-      hoop_hgt  = hoop_hgt_in
+      hoop_num = roster_number,
+      hoop_hgt = hoop_hgt_in
     )
 
   y <- torvik_keep %>%
     transmute(
       year, team_key,
       torvik_name = player_key,
-      torvik_num  = num,
-      torvik_hgt  = torvik_hgt_in,
+      torvik_num = num,
+      torvik_hgt = torvik_hgt_in,
       across(everything())
     )
 
@@ -456,9 +464,9 @@ if (nrow(need_fix) > 0) {
       num_ok  = !is.na(hoop_num) & !is.na(torvik_num) & hoop_num == torvik_num,
       hgt_ok  = !is.na(hoop_hgt) & !is.na(torvik_hgt) & abs(hoop_hgt - torvik_hgt) <= 1,
       name_ok = hoop_name == torvik_name,
-      score   = 4*as.integer(num_ok) + 2*as.integer(hgt_ok) + 1*as.integer(name_ok)
+      score   = 4 * as.integer(num_ok) + 2 * as.integer(hgt_ok) + 1 * as.integer(name_ok)
     ) %>%
-    filter(num_ok, hgt_ok) %>%                 # require both (safe)
+    filter(num_ok, hgt_ok) %>% # require both (safe)
     group_by(id) %>%
     slice_max(score, n = 1, with_ties = FALSE) %>%
     ungroup()
@@ -480,13 +488,14 @@ if (nrow(need_fix) > 0) {
   }
 
   merged2 <- merged2 %>% select(-ends_with("_rescued"))
-
 } else {
   merged2 <- merged1
 }
 
 cat("Matched rows after rescue (non-NA mpg): ",
-    sum(!is.na(merged2$mpg)), " / ", nrow(merged2), "\n", sep="")
+  sum(!is.na(merged2$mpg)), " / ", nrow(merged2), "\n",
+  sep = ""
+)
 
 # -----------------------------
 # 5) Audit summary
@@ -508,9 +517,6 @@ out_path <- "torvik3.csv"
 write_csv(torvik3, out_path)
 
 # 3) open it in your default app (Excel usually)
-
-
-
 
 
 ## -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -551,14 +557,20 @@ extract_last_candidates <- function(name_vec) {
   raw_vec <- as.character(name_vec)
 
   out <- lapply(raw_vec, function(raw) {
-    if (is.na(raw)) return(character(0))
+    if (is.na(raw)) {
+      return(character(0))
+    }
     raw <- str_trim(raw)
-    if (raw == "") return(character(0))
+    if (raw == "") {
+      return(character(0))
+    }
 
     x <- clean_letters(raw)
     toks <- str_split(x, "\\s+")[[1]]
     toks <- drop_suffix_anywhere(toks)
-    if (length(toks) == 0) return(character(0))
+    if (length(toks) == 0) {
+      return(character(0))
+    }
 
     unique(c(toks[1], toks[length(toks)]))
   })
@@ -576,7 +588,6 @@ if (nrow(need_lastname_rescue) == 0) {
   message("No rows need last-name rescue (all already matched).")
   merged3 <- merged2
 } else {
-
   # Use Hoop's *current* name key (player_key) since that's what you're working with
   hoop_search <- need_lastname_rescue %>%
     transmute(
@@ -623,7 +634,7 @@ if (nrow(need_lastname_rescue) == 0) {
   picked <- cand %>%
     semi_join(unique_hits, by = "id") %>%
     group_by(id) %>%
-    slice(1) %>%   # unique anyway
+    slice(1) %>% # unique anyway
     ungroup()
 
   join_keys <- c("year", "team_key", "player_key")
@@ -687,15 +698,19 @@ make_two_tokens <- function(name_vec) {
 
   lapply(x, function(s) {
     s <- str_trim(s)
-    if (s == "") return(character(0))
+    if (s == "") {
+      return(character(0))
+    }
 
     toks <- str_split(s, "\\s+")[[1]]
     toks <- toks[toks != ""]
     toks <- drop_jr_sr_roman_anywhere(toks)
 
-    if (length(toks) == 0) return(character(0))
+    if (length(toks) == 0) {
+      return(character(0))
+    }
 
-    last_tok  <- toks[length(toks)]
+    last_tok <- toks[length(toks)]
     first_tok <- toks[1]
 
     # order matters: try last token first, then first token
@@ -710,7 +725,6 @@ if (nrow(need_tok) == 0) {
   message("POST token rescue: nothing to do (all already matched).")
   merged3 <- merged2
 } else {
-
   hoop_tokens <- need_tok %>%
     transmute(
       id,
@@ -721,7 +735,7 @@ if (nrow(need_tok) == 0) {
     mutate(tok_list = make_two_tokens(name_for_tokens)) %>%
     unnest(tok_list) %>%
     group_by(id) %>%
-    mutate(priority = row_number()) %>%   # 1 = last token, 2 = first token
+    mutate(priority = row_number()) %>% # 1 = last token, 2 = first token
     ungroup() %>%
     rename(token = tok_list) %>%
     filter(!is.na(token), token != "")
@@ -755,12 +769,12 @@ if (nrow(need_tok) == 0) {
       ungroup()
   }
 
-  picked1 <- pick_unique_at_priority(cand, 1)   # try LAST token first
+  picked1 <- pick_unique_at_priority(cand, 1) # try LAST token first
   remaining_ids <- setdiff(need_tok$id, picked1$id)
 
   picked2 <- cand %>%
     filter(id %in% remaining_ids) %>%
-    pick_unique_at_priority(., 2)               # then try FIRST token
+    pick_unique_at_priority(., 2) # then try FIRST token
 
   picked <- bind_rows(picked1, picked2)
 
@@ -799,239 +813,139 @@ important_merged <- merged
 # -----------------------------
 # Helpers: Excel column letters -> numeric index
 # -----------------------------
-excel_col_to_num <- function(col) {
-  col <- toupper(gsub("[^A-Z]", "", col))
-  if (nchar(col) == 0) return(NA_integer_)
-  chars <- strsplit(col, "")[[1]]
-  vals <- match(chars, LETTERS)
-  Reduce(function(acc, v) acc * 26 + v, vals, init = 0L)
-}
-
-parse_excel_spec <- function(spec) {
-  spec <- toupper(str_trim(spec))
-  spec <- gsub("\\s+", "", spec)
-
-  if (grepl(":", spec)) {
-    parts <- strsplit(spec, ":", fixed = TRUE)[[1]]
-    a <- excel_col_to_num(parts[1])
-    b <- excel_col_to_num(parts[2])
-    if (is.na(a) || is.na(b)) return(integer(0))
-    return(seq.int(min(a, b), max(a, b)))
-  } else {
-    a <- excel_col_to_num(spec)
-    if (is.na(a)) return(integer(0))
-    return(a)
-  }
-}
-
 # -----------------------------
 # 1) Drop columns (Explicitly listed with names)
 # -----------------------------
-drop_specs <- c(
+drop_cols <- c(
   # --- Singles ---
-  "A",   # id
-  "E",   # year
-  "F",   # style
-  "G",   # pos_freqs
-  "H",   # doc_count
-  "I",   # pos_class
-  "J",   # code
-  "K",   # pos_confidences
-  
-  "DP",  # team_raw
-  "DO",  # gender
-  "DR",  # player
-  "DS",  # team_key
-  "DT",  # player_key
-  "DY",  # hgt
-  
-  "GG",  # torvik_hgt_in
-  "GH",  # num_match
-  "GI",  # hgt_match
-  
-  
-  "DD",  # roster_origin
-  "DC",  # roster_pos
-  "DB",  # roster_year_class
-  "DA",  # roster_height
-  
-  "CZ",  # roster_number
-  "CX",  # def_adj_prod_override
-  "CR",  # def_rtg_override
-  
-  "AG",  # off_2p_ast_value
-  "AN",  # off_ft_value
-  "AO",  # off_ftr_value
-  
-  "CB",  # off_assist_value
-  "CC",  # off_to_value
-  "CD",  # off_orb_value
-  "CE",  # off_usage_value
-  "CG",  # def_orb_value
-  "CH",  # def_ftr_value
-  "CI",  # def_to_value
-  "CJ",  # def_2prim_value
-  "CL",  # def_team_poss_pct_value
-  "CM",  # off_rtg_value
-  
-  "DL",  # def_adj_rapm_prod_old_value
-  "DK",  # def_adj_rapm_prod_value
-  "DJ",  # off_adj_rapm_prod_value
-  "DF",  # off_adj_rapm_old_value
-  "DH",  # def_adj_rapm_override
-  "DI",  # def_adj_rapm_old_value
-  
-  "CW",  # def_adj_prod_old_value
-  "CV",  # def_adj_prod_value
-  "CU",  # def_adj_rtg_override
-  "CT",  # def_adj_rtg_old_value
-  "CQ",  # def_rtg_old_value
-  "CP",  # def_rtg_value
-  "CS",  # def_adj_rtg_value
-  "CO",  # off_adj_prod_value
-  "CN",  # off_adj_rtg_value
-  "CK",  # off_team_poss_pct_value
-  
-  "BX",  # off_efg_value
-  "BZ",  # off_trans_efg_value
-  "BY",  # off_scramble_efg_value
-  
-  "DM",  # def_adj_rapm_prod_override
-  "DQ",  # player_raw
-  
-  "BL",  # off_trans_2prim_ast_value
-  "BH",  # off_trans_2p_ast_value
-  "BJ",  # off_trans_3p_ast_value
-  "BK",  # off_trans_2prim_value
-  "BN",  # off_trans_2pmid_ast_value
-  "BO",  # off_trans_ft_value
-  "BP",  # off_trans_ftr_value
-  "BQ",  # off_trans_2primr_value
-  "BR",  # off_trans_2pmidr_value
-  "BS",  # off_trans_3pr_value
-  "BT",  # off_trans_assist_value
-  
-  "DN",  # tier
-  
-  
-  "EZ",  # three_pct
-  "EW",  # two_pct
-  
-
-  # --- Expanded Range: L:W (Hoop Explorer Ranks) ---
-  "L",   # adj_rtg_margin_rank
-  "M",   # def_adj_rtg_rank
-  "N",   # off_adj_rtg_rank
-  "O",   # adj_prod_margin_rank
-  "P",   # def_adj_prod_rank
-  "Q",   # off_adj_prod_rank
-  "R",   # adj_rapm_margin_rank
-  "S",   # def_adj_rapm_rank
-  "T",   # off_adj_rapm_rank
-  "U",   # adj_rapm_prod_margin_rank
-  "V",   # def_adj_rapm_prod_rank
-  "W",   # off_adj_rapm_prod_rank
-
-  # --- Expanded Range: AB:AD (Opponent Adjustments) ---
-  "AB",  # off_adj_opp_value
-  "AC",  # off_poss_value
-  "AD",  # def_adj_opp_value
-
-  # --- Expanded Range: AS:BF (Scramble Situations) ---
-  "AS",  # off_scramble_2p_value
-  "AT",  # off_scramble_2p_ast_value
-  "AU",  # off_scramble_3p_value
-  "AV",  # off_scramble_3p_ast_value
-  "AW",  # off_scramble_2prim_value
-  "AX",  # off_scramble_2prim_ast_value
-  "AY",  # off_scramble_2pmid_value
-  "AZ",  # off_scramble_2pmid_ast_value
-  "BA",  # off_scramble_ft_value
-  "BB",  # off_scramble_ftr_value
-  "BC",  # off_scramble_2primr_value
-  "BD",  # off_scramble_2pmidr_value
-  "BE",  # off_scramble_3pr_value
-  "BF",  # off_scramble_assist_value
-
-  # --- Expanded Range: FD:FI (Torvik Shooting Splits) ---
-  "FD",  # rim_m
-  "FE",  # rim_a
-  "FF",  # rim_pct
-  "FG",  # mid_m
-  "FH",  # mid_a
-  "FI"   # mid_pct
+  "id", "year", "style", "pos_freqs", "doc_count", "pos_class", "code", "pos_confidences",
+  "team_raw", "gender", "player", "team_key", "player_key", "hgt",
+  "torvik_hgt_in", "num_match", "hgt_match",
+  "roster_origin", "roster_pos", "roster_year_class", "roster_height",
+  "roster_number", "def_adj_prod_override", "def_rtg_override",
+  "off_2p_ast_value", "off_ft_value", "off_ftr_value",
+  "off_assist_value", "off_to_value", "off_orb_value", "off_usage_value",
+  "def_orb_value", "def_ftr_value", "def_to_value", "def_2prim_value",
+  "def_team_poss_pct_value", "off_rtg_value",
+  "def_adj_rapm_prod_old_value", "def_adj_rapm_prod_value", "off_adj_rapm_prod_value",
+  "off_adj_rapm_old_value", "def_adj_rapm_override", "def_adj_rapm_old_value",
+  "def_adj_prod_old_value", "def_adj_prod_value", "def_adj_rtg_override",
+  "def_adj_rtg_old_value", "def_rtg_old_value", "def_rtg_value", "def_adj_rtg_value",
+  "off_adj_prod_value", "off_adj_rtg_value", "off_team_poss_pct_value",
+  "off_efg_value", "off_trans_efg_value", "off_scramble_efg_value",
+  "def_adj_rapm_prod_override", "player_raw",
+  "off_trans_2prim_ast_value", "off_trans_2p_ast_value", "off_trans_3p_ast_value",
+  "off_trans_2prim_value", "off_trans_2pmid_ast_value", "off_trans_ft_value",
+  "off_trans_ftr_value", "off_trans_2primr_value", "off_trans_2pmidr_value",
+  "off_trans_3pr_value", "off_trans_assist_value",
+  "tier",
+  "three_pct", "two_pct",
+  "adj_rtg_margin_rank", "def_adj_rtg_rank", "off_adj_rtg_rank",
+  "adj_prod_margin_rank", "def_adj_prod_rank", "off_adj_prod_rank",
+  "adj_rapm_margin_rank", "def_adj_rapm_rank", "off_adj_rapm_rank",
+  "adj_rapm_prod_margin_rank", "def_adj_rapm_prod_rank", "off_adj_rapm_prod_rank",
+  "off_adj_opp_value", "off_poss_value", "def_adj_opp_value",
+  "off_scramble_2p_value", "off_scramble_2p_ast_value",
+  "off_scramble_3p_value", "off_scramble_3p_ast_value",
+  "off_scramble_2prim_value", "off_scramble_2prim_ast_value",
+  "off_scramble_2pmid_value", "off_scramble_2pmid_ast_value",
+  "off_scramble_ft_value", "off_scramble_ftr_value",
+  "off_scramble_2primr_value", "off_scramble_2pmidr_value",
+  "off_scramble_3pr_value", "off_scramble_assist_value",
+  "rim_m", "rim_a", "rim_pct", "mid_m", "mid_a", "mid_pct"
 )
 
-drop_idx <- sort(unique(unlist(lapply(drop_specs, parse_excel_spec))))
-drop_idx <- drop_idx[drop_idx >= 1 & drop_idx <= ncol(important_merged)]
+# Ensure checking names against "clean" names
+drop_cols_clean <- janitor::make_clean_names(drop_cols)
 
-if (length(drop_idx) > 0) {
-  important_merged <- important_merged[, -drop_idx, drop = FALSE]
-}
+important_merged <- important_merged %>%
+  select(-any_of(drop_cols_clean))
 
 # -----------------------------
 # 2) Rename columns (only if present)
 # -----------------------------
 rename_wanted <- c(
-  "Total_off_2p_attempts_value"     = "2pa",
-  "Total_off_3p_attempts_value"     = "3pa",
-  "Total_off_2prim_attempts_value"  = "rim attempts",
-  "Total_off_2pmid_attempts_value"  = "middy attempts",
-
-  "Off_2p_value"                    = "2p%",
-  "Off_3p_value"                    = "3p%",
-  "off_3p_ast_value"                = "assisted 3p %",
-
-  "Off_2prim_value"                 = "rim%",
-  "Off_2prim_ast_value"             = "assisted rim fg%",
-  "Off_2pmid_value"                 = "middy fg%",
-  "Off_2pmid_ast_value"             = "assisted middy fg%",
-
-  "Off_2primr_value"                = "rim attempt rate",
-  "Off_2pmidr_value"                = "middy attempt rate",
-  "Off_3pr_value"                   = "3 pt rate",
-  
-  "duration_mins_value"="total minutes",
-
-  "Off_trans_2p_value"              = "transition 2p%",
-  "Off_trans_3p_value"              = "transition 3p%",
-  "Off_trans_2prim_value"           = "transition rim 2p%",
-  "off_trans_2pmid_value"           = "transition midrange fg%",
-
-  "Off_efg_value"                   = "hoop-e efg%",
-  "Off_scramble_efg_value"          = "2nd chance pts efg%",
-  "Off_trans_efg_value"             = "transition efg%",
-
-  "Def_2prim_value"                 = "opponent 2p rim fg%",
-
-  "Off_trans_assist_value"          = "% of assists via transition",
-  "Off_ast_rim_value"               = "% of assists end w/ rim",
-  "Off_ast_mid_value"               = "% of assists end w/ middy",
+  "Total_off_2p_attempts_value" = "2pa",
+  "Total_off_3p_attempts_value" = "3pa",
+  "Total_off_2prim_attempts_value" = "rim attempts",
+  "Total_off_2pmid_attempts_value" = "middy attempts",
+  "Off_2p_value" = "2p%",
+  "Off_3p_value" = "3p%",
+  "off_3p_ast_value" = "assisted 3p %",
+  "Off_2prim_value" = "rim%",
+  "Off_2prim_ast_value" = "assisted rim fg%",
+  "Off_2pmid_value" = "middy fg%",
+  "Off_2pmid_ast_value" = "assisted middy fg%",
+  "Off_2primr_value" = "rim attempt rate",
+  "Off_2pmidr_value" = "middy attempt rate",
+  "Off_3pr_value" = "3 pt rate",
+  "duration_mins_value" = "total minutes",
+  "Off_trans_2p_value" = "transition 2p%",
+  "Off_trans_3p_value" = "transition 3p%",
+  "Off_trans_2prim_value" = "transition rim 2p%",
+  "off_trans_2pmid_value" = "transition midrange fg%",
+  "Off_efg_value" = "hoop-e efg%",
+  "Off_scramble_efg_value" = "2nd chance pts efg%",
+  "Off_trans_efg_value" = "transition efg%",
+  "Def_2prim_value" = "opponent 2p rim fg%",
+  "Off_trans_assist_value" = "% of assists via transition",
+  "Off_ast_rim_value" = "% of assists end w/ rim",
+  "Off_ast_mid_value" = "% of assists end w/ middy",
 
   # you typed "Off_ast_mid_value" again for 3p; I'm assuming you meant Off_ast_3p_value
-  "Off_ast_3p_value"                = "% of assists end w/ 3p",
-
-  "Rec"                             = "recruit rank",
+  "Off_ast_3p_value" = "% of assists end w/ 3p",
+  "Rec" = "recruit rank",
   "off_adj_rapm_value" = "offensive rapm",
   "def_adj_rapm_value" = "defensive rapm"
 )
 
-# Match columns robustly by comparing "clean names" (handles case/punctuation)
-df_clean <- janitor::make_clean_names(names(important_merged))
-want_old <- names(rename_wanted)
-want_old_clean <- janitor::make_clean_names(want_old)
+# 2. Rename columns
+message("Renaming columns in important_merged...")
 
-# Build actual rename map for columns that exist
-rename_actual <- character(0)
-for (i in seq_along(want_old)) {
-  hit <- which(df_clean == want_old_clean[i])
-  if (length(hit) == 1) {
-    rename_actual[names(important_merged)[hit]] <- rename_wanted[[i]]
-  }
+# Robust rename of ALL wanted columns
+# Note: Source columns are "clean_names" (lowercase/underscores) because janitor::clean_names was run on hoop data
+important_merged <- important_merged %>%
+  rename(
+    "2pa"                         = any_of(c("total_off_2p_attempts_value")),
+    "3pa"                         = any_of(c("total_off_3p_attempts_value")),
+    "rim attempts"                = any_of(c("total_off_2prim_attempts_value")),
+    "middy attempts"              = any_of(c("total_off_2pmid_attempts_value")),
+    "2p%"                         = any_of(c("off_2p_value")),
+    "3p%"                         = any_of(c("off_3p_value")),
+    "assisted 3p %"               = any_of(c("off_3p_ast_value")),
+    "rim%"                        = any_of(c("off_2prim_value")),
+    "assisted rim fg%"            = any_of(c("off_2prim_ast_value")),
+    "middy fg%"                   = any_of(c("off_2pmid_value")),
+    "assisted middy fg%"          = any_of(c("off_2pmid_ast_value")),
+    "rim attempt rate"            = any_of(c("off_2primr_value")),
+    "middy attempt rate"          = any_of(c("off_2pmidr_value")),
+    "3 pt rate"                   = any_of(c("off_3pr_value")),
+    "total minutes"               = any_of(c("duration_mins_value")),
+    "transition 2p%"              = any_of(c("off_trans_2p_value")),
+    "transition 3p%"              = any_of(c("off_trans_3p_value")),
+    "transition rim 2p%"          = any_of(c("off_trans_2prim_value")),
+    "transition midrange fg%"     = any_of(c("off_trans_2pmid_value")),
+    "hoop-e efg%"                 = any_of(c("off_efg_value")),
+    "2nd chance pts efg%"         = any_of(c("off_scramble_efg_value")),
+    "transition efg%"             = any_of(c("off_trans_efg_value")),
+    "opponent 2p rim fg%"         = any_of(c("def_2prim_value")),
+    "% of assists via transition" = any_of(c("off_trans_assist_value")),
+    "% of assists end w/ rim"     = any_of(c("off_ast_rim_value")),
+    "% of assists end w/ middy"   = any_of(c("off_ast_mid_value")),
+    "% of assists end w/ 3p"      = any_of(c("off_ast_3p_value")),
+    "recruit rank"                = any_of(c("rec", "Rec")),
+    "offensive rapm"              = any_of(c("off_adj_rapm_value", "Off_adj_rapm_value")),
+    "defensive rapm"              = any_of(c("def_adj_rapm_value", "Def_adj_rapm_value"))
+  )
+
+# Verify required columns
+if (!"offensive rapm" %in% names(important_merged)) {
+  message("WARNING: 'offensive rapm' column missing! Creating empty column.")
+  important_merged$`offensive rapm` <- NA_real_
 }
-
-if (length(rename_actual) > 0) {
-  names(important_merged)[match(names(rename_actual), names(important_merged))] <- unname(rename_actual)
+if (!"defensive rapm" %in% names(important_merged)) {
+  message("WARNING: 'defensive rapm' column missing! Creating empty column.")
+  important_merged$`defensive rapm` <- NA_real_
 }
 
 # -----------------------------
@@ -1042,7 +956,7 @@ if (length(rename_actual) > 0) {
 important_merged <- important_merged %>%
   mutate(
     `total RAPM` = suppressWarnings(as.numeric(`offensive rapm`)) -
-                   suppressWarnings(as.numeric(`defensive rapm`))
+      suppressWarnings(as.numeric(`defensive rapm`))
   )
 
 # -----------------------------
@@ -1061,27 +975,20 @@ important_merged <- important_merged %>%
     dunk_a = suppressWarnings(as.numeric(dunk_a)),
     `rim attempts` = suppressWarnings(as.numeric(`rim attempts`)),
     `middy attempts` = suppressWarnings(as.numeric(`middy attempts`)),
-
     `stls/100` = ifelse(def_team_poss_value > 0, 100 * spg * g / def_team_poss_value, NA_real_),
     `blks/100` = ifelse(def_team_poss_value > 0, 100 * bpg * g / def_team_poss_value, NA_real_),
-    `stops/100`= ifelse(def_team_poss_value > 0, 100 * stops / def_team_poss_value, NA_real_),
-
-    `3pa/100`  = ifelse(off_team_poss_value > 0, 100 * `3pa` / off_team_poss_value, NA_real_),
-    `midfga/100`= ifelse(off_team_poss_value > 0, 100 * `middy attempts` / off_team_poss_value, NA_real_),
-    `dunkfga/100`= ifelse(off_team_poss_value > 0, 100 * dunk_a / off_team_poss_value, NA_real_),
-    `rimfga/100`= ifelse(off_team_poss_value > 0, 100 * `rim attempts` / off_team_poss_value, NA_real_),
-    `2pa/100`  = ifelse(off_team_poss_value > 0, 100 * `2pa` / off_team_poss_value, NA_real_)
+    `stops/100` = ifelse(def_team_poss_value > 0, 100 * stops / def_team_poss_value, NA_real_),
+    `3pa/100` = ifelse(off_team_poss_value > 0, 100 * `3pa` / off_team_poss_value, NA_real_),
+    `midfga/100` = ifelse(off_team_poss_value > 0, 100 * `middy attempts` / off_team_poss_value, NA_real_),
+    `dunkfga/100` = ifelse(off_team_poss_value > 0, 100 * dunk_a / off_team_poss_value, NA_real_),
+    `rimfga/100` = ifelse(off_team_poss_value > 0, 100 * `rim attempts` / off_team_poss_value, NA_real_),
+    `2pa/100` = ifelse(off_team_poss_value > 0, 100 * `2pa` / off_team_poss_value, NA_real_)
   )
-
-
-
-
 
 
 ## ----savea----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 out_path <- "season.csv"
 write_csv(important_merged, out_path)
-
 
 
 ## ----saveasd--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1091,15 +998,16 @@ write_csv(important_merged, out_path)
 # ============================================
 
 
-
 # ---- load (use your object if already in memory) ----
 # df <- mergednew            # if you already have it as an object
-df <- read_csv("mergednew.csv", show_col_types = FALSE)
+df <- important_merged
 
 # ---- helpers ----
 wavg <- function(x, w) {
   ok <- !is.na(x) & !is.na(w) & w > 0
-  if (!any(ok)) return(NA_real_)
+  if (!any(ok)) {
+    return(NA_real_)
+  }
   sum(x[ok] * w[ok], na.rm = TRUE) / sum(w[ok], na.rm = TRUE)
 }
 
@@ -1153,7 +1061,7 @@ career_agg <- df %>%
     career_two_a = sum(two_a, na.rm = TRUE),
     career_two_m = sum(two_m, na.rm = TRUE),
     career_g = sum(g, na.rm = TRUE),
-        # --- POSSESSIONS (career totals) ---
+    # --- POSSESSIONS (career totals) ---
     career_off_poss = sum(off_team_poss_value, na.rm = TRUE),
     career_def_poss = sum(def_team_poss_value, na.rm = TRUE),
 
@@ -1193,12 +1101,12 @@ career_agg <- df %>%
     # MINUTES-weighted rate stats
     career_stl = wavg(stl, `total minutes`),
     career_blk = wavg(blk, `total minutes`),
-    career_to  = wavg(to,  `total minutes`),
+    career_to = wavg(to, `total minutes`),
     career_ast = wavg(ast, `total minutes`),
     career_obpm = wavg(obpm, `total minutes`),
     career_dbpm = wavg(dbpm, `total minutes`),
-    career_bpm  = wavg(bpm,  `total minutes`),
-    career_usg  = wavg(usg,  `total minutes`),
+    career_bpm = wavg(bpm, `total minutes`),
+    career_usg = wavg(usg, `total minutes`),
     career_oreb_rate = wavg(oreb_rate, `total minutes`),
     career_dreb_rate = wavg(dreb_rate, `total minutes`),
     career_porpag = wavg(porpag, `total minutes`),
@@ -1208,13 +1116,12 @@ career_agg <- df %>%
     career_offensive_rapm = mean(`offensive rapm`, na.rm = TRUE),
     career_defensive_rapm = mean(`defensive rapm`, na.rm = TRUE),
     career_rapm = mean(`total RAPM`, na.rm = TRUE),
-    
+
 
     # new: adjusted apg/tov/ast_to (minutes-weighted)
     career_adjusted_apg = wavg(apg, `total minutes`),
     career_adjusted_tov = wavg(tov, `total minutes`),
     career_adjusted_ast_to = wavg(ast_to, `total minutes`),
-
     .groups = "drop"
   ) %>%
   mutate(
@@ -1232,28 +1139,28 @@ career_agg <- df %>%
 
     # TS%: you described the denominator slightly wrong.
     # Correct TS% is: points / (2*(FGA + 0.44*FTA))
-    career_points = 2*career_two_m + 3*career_three_m + career_ftm,
-    career_ts = ifelse((career_fga + 0.44*career_fta) > 0,
-                       career_points / (2 * (career_fga + 0.44*career_fta)),
-                       NA_real_),
-    `career stls/100`  = ifelse(career_def_poss > 0, 100 * career_total_steals / career_def_poss, NA_real_),
-    `career blks/100`  = ifelse(career_def_poss > 0, 100 * career_total_blocks / career_def_poss, NA_real_),
-    `career stops/100` = ifelse(career_def_poss > 0, 100 * career_stops / career_def_poss, NA_real_),  # you already sum stops as career_stops
+    career_points = 2 * career_two_m + 3 * career_three_m + career_ftm,
+    career_ts = ifelse((career_fga + 0.44 * career_fta) > 0,
+      career_points / (2 * (career_fga + 0.44 * career_fta)),
+      NA_real_
+    ),
+    `career stls/100` = ifelse(career_def_poss > 0, 100 * career_total_steals / career_def_poss, NA_real_),
+    `career blks/100` = ifelse(career_def_poss > 0, 100 * career_total_blocks / career_def_poss, NA_real_),
+    `career stops/100` = ifelse(career_def_poss > 0, 100 * career_stops / career_def_poss, NA_real_), # you already sum stops as career_stops
 
-    `career 3pa/100`     = ifelse(career_off_poss > 0, 100 * career_total_3pa / career_off_poss, NA_real_),
-    `career 2pa/100`     = ifelse(career_off_poss > 0, 100 * career_total_2pa / career_off_poss, NA_real_),
-    `career midfga/100`  = ifelse(career_off_poss > 0, 100 * career_total_mid_att / career_off_poss, NA_real_),
-    `career rimfga/100`  = ifelse(career_off_poss > 0, 100 * career_total_rim_att / career_off_poss, NA_real_),
+    `career 3pa/100` = ifelse(career_off_poss > 0, 100 * career_total_3pa / career_off_poss, NA_real_),
+    `career 2pa/100` = ifelse(career_off_poss > 0, 100 * career_total_2pa / career_off_poss, NA_real_),
+    `career midfga/100` = ifelse(career_off_poss > 0, 100 * career_total_mid_att / career_off_poss, NA_real_),
+    `career rimfga/100` = ifelse(career_off_poss > 0, 100 * career_total_rim_att / career_off_poss, NA_real_),
     `career dunkfga/100` = ifelse(career_off_poss > 0, 100 * career_total_dunk_att / career_off_poss, NA_real_)
   )
-  
+
 
 # ---- build final career table: start from most-recent row, overwrite with career values ----
 career <- last_row %>%
   left_join(career_agg, by = "roster_ncaa_id") %>%
   mutate(
     # copy-most-recent columns are already in last_row; we only overwrite computed ones:
-
     `2pa` = career_2pa,
     `3pa` = career_3pa,
     `rim attempts` = career_rim_attempts,
@@ -1271,7 +1178,6 @@ career <- last_row %>%
     two_a = career_two_a,
     two_m = career_two_m,
     g = career_g,
-
     `2p%` = career_2p_pct,
     `3p%` = career_3p_pct,
     `rim%` = career_rim_pct,
@@ -1280,41 +1186,34 @@ career <- last_row %>%
     `middy attempt rate` = career_middy_attempt_rate,
     fg_pct = career_fg_pct,
     ftr = career_ftr,
-
     `% of assists end w/ 3p` = career_pct_ast_end_3p,
     `% of assists end w/ middy` = career_pct_ast_end_middy,
     `% of assists end w/ rim` = career_pct_ast_end_rim,
-    
-        off_team_poss_value = career_off_poss,
+    off_team_poss_value = career_off_poss,
     def_team_poss_value = career_def_poss,
-
-    `stls/100`  = `career stls/100`,
-    `blks/100`  = `career blks/100`,
+    `stls/100` = `career stls/100`,
+    `blks/100` = `career blks/100`,
     `stops/100` = `career stops/100`,
-    `3pa/100`   = `career 3pa/100`,
-    `2pa/100`   = `career 2pa/100`,
-    `midfga/100`= `career midfga/100`,
-    `rimfga/100`= `career rimfga/100`,
-    `dunkfga/100`= `career dunkfga/100`,
-
-
+    `3pa/100` = `career 3pa/100`,
+    `2pa/100` = `career 2pa/100`,
+    `midfga/100` = `career midfga/100`,
+    `rimfga/100` = `career rimfga/100`,
+    `dunkfga/100` = `career dunkfga/100`,
     stl = career_stl,
     blk = career_blk,
-    to  = career_to,
+    to = career_to,
     ast = career_ast,
     obpm = career_obpm,
     dbpm = career_dbpm,
-    bpm  = career_bpm,
-    usg  = career_usg,
+    bpm = career_bpm,
+    usg = career_usg,
     oreb_rate = career_oreb_rate,
     dreb_rate = career_dreb_rate,
     porpag = career_porpag,
     dporpag = career_dporpag,
-
     `offensive rapm` = career_offensive_rapm,
     `defensive rapm` = career_defensive_rapm,
-    `total RAPM` = career_rapm, 
-
+    `total RAPM` = career_rapm,
     ft_pct = career_ft_pct,
     ts = career_ts,
     `3 pt rate` = career_3_pt_rate,
@@ -1383,4 +1282,3 @@ if (file.exists(out_season_path) && file.exists(out_career_path)) {
 } else {
   cat("\nERROR: Files were not saved. Check permissions or paths.\n")
 }
-

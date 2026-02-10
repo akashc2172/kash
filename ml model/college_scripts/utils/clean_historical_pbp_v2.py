@@ -201,9 +201,15 @@ class GameSolver:
             else:
                 hs, as_ = 0, 0
             
+            # Extract date from filename
+            # Filename format: ncaa_pbp_YYYY-MM-DD.csv
+            match = re.search(r'(\d{4}-\d{2}-\d{2})', os.path.basename(self.filename))
+            date_str = match.group(0) if match else "1900-01-01"
+
             output.append({
                 "gameSourceId": str(self.game_id),
                 "season": self.season,
+                "date": date_str,
                 "clock": clock,
                 "playText": row_text,
                 "homeScore": hs,
@@ -215,10 +221,7 @@ class GameSolver:
 def main():
     print("🦊 Starting Full Scale Holistic Cleaner...")
     con = duckdb.connect(DB_PATH)
-    team_df = con.execute("SELECT id, school, displayName FROM dim_teams").fetchdf()
-    
-    # Pre-fetch Team Map for speed
-    # (In a real massive run, we'd optimize the fuzzy matcher, but for ~5000 games it's fine)
+    # team_df = con.execute("SELECT id, school, displayName FROM dim_teams").fetchdf() # Not used yet
     
     all_clean_rows = []
     
@@ -253,16 +256,15 @@ def main():
                     game_rows = df[df['contest_id'] == cid].sort_index()
                     h_team, a_team = get_header_teams(game_rows)
                     
-                    # Fuzzy match IDs (Simplified for speed - usually we'd cache this)
-                    # For now just passing names is fine as per schema, IDs are explicit in next step if we want.
-                    
-                    # Extract season from folder name (handle both YYYY and YYYY-YYYY formats)
+                    # Extract season from folder name
                     folder_name = os.path.basename(folder)
                     if '-' in folder_name:
                         season = int(folder_name.split('-')[0])  # 2012-2013 -> 2012
                     else:
                         season = int(folder_name)  # 2012 -> 2012
+                    
                     solver = GameSolver(cid, game_rows['raw_text'].tolist(), h_team, a_team, season)
+                    solver.filename = f # Pass filename for date extraction
                     solver.parse_rows()
                     solver.solve_timeline()
                     clean = solver.export_rows()
@@ -275,11 +277,17 @@ def main():
     OUT_PARQUET = "data/fact_play_historical_combined.parquet"
     print(f"\n💾 Saving {len(all_clean_rows)} rows to {OUT_PARQUET}...")
     
+    if not all_clean_rows:
+        print("⚠️ No rows generated. Exiting.")
+        return
+
     out_df = pd.DataFrame(all_clean_rows)
     # Ensure types
     out_df['season'] = out_df['season'].astype(int)
     out_df['homeScore'] = pd.to_numeric(out_df['homeScore'], errors='coerce').fillna(0).astype(int)
     out_df['awayScore'] = pd.to_numeric(out_df['awayScore'], errors='coerce').fillna(0).astype(int)
+    # Ensure date is string/object
+    out_df['date'] = out_df['date'].astype(str)
     
     out_df.to_parquet(OUT_PARQUET, index=False)
     print("✅ Full Batch Complete!")
