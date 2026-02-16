@@ -627,3 +627,91 @@ def ingest_games_only(
             for err in result.errors:
                 endpoint, msg = err.split(": ", 1) if ": " in err else ("unknown", err)
                 _log_ingest_failure(wh, gid, season, season_type, endpoint, msg)
+
+
+def ingest_games_only_endpoints(
+    wh: Warehouse,
+    season: int,
+    season_type: str = "regular",
+    include_plays: bool = True,
+    include_subs: bool = True,
+    include_lineups: bool = False,
+):
+    """
+    Resume per-game ingest with endpoint-level controls.
+
+    This allows strict backfill ordering:
+      1) plays (+participants derived from plays)
+      2) substitutions
+      3) lineups
+    """
+    quota = _get_quota_manager(wh)
+    wh.init_schema(CORE_DDL)
+
+    with get_client() as client:
+        try:
+            games = wh.query_df(f"""
+                SELECT id FROM {Tables.GAMES}
+                WHERE season = {season} AND seasonType = '{season_type}'
+            """)
+            game_ids = set(games["id"].astype(str).tolist())
+        except duckdb.Error as e:
+            print(f"Error: {Tables.GAMES} not found. Run full ingest first. {e}")
+            return
+
+        if not game_ids:
+            print(f"No games found for {season} {season_type}.")
+            return
+
+        done_play = (
+            _existing_game_ids_for_table(wh, Tables.PLAY_RAW, season, season_type)
+            if include_plays
+            else game_ids
+        )
+        done_subs = (
+            _existing_game_ids_for_table(wh, Tables.SUBSTITUTION_RAW, season, season_type)
+            if include_subs
+            else game_ids
+        )
+        done_lineups = (
+            _existing_game_ids_for_table(wh, Tables.LINEUP_STINT_RAW, season, season_type)
+            if include_lineups
+            else game_ids
+        )
+
+        missing_play = game_ids - done_play
+        missing_subs = game_ids - done_subs
+        missing_lineups = game_ids - done_lineups
+        todo = sorted(missing_play | missing_subs | missing_lineups, key=lambda x: int(x))
+
+        print(
+            f"Endpoint-scoped queue for {season} {season_type}: "
+            f"plays={len(missing_play)} (enabled={include_plays}), "
+            f"subs={len(missing_subs)} (enabled={include_subs}), "
+            f"lineups={len(missing_lineups)} (enabled={include_lineups}), "
+            f"total={len(todo)}"
+        )
+
+        plays_api = cbbd.PlaysApi(client)
+
+        for gid in tqdm(todo, desc="Per-game ingest"):
+            result = _process_single_game(
+                gid=gid,
+                plays_api=plays_api,
+                quota=quota,
+                include_lineups=include_lineups,
+                need_plays=(gid in missing_play) and include_plays,
+                need_subs=(gid in missing_subs) and include_subs,
+                need_lineups=(gid in missing_lineups) and include_lineups,
+            )
+
+            if result.lineups:
+                wh.ensure_table(Tables.LINEUP_STINT_RAW, pd.DataFrame(result.lineups), pk=None)
+            if result.subs:
+                wh.ensure_table(Tables.SUBSTITUTION_RAW, pd.DataFrame(result.subs), pk=None)
+            if result.plays:
+                wh.ensure_table(Tables.PLAY_RAW, pd.DataFrame(result.plays), pk=None)
+
+            for err in result.errors:
+                endpoint, msg = err.split(": ", 1) if ": " in err else ("unknown", err)
+                _log_ingest_failure(wh, gid, season, season_type, endpoint, msg)

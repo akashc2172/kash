@@ -4,6 +4,7 @@ from typing import List
 from .warehouse import Warehouse
 from .ingest import ingest_static, ingest_play_types, ingest_games_only, fetch_and_ingest_season
 from .ingest import ingest_player_season_stats
+from .ingest import ingest_games_only_endpoints
 from .derive import build_derived_sql
 from .windows import build_windows_player, build_windows_team
 from .export import export_player_asof_wide
@@ -37,6 +38,36 @@ def resume_ingest(
     ingest_games_only(wh, season=season, season_type=season_type, include_lineups=include_lineups)
     wh.close()
     typer.echo("OK: resumed ingest")
+
+
+@app.command()
+def resume_ingest_endpoints(
+    season: int = typer.Option(...),
+    season_type: str = typer.Option("regular", help="regular/postseason/tournament depending on API"),
+    endpoints: str = typer.Option("plays,subs,lineups", help="Comma-separated: plays,subs,lineups"),
+    out: str = typer.Option("data/warehouse.duckdb"),
+):
+    """
+    Resume per-game ingest with endpoint-level controls.
+    Use this for strict staged backfills (plays -> subs -> lineups).
+    """
+    wanted = {x.strip().lower() for x in endpoints.split(",") if x.strip()}
+    allowed = {"plays", "subs", "lineups"}
+    invalid = sorted(wanted - allowed)
+    if invalid:
+        raise typer.BadParameter(f"Invalid endpoint(s): {invalid}. Allowed: plays,subs,lineups")
+
+    wh = Warehouse(out)
+    ingest_games_only_endpoints(
+        wh,
+        season=season,
+        season_type=season_type,
+        include_plays="plays" in wanted,
+        include_subs="subs" in wanted,
+        include_lineups="lineups" in wanted,
+    )
+    wh.close()
+    typer.echo("OK: resumed endpoint-scoped ingest")
 
 @app.command()
 def fetch_ingest(
