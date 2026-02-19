@@ -271,7 +271,11 @@ def build_dim_player_nba(raw_be, crosswalk, config):
     counts_wt = anthro_df.dropna(subset=['wt']).groupby('nba_id')['season_year'].nunique()
     anthro_stats['has_wt_multiseason'] = anthro_stats['nba_id'].map(counts_wt).fillna(0) >= 2
 
-    anthro_stats['wingspan_const'] = np.nan
+    # Wingspan scaffolding (schema-only for now; ingestion lands in a later phase).
+    anthro_stats['wingspan_const'] = np.nan  # Backward-compatible legacy column.
+    anthro_stats['wingspan_in'] = np.nan
+    anthro_stats['standing_reach_in'] = np.nan
+    anthro_stats['wingspan_minus_height_in'] = np.nan
     anthro_stats['has_wingspan'] = 0
     
     # Merge

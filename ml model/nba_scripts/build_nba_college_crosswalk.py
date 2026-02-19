@@ -22,6 +22,7 @@ import numpy as np
 from pathlib import Path
 import duckdb
 import re
+import unicodedata
 from difflib import SequenceMatcher
 import logging
 
@@ -34,16 +35,64 @@ WAREHOUSE_DIR = Path("data/warehouse_v2")
 DB_PATH = 'data/warehouse.duckdb'
 OUT_FILE = WAREHOUSE_DIR / "dim_player_nba_college_crosswalk.parquet"
 
-def normalize_name(name):
-    """Normalize names for matching: lowercase, remove punctuation/suffixes."""
-    if pd.isna(name): return ""
-    name = str(name).lower()
-    name = re.sub(r'[^a-z\s]', '', name)
-    name = re.sub(r'\s+(jr|sr|ii|iii|iv)$', '', name)
-    return name.strip()
+SUFFIX_RE = re.compile(r"\b(jr|sr|ii|iii|iv|v)\b", flags=re.IGNORECASE)
+PUNCT_RE = re.compile(r"[^a-z0-9\s]")
+WS_RE = re.compile(r"\s+")
 
-def similar(a, b):
-    return SequenceMatcher(None, a, b).ratio()
+
+def _ascii_fold(text: str) -> str:
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+
+def normalize_name(name):
+    """
+    Normalize names for matching.
+    Handles apostrophes/hyphens/diacritics and removes suffix noise.
+    """
+    if pd.isna(name):
+        return ""
+    n = _ascii_fold(str(name).lower())
+    n = n.replace("-", " ").replace("'", " ")
+    n = PUNCT_RE.sub(" ", n)
+    n = SUFFIX_RE.sub(" ", n)
+    n = WS_RE.sub(" ", n).strip()
+    return n
+
+
+def name_variants(name: str) -> set[str]:
+    """Generate robust variants for non-exact matching."""
+    base = normalize_name(name)
+    if not base:
+        return set()
+    toks = [t for t in base.split(" ") if t]
+    variants = {base, "".join(toks), " ".join(sorted(toks))}
+    if len(toks) >= 2:
+        first, last = toks[0], toks[-1]
+        variants.add(f"{first} {last}")
+        variants.add(f"{first[:1]} {last}")
+        variants.add(f"{last} {first}")
+    return {v.strip() for v in variants if v.strip()}
+
+
+def name_score(nba_name: str, college_name: str) -> float:
+    """Robust similarity across multiple normalized name variants."""
+    v1 = name_variants(nba_name)
+    v2 = name_variants(college_name)
+    if not v1 or not v2:
+        return 0.0
+    best = 0.0
+    for a in v1:
+        for b in v2:
+            s = SequenceMatcher(None, a, b).ratio()
+            if s > best:
+                best = s
+    # Token overlap boost for hyphen/apostrophe or middle-name differences.
+    t1 = set(normalize_name(nba_name).split())
+    t2 = set(normalize_name(college_name).split())
+    if t1 and t2:
+        jacc = len(t1 & t2) / len(t1 | t2)
+        best = max(best, 0.7 * best + 0.3 * jacc)
+    return float(best)
 
 def get_college_players():
     """Extract distinct athlete_id -> name from stg_shots."""
@@ -88,63 +137,73 @@ def get_nba_players():
     return df
 
 def match_players(college_df, nba_df):
-    logger.info("Running optimized fuzzy matching...")
-    
-    # Pre-calculate exact match lookups (Blocked by Letter for speed)
-    college_lookup = {}
-    for r in college_df.to_dict('records'):
-        if not r['norm_name']: continue
-        letter = r['norm_name'][0]
-        if letter not in college_lookup: college_lookup[letter] = []
-        college_lookup[letter].append(r)
+    logger.info("Running deterministic fuzzy+year matching...")
 
-    matches = []
-    
+    # Block by first normalized token for speed.
+    college_records = college_df.to_dict("records")
+    block = {}
+    for r in college_records:
+        norm = r.get("norm_name", "")
+        if not norm:
+            continue
+        key = norm.split(" ")[0]
+        block.setdefault(key, []).append(r)
+
+    candidates = []
     for _, nba in nba_df.iterrows():
-        n_name = nba['norm_name']
-        n_draft = nba['draft_year_proxy']
-        n_id = nba['nba_id']
-        
-        if pd.isna(n_draft) or not n_name: continue
-        
-        letter = n_name[0]
-        if letter not in college_lookup: continue
-        
-        best_score = 0
-        best_match = None
-        
-        # Scan candidates with same first letter
-        for college in college_lookup[letter]:
-            # 1. Temporal Constraints
-            if abs(college['final_season'] - n_draft) > 2:
+        nba_name = nba.get("player_name", "")
+        n_norm = nba.get("norm_name", "")
+        n_draft = nba.get("draft_year_proxy", np.nan)
+        n_id = nba.get("nba_id")
+        if not n_norm or pd.isna(n_draft):
+            continue
+
+        key = n_norm.split(" ")[0]
+        pool = block.get(key, [])
+        if not pool:
+            # fallback: same first letter
+            first = key[:1]
+            pool = [r for r in college_records if r.get("norm_name", "").startswith(first)]
+
+        for c in pool:
+            year_gap = abs(float(c["final_season"]) - float(n_draft))
+            if year_gap > 2:
                 continue
-            
-            # 2. Name Matching
-            if college['norm_name'] == n_name:
-                score = 1.0
-            else:
-                # Fuzzy is slow, only do it if basics match
-                # e.g. length within 3 chars
-                if abs(len(n_name) - len(college['norm_name'])) > 3:
-                    continue
-                score = similar(n_name, college['norm_name'])
-            
-            if score > 0.88 and score > best_score:
-                best_score = score
-                best_match = college
-        
-        if best_match:
-            matches.append({
-                'nba_id': n_id,
-                'athlete_id': best_match['athlete_id'],
-                'nba_name': nba['player_name'],
-                'college_name': best_match['athlete_name'],
-                'match_score': best_score,
-                'draft_year': n_draft,
-                'college_final': best_match['final_season']
+            s = name_score(nba_name, c["athlete_name"])
+            if s < 0.84:
+                continue
+            # Mild year-gap prior: prefer closer season matches.
+            s_adj = s - 0.02 * year_gap
+            candidates.append({
+                "nba_id": n_id,
+                "athlete_id": int(c["athlete_id"]),
+                "nba_name": nba_name,
+                "college_name": c["athlete_name"],
+                "match_score": float(s_adj),
+                "name_score_raw": float(s),
+                "year_gap": float(year_gap),
+                "draft_year": float(n_draft),
+                "college_final": float(c["final_season"]),
             })
-            
-    return pd.DataFrame(matches)
+
+    cand = pd.DataFrame(candidates)
+    if cand.empty:
+        return cand
+
+    # Deterministic one-to-one resolution:
+    # 1) keep best per nba_id
+    # 2) if athlete maps to >1 nba, keep highest score
+    cand = cand.sort_values(
+        ["match_score", "name_score_raw", "year_gap", "nba_id", "athlete_id"],
+        ascending=[False, False, True, True, True],
+    )
+    cand = cand.drop_duplicates(subset=["nba_id"], keep="first")
+    cand = cand.sort_values(
+        ["match_score", "name_score_raw", "year_gap", "athlete_id", "nba_id"],
+        ascending=[False, False, True, True, True],
+    )
+    cand = cand.drop_duplicates(subset=["athlete_id"], keep="first")
+    return cand.reset_index(drop=True)
 
 def main():
     col_df = get_college_players()

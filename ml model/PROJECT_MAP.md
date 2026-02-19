@@ -216,7 +216,3 @@ print(analysis.narrative)
 # Projection: 2.1 ± 0.8 peak RAPM (All-Star caliber)
 # Comparisons: Jaylen Brown (78%), OG Anunoby (72%)
 ```
-<<<<<<< /Users/akashc/my-trankcopy/ml model/PROJECT_MAP.md
->>>>>>> /Users/akashc/.windsurf/worktrees/my-trankcopy/my-trankcopy-2f05fd79/ml model/PROJECT_MAP.md
-=======
->>>>>>> /Users/akashc/.windsurf/worktrees/my-trankcopy/my-trankcopy-2f05fd79/ml model/PROJECT_MAP.md

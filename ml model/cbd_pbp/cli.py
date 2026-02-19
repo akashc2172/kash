@@ -4,7 +4,7 @@ from typing import List
 from .warehouse import Warehouse
 from .ingest import ingest_static, ingest_play_types, ingest_games_only, fetch_and_ingest_season
 from .ingest import ingest_player_season_stats
-from .ingest import ingest_games_only_endpoints
+from .ingest import ingest_games_only_endpoints, load_game_ids_from_file
 from .derive import build_derived_sql
 from .windows import build_windows_player, build_windows_team
 from .export import export_player_asof_wide
@@ -45,6 +45,8 @@ def resume_ingest_endpoints(
     season: int = typer.Option(...),
     season_type: str = typer.Option("regular", help="regular/postseason/tournament depending on API"),
     endpoints: str = typer.Option("plays,subs,lineups", help="Comma-separated: plays,subs,lineups"),
+    only_game_ids_file: str = typer.Option(None, help="Optional path to game IDs to include"),
+    skip_game_ids_file: str = typer.Option(None, help="Optional path to game IDs to exclude"),
     out: str = typer.Option("data/warehouse.duckdb"),
 ):
     """
@@ -57,6 +59,9 @@ def resume_ingest_endpoints(
     if invalid:
         raise typer.BadParameter(f"Invalid endpoint(s): {invalid}. Allowed: plays,subs,lineups")
 
+    only_ids = load_game_ids_from_file(only_game_ids_file)
+    skip_ids = load_game_ids_from_file(skip_game_ids_file)
+
     wh = Warehouse(out)
     ingest_games_only_endpoints(
         wh,
@@ -65,6 +70,8 @@ def resume_ingest_endpoints(
         include_plays="plays" in wanted,
         include_subs="subs" in wanted,
         include_lineups="lineups" in wanted,
+        only_game_ids=only_ids,
+        skip_game_ids=skip_ids,
     )
     wh.close()
     typer.echo("OK: resumed endpoint-scoped ingest")

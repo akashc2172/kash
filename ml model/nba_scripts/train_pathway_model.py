@@ -17,6 +17,8 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 BASE_DIR = Path(__file__).parent.parent
@@ -39,16 +41,22 @@ FEATURE_COLS = [
     'college_mid_fg_pct', 'college_mid_share',
     'college_three_fg_pct', 'college_three_share',
     'college_ft_pct',
-    'college_on_net_rating',
     'college_assisted_share_rim', 'college_assisted_share_three',
     'final_trueShootingPct', 'final_usage',
     'college_corner_3_rate', 'college_rim_purity',
     'college_avg_shot_dist', 'college_shot_dist_var',
+    # New impact/dev/transfer/wingspan surfaces
+    'impact_on_net_raw', 'impact_pm100_stint_lev_wt', 'rIPM_tot_std',
+    'impact_reliability_weight',
+    'college_dev_p50', 'college_dev_quality_weight',
+    'transfer_mean_shock', 'transfer_mean_perf_delta_context_adj',
+    'transfer_event_count',
+    'wingspan_minus_height_in', 'wingspan_in', 'standing_reach_in',
 ]
 
 TARGET_COL = 'y_peak_ovr'
 MADE_NBA_COL = 'made_nba'
-AUX_COLS = ['year1_epm_tot', 'gap_ts_legacy']
+AUX_COLS = ['year1_epm_tot', 'gap_ts_legacy', 'dev_rate_y1_y3_mean']
 POSS_COL = 'peak_poss'
 
 
@@ -250,6 +258,11 @@ def main():
     parser.add_argument('--k_p', type=int, default=6, help='Number of pathways')
     parser.add_argument('--lr', type=float, default=0.005, help='Learning rate')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument(
+        '--skip-diagnostics',
+        action='store_true',
+        help='Skip plotting/report diagnostics (safer in constrained runtime environments)'
+    )
     args = parser.parse_args()
     
     logger.info("=" * 60)
@@ -298,10 +311,6 @@ def main():
     output_dir = MODELS_DIR / f"pathway_model_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    plot_training_loss(result['losses'], output_dir / "training_loss.png")
-    
-    report = generate_report(model, X, targets, feature_cols, output_dir)
-    
     import pickle
     model_path = output_dir / "model.pkl"
     with open(model_path, 'wb') as f:
@@ -318,12 +327,23 @@ def main():
             'losses': result['losses'],
         }, f)
     logger.info(f"Saved model to {model_path}")
+
+    report = None
+    if not args.skip_diagnostics:
+        try:
+            plot_training_loss(result['losses'], output_dir / "training_loss.png")
+            report = generate_report(model, X, targets, feature_cols, output_dir)
+        except Exception as exc:
+            logger.warning("Diagnostics generation failed (continuing): %s", exc)
     
     logger.info("\n" + "=" * 60)
     logger.info("TRAINING COMPLETE")
     logger.info("=" * 60)
     logger.info(f"Output directory: {output_dir}")
-    logger.info(f"Metrics: RMSE={report['metrics']['rmse']:.3f}, Corr={report['metrics']['correlation']:.3f}")
+    if report and "metrics" in report:
+        logger.info(f"Metrics: RMSE={report['metrics']['rmse']:.3f}, Corr={report['metrics']['correlation']:.3f}")
+    else:
+        logger.info("Metrics: diagnostics skipped/unavailable")
     
     if len(X) > 0:
         logger.info("\nSample decomposition (first player):")

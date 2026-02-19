@@ -235,7 +235,7 @@ def process_season(df_season, season_year):
             for p in lineup:
                 key = (str(season_year), p['team'], p['name'])
                 if key not in player_stats:
-                    player_stats[key] = {'minutes': 0.0, 'turnovers': 0}
+                    player_stats[key] = {'minutes': 0.0, 'turnovers': 0, 'games': 0}
                 
                 if duration > 0:
                     player_stats[key]['minutes'] += duration
@@ -278,12 +278,27 @@ def process_season(df_season, season_year):
                         if team:
                             key = (str(season_year), team, tov_player)
                             if key not in player_stats:
-                                player_stats[key] = {'minutes': 0.0, 'turnovers': 0}
+                                player_stats[key] = {'minutes': 0.0, 'turnovers': 0, 'games': 0}
                             player_stats[key]['turnovers'] += 1
             except Exception as e:
                 # Silently skip malformed playText (rare, but don't crash on edge cases)
                 # Logging every error would be too verbose for 1.5M plays
                 pass
+
+        # 3. Games played (per player/team/season): each player appearing in at
+        # least one lineup row for a game gets one game credit.
+        players_in_game = set()
+        for _, row in game_df.iterrows():
+            try:
+                lineup = json.loads(row['onFloor'])
+            except Exception:
+                continue
+            for p in lineup:
+                players_in_game.add((str(season_year), p['team'], p['name']))
+        for key in players_in_game:
+            if key not in player_stats:
+                player_stats[key] = {'minutes': 0.0, 'turnovers': 0, 'games': 0}
+            player_stats[key]['games'] += 1
 
     # Convert to DataFrame
     # 
@@ -299,7 +314,8 @@ def process_season(df_season, season_year):
             'team_name': team,  # Team name from onFloor (e.g., "HOME", "AWAY", or team ID)
             'player_name': name,  # Normalized player name (e.g., "JACKSON,WARREN")
             'minutes_derived': round(stats['minutes'] / 60.0, 2),  # Convert seconds to minutes
-            'turnovers_derived': stats['turnovers']  # Raw count (not per-game or per-minute)
+            'turnovers_derived': stats['turnovers'],  # Raw count (not per-game or per-minute)
+            'games_derived': stats.get('games', 0),
         })
         
     return pd.DataFrame(records)

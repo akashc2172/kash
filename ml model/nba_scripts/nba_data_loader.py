@@ -32,6 +32,7 @@ DRAFT_TIME_SAFE_COLUMNS = {
     # Bio/Anthro (known at draft time from combine or college records)
     'ht_first', 'ht_max', 'ht_peak_delta',
     'wt_first', 'wt_max', 'wt_peak_delta',
+    'wingspan_in', 'standing_reach_in', 'wingspan_minus_height_in', 'has_wingspan',
     
     # Draft metadata (known at draft time by definition)
     'draft_year',
@@ -220,6 +221,7 @@ def get_feature_columns() -> dict:
         'bio_features': [
             'ht_first', 'ht_max', 'ht_peak_delta',
             'wt_first', 'wt_max', 'wt_peak_delta',
+            'wingspan_in', 'standing_reach_in', 'wingspan_minus_height_in', 'has_wingspan',
             'draft_year', 'rookie_season_year',
         ],
         

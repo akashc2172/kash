@@ -6,6 +6,7 @@ Fetches game data from the College Basketball Data API and stores in DuckDB.
 
 from __future__ import annotations
 import os
+import csv
 import time
 import requests
 import duckdb
@@ -636,6 +637,8 @@ def ingest_games_only_endpoints(
     include_plays: bool = True,
     include_subs: bool = True,
     include_lineups: bool = False,
+    only_game_ids: Optional[Set[str]] = None,
+    skip_game_ids: Optional[Set[str]] = None,
 ):
     """
     Resume per-game ingest with endpoint-level controls.
@@ -658,6 +661,11 @@ def ingest_games_only_endpoints(
         except duckdb.Error as e:
             print(f"Error: {Tables.GAMES} not found. Run full ingest first. {e}")
             return
+
+        if only_game_ids is not None:
+            game_ids = game_ids & only_game_ids
+        if skip_game_ids:
+            game_ids = game_ids - skip_game_ids
 
         if not game_ids:
             print(f"No games found for {season} {season_type}.")
@@ -715,3 +723,35 @@ def ingest_games_only_endpoints(
             for err in result.errors:
                 endpoint, msg = err.split(": ", 1) if ": " in err else ("unknown", err)
                 _log_ingest_failure(wh, gid, season, season_type, endpoint, msg)
+
+
+def load_game_ids_from_file(path: Optional[str]) -> Optional[Set[str]]:
+    """
+    Load game ids from text/csv file.
+    Supported inputs:
+      - one id per line
+      - csv with columns: game_id, gameId, or id
+    """
+    if not path:
+        return None
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Game ID file not found: {path}")
+
+    out: Set[str] = set()
+    with open(path, "r", encoding="utf-8") as f:
+        sample = f.read(2048)
+        f.seek(0)
+
+        has_header = any(k in sample for k in ["game_id", "gameId", "id,"])
+        if has_header:
+            reader = csv.DictReader(f)
+            for row in reader:
+                gid = row.get("game_id") or row.get("gameId") or row.get("id")
+                if gid is not None and str(gid).strip():
+                    out.add(str(gid).strip())
+        else:
+            for line in f:
+                gid = line.strip()
+                if gid:
+                    out.add(gid)
+    return out

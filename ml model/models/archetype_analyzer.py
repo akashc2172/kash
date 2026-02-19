@@ -86,7 +86,7 @@ class ArchetypeAnalyzer:
             'description': 'High-efficiency finisher who scores primarily at the rim with limited shot creation',
         },
         'three_and_d': {
-            'triggers': {'college_three_fg_pct': 0.3, 'final_usage': -0.2, 'college_on_net_rating': 0.2},
+            'triggers': {'college_three_fg_pct': 0.3, 'final_usage': -0.2, 'college_stl_total_per100poss': 0.2},
             'name': '3-and-D Wing',
             'description': 'Perimeter shooter with defensive impact and low usage role',
         },
@@ -116,7 +116,7 @@ class ArchetypeAnalyzer:
             'description': 'Playmaker who creates for others more than self',
         },
         'two_way_wing': {
-            'triggers': {'college_on_net_rating': 0.4, 'final_trueShootingPct': 0.2},
+            'triggers': {'college_stl_total_per100poss': 0.3, 'final_trueShootingPct': 0.2},
             'name': 'Two-Way Wing',
             'description': 'Versatile wing with positive impact on both ends',
         },

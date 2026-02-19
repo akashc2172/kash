@@ -1,0 +1,2782 @@
+# Docs Contract Digest (Auto-compiled)
+
+## INDEX.md
+
+### Headings
+- # Docs Index
+- ## Getting Oriented
+- ## Model Architecture
+- ## Feature Store & Data
+- ## Training & Validation
+- ## Historical Data & RApM
+- ## Reviews
+
+### Key Lines
+- - `missing_data_closure_runbook.md` — quota-safe closure operations + dual-gate readiness
+- - `end_to_end_wiring.md` — what’s wired together (college→targets→models) + what NBA data is/ isn’t used
+- - `full_input_columns.md` — verified explicit column list for every model input + targets/masks
+- - `latent_input_plan.md` — input plan for latent model (multi-season handling)
+- - `within_season_breakout_pipeline.md` — within-season windows + breakout timing pipeline (March breakout)
+- - `career_feature_spec.md` — career store schema spec
+- - `nba_pretrain_gate.md` — pre-train critical QA gate (coverage + drift + key integrity)
+
+## WORKSPACE_STATUS.md
+
+### Headings
+- # Workspace Status (ML Model)
+- ## Current State
+- ## Key Documents
+- ## Immediate Next Steps
+- ## Career Data Formatting (Current)
+- ## Within-Season Breakout (Current)
+- ## Notes
+
+### Key Lines
+- - Career store builder outputs both wide and long formats.
+- - `ml model/docs/career_feature_spec.md`
+- 1. Finish historical scraping for missing seasons, then clean:
+- 2. Backfill minutes and turnovers from historical PBP:
+- - `college_scripts/derive_minutes_from_historical_pbp.py`
+- - `data/college_feature_store/prospect_career_v1.parquet`
+- - `data/warehouse_v2/dim_player_nba_college_crosswalk.parquet`
+- - `data/warehouse_v2/fact_player_year1_epm.parquet`
+- ## Career Data Formatting (Current)
+- The career store builder produces two artifacts:
+- - Wide career summary: `data/college_feature_store/prospect_career_v1.parquet`
+- - Final-season snapshot, career slopes, deltas, and recency-weighted averages.
+- - Long career table: `data/college_feature_store/prospect_career_long_v1.parquet`
+- - One row per athlete-season (ALL__ALL only) with per-season metrics and
+- optional `games_played`, `minutes_per_game`, and `poss_per_game`.
+- - One row per athlete with list-valued season sequences (for future sequence models).
+- ## Within-Season Breakout (Current)
+- - Builder: `college_scripts/build_within_season_windows_v1.py`
+- - Output: `data/college_feature_store/within_season_windows_v1.parquet`
+- - Joined into career store outputs when present.
+- This split supports both trajectory modeling (long) and final-season modeling (wide).
+- - Keep Tier 2 spatial features as `NaN` when coverage thresholds are unmet.
+- - Avoid leakage by excluding post-draft NBA stats from features.
+
+## antigravity_review_2012_integration.md
+
+### Headings
+- # Review: Antigravity's 2012 Data Integration
+- ## Executive Summary
+- ## Antigravity's Changes Review
+- ### 1. RAPM Script Fix ✅
+- # Process each season
+- ### 2. Documentation Updates ✅
+- ## My Improvements
+- ### 1. File Naming Convention Update ✅
+- ### 2. Full Pipeline Runner ✅
+- ### 3. Full Pipeline Execution ✅
+- ## Code Quality Assessment
+- ### ✅ Strengths (Antigravity's Work)
+- ### ✅ Improvements (My Changes)
+- ## Validation Results
+- ### Combined PBP File
+- ### Backfill Stats (2012 & 2015)
+- ### RAPM Results
+- ## Recommendations
+- ### Immediate Next Steps
+- ### Future Enhancements
+- ## Files Created/Updated
+- ### New Files
+- ### Updated Files
+- ### Renamed Folders
+- ## Final Verdict
+
+### Key Lines
+- Antigravity successfully integrated 2012 data into the pipeline. The key fix was removing hardcoded seasons in `calculate_historical_rapm.py`, making it dynamically detect seasons. I've made additional improvements:
+- 1. ✅ **File Naming**: Updated to include both years (2012-2013, 2015-2016, 2017-2018)
+- **Problem**: `calculate_historical_rapm.py` had hardcoded seasons `[2015, 2017]`, preventing 2012 from being processed.
+- **Antigravity's Fix**: Changed to dynamically detect seasons:
+- unique_seasons = sorted(stints['season'].unique())
+- logger.info(f"Target seasons found: {unique_seasons}")
+- for season in unique_seasons:
+- # Process each season
+- **Review**: ✅ **CORRECT** - This is the right approach. The script now processes all seasons in the combined file automatically.
+- **Problem**: Folders were named with single year (2012, 2015, 2017), but NCAA seasons span two calendar years.
+- - Extract season from folder name: `2012-2013` → `2012` (first year)
+- 2. Derive minutes/turnovers
+- - `--seasons` flag to specify which seasons to process
+- - Validation checks (ensures combined file has required seasons)
+- **Usage**:
+- python college_scripts/run_full_pipeline.py --seasons 2012 2015
+- - **Cleaned PBP**: 4,439,305 rows (up from 3M, includes all 3 seasons)
+- - **Backfill (2012)**: 1,132,470 minutes, 60,776 turnovers
+- - **Backfill (2015)**: 1,166,158 minutes, 57,726 turnovers
+- - **RAPM**: Calculated for all seasons (2012, 2015, 2017)
+- - 2012: 5,761 games processed
+- - 2015: 5,926 games processed
+- - Minutes totals match expected (~200 min/game)
+- 1. **Dynamic Season Detection**: Correct fix, makes script more maintainable
+- 1. **File Naming**: More accurate (reflects actual NCAA season spans)
+- - **Seasons**: 2012, 2015, 2017
+- - **Status**: ✅ All seasons present
+- - **2012**: 1,132,470 minutes, 60,776 turnovers
+- - **2015**: 1,166,158 minutes, 57,726 turnovers
+- - **Status**: ✅ All seasons processed
+- 3. **Usage Gap Analysis**: Re-run Phase 4 gap analysis with new minutes data
+
+## antigravity_review_followup_2026-02-19.md
+
+### Headings
+- # Antigravity Review Follow-up (2026-02-19)
+- ## Findings validated
+- ## Fixes implemented
+- ## Remaining constraints
+
+### Key Lines
+- - `usage`, `games_played`, and `poss_per_game` were sparse/all-null for most pre-2025 rows in `prospect_career_long_v1.parquet`.
+- - Kept `usage` derivation fallback from `fga_total`, `ft_att`, `tov_total`, `poss_total`.
+- - Retained `usage` and creation-rate derivations from populated columns.
+- - If present in crosswalk, wingspan columns are carried through; otherwise nullable defaults are added.
+- - Historical impact coverage is still source-limited by available lineup/impact records.
+
+## api_aligned_ingest_playbook.md
+
+### Headings
+- # API-Aligned Ingest Playbook (Regular + Postseason + Bio)
+- ## Goal
+- ## 1) Required Endpoint Contract (from API PDF)
+- ## Core game/event endpoints
+- ## Season stats endpoints
+- ## Team/bio endpoints
+- ## Optional context endpoints
+- ## 2) Pre-Run Code Fixes (must do first)
+- ## 3) Canonical Pull Order
+- ## Step A: Static dimensions (once)
+- ## Step B: Season loop (regular + postseason)
+- ## Step C: Resume/backfill missing game events
+- ## 4) NCAA.org Historical Lineup Merge (pre-2024/25)
+- ## 5) Bio Ingest Spec (`teams/roster`)
+- ## 6) QA Gates (must pass)
+- ## Coverage gate: games
+- ## Coverage gate: facts
+- ## Completeness gate: player seasons
+- ## Bio gate
+- ## RAPM gate
+- ## 7) SQL Checks (copy/paste)
+- ## 8) Operational Notes
+- ## 8.1) Quota-Safe Retry Policy
+- ## 8.2) Dual-Gate Readiness
+- ## 9) Definition of Done
+
+### Key Lines
+- # API-Aligned Ingest Playbook (Regular + Postseason + Bio)
+- ## Goal
+- 1. Full regular + postseason game coverage
+- - `GET /games`
+- - `GET /games/players`
+- ## Season stats endpoints
+- - `GET /stats/player/season`
+- - `GET /stats/player/shooting/season`
+- - `GET /stats/team/season`
+- - `GET /stats/team/shooting/season`
+- - `GET /ratings/adjusted`, `GET /ratings/srs`, `GET /rankings`, `GET /lines`
+- ## 2) Pre-Run Code Fixes (must do first)
+- 1. `ingest_games_only(...)` does **not** filter `dim_games` by season/seasonType.
+- - It currently loads all game IDs from `dim_games`.
+- - Fix: query `WHERE season = ? AND seasonType = ?`.
+- 2. `ingest_games_only(...)` has lineups disabled.
+- - Add structured failure table, e.g. `ingest_failures(gameId, season, seasonType, endpoint, error, ts)`.
+- Run static pulls before season loops:
+- python -m cbd_pbp.cli ingest_season_cmd --season 2025 --season-type regular --out data/warehouse.duckdb
+- (First run seeds static dims + one season. Additional seasons below.)
+- ## Step B: Season loop (regular + postseason)
+- For each target season `Y`:
+- 2. Pull `postseason`
+- python -m cbd_pbp.cli ingest_season_cmd --season Y --season-type regular --out data/warehouse.duckdb
+- python -m cbd_pbp.cli ingest_season_cmd --season Y --season-type postseason --out data/warehouse.duckdb
+- python -m cbd_pbp.cli build_derived --season Y --season-type regular --out data/warehouse.duckdb
+- - For historical years where API lineup/sub coverage is weak, merge NCAA.org reconstructed lineups after this pass.
+- - If API supports `preseason` and you need it, run an explicit third pass.
+- After initial season pulls, run a targeted resume on missing IDs only (not whole-table blind rerun).
+- Command (after fixing season filter + lineup skip):
+- python -m cbd_pbp.cli resume_ingest --season Y --season-type regular --out data/warehouse.duckdb
+- python -m cbd_pbp.cli resume_ingest --season Y --season-type postseason --out data/warehouse.duckdb
+- When API lineup coverage is incomplete for older seasons:
+- 1. Use `data/manual_scrapes/{YEAR}/` raw files
+- 3. Map game IDs to `dim_games.id/sourceId`
+- 4. Map athlete name -> athleteId crosswalk
+- - keys: `(teamId, season, player_source_id)`
+- - fields: team/conference/season, player id/sourceId
+- - keys: `(player_source_id, season)`
+- - fields: `firstName`, `lastName`, `position`, `height`, `weight`, `dateOfBirth`, hometown, `startSeason`, `endSeason`
+- ## 6) QA Gates (must pass)
+- ## Coverage gate: games
+- For each `(season, seasonType)`:
+- - `dim_games.count` vs `stg_participants.distinct(gameId)`
+- - `dim_games.count` vs `stg_plays.distinct(gameId)`
+- - `dim_games.count` vs `stg_subs.distinct(gameId)`
+- - `dim_games.count` vs `stg_lineups.distinct(gameId)`
+- ## Coverage gate: facts
+- - `fact_player_game*` game counts should track play/sub/lineup readiness
+- ## Completeness gate: player seasons
+- - `fact_player_season_stats` must include all intended seasons (not just 2005/2025)
+- - no duplicate `(season, athleteId, teamId)` unless justified by transfer logic
+- ## Bio gate
+- - `% rows with non-null dateOfBirth` by season
+- ## RAPM gate
+- - Tag RAPM output with `season_scope` (`regular_only` vs `regular_postseason`)
+- -- Missing games by season/type
+- SELECT season, seasonType, COUNT(*) AS dim_games
+- FROM dim_games
+- SELECT g.season, g.seasonType, COUNT(DISTINCT s.gameId) AS games_with_participants
+- JOIN dim_games g ON g.id = TRY_CAST(s.gameId AS BIGINT)
+- SELECT dg.season, dg.seasonType, dg.dim_games,
+- COALESCE(sp.games_with_participants,0) AS games_with_participants,
+- dg.dim_games - COALESCE(sp.games_with_participants,0) AS missing_games
+- FROM dg LEFT JOIN sp USING (season, seasonType)
+- SELECT g.id, g.sourceId, g.season, g.seasonType
+- FROM dim_games g
+- ORDER BY g.season, g.seasonType, g.id;
+- -- Bio coverage once roster ingest is added
+- SELECT season,
+- - After every batch: run QA SQL above and checkpoint counts in a coverage report.
+- - `source_void_games.csv`
+- 4. Always pass targeted game lists to endpoint ingest to avoid season-wide re-queries.
+- --season 2018 \
+- --season-type regular \
+- ## 8.2) Dual-Gate Readiness
+- - `model_readiness_gate.json`: API execution gate (pipeline health).
+- - `model_readiness_dual_source.json`: data availability gate (API or manual source).
+- - API gate may fail while dual-source gate passes.
+- - Production modeling should key off dual-source gate for required families.
+- - Regular + postseason ingested for target seasons.
+- - Lineup tables populated for years where API is weak using NCAA.org reconstruction.
+- - RAPM outputs clearly labeled by season scope and reproducible.
+
+## career_feature_spec.md
+
+### Headings
+- # Career Feature Spec (Prospect Career Store)
+- ## Inputs (Required Columns)
+- ## Output A: Wide Career Store
+- ## Within-Season Windows (v1)
+- ## Output B: Long Career Store
+- ## Rationale
+- ## Future Additions (Planned)
+
+### Key Lines
+- # Career Feature Spec (Prospect Career Store)
+- **Source**: `college_scripts/build_prospect_career_store_v2.py`
+- This spec defines the intended schema for career features derived from `college_features_v1.parquet` (ALL__ALL split only). The career store is emitted in two formats:
+- - **Wide**: one row per athlete (`prospect_career_v1.parquet`)
+- - **Long**: one row per athlete-season (`prospect_career_long_v1.parquet`)
+- ## Inputs (Required Columns)
+- These columns must exist in `college_features_v1.parquet` for a field to be emitted:
+- - Core totals: `minutes_total`, `fga_total`, `ast_total`, `tov_total`, `stl_total`, `blk_total`
+- - Spatial (Tier 2): `avg_shot_dist`, `corner_3_rate`, `corner_3_pct`, `xy_coverage`, `deep_3_rate`, `rim_purity`, `shot_dist_var`
+- - `poss_total`
+- - `usage`
+- - `games_played` (if available from `warehouse.duckdb`)
+- - `minutes_per_game` (if `games_played` available)
+- - `poss_per_game` (if `games_played` available)
+- - Within-season windows (if `within_season_windows_v1.parquet` available)
+- ## Output A: Wide Career Store
+- **File**: `data/college_feature_store/prospect_career_v1.parquet`
+- - `season`: final college season
+- - `teamId`: team in final season
+- - `career_years`: number of college seasons with data
+- **Career shape columns**:
+- - `slope_*`: linear slope between first and last season for each available metric
+- - `delta_*`: final season YoY delta (last season minus prior season)
+- - `career_wt_*`: recency-weighted career average for each metric
+- **Final season snapshot**:
+- - `final_*`: final season value for each available metric
+- - `final_poss_per_game` (if `final_games_played` available)
+- - `breakout_rank_volume`, `breakout_rank_usage`, `breakout_rank_eff`
+- - `breakout_timing_volume`, `breakout_timing_usage`, `breakout_timing_eff`
+- - Spatial Tier 2 features preserve `NaN` gating when coverage thresholds are not met.
+- - Missingness is preserved: if a breakout dimension cannot be computed (e.g., usage requires minutes/games), it remains `NaN`.
+- ## Within-Season Windows (v1)
+- If `data/college_feature_store/within_season_windows_v1.parquet` is present, these columns are joined into the career store.
+- - `games_played_pg` (games present in `fact_player_game` for that athlete-season)
+- - Window masks: `has_ws_last5`, `has_ws_last10`, `has_ws_prev5`, `has_ws_prev10`
+- - Window aggregates: `ws_minutes_last5`, `ws_minutes_last10`, `ws_fga_last5`, `ws_fga_last10`, `ws_pts_last5`, `ws_pts_last10`, `ws_pps_last5`, `ws_pps_last10`, `ws_on_net_rating_last5_mean`, `ws_on_net_rating_last10_mean`
+- - Window deltas: `ws_delta_pps_last5_minus_prev5`, `ws_delta_pps_last10_minus_prev10`, `ws_delta_minutes_last5_minus_prev5`, `ws_delta_minutes_last10_minus_prev10`
+- - Breakout timing + masks: `has_ws_breakout_timing_minutes`, `ws_breakout_timing_minutes`, `has_ws_breakout_timing_volume`, `ws_breakout_timing_volume`, `has_ws_breakout_timing_eff`, `ws_breakout_timing_eff`
+- All of these are expected to be `NaN` when missing or when there are insufficient games.
+- ## Output B: Long Career Store
+- **File**: `data/college_feature_store/prospect_career_long_v1.parquet`
+- **Grain**: one row per `(athlete_id, season)` for split `ALL__ALL`.
+- - Identifiers: `athlete_id`, `season`, `teamId`
+- - Career context: `season_rank`, `career_years`
+- - Volume: `games_played`, `minutes_total`, `minutes_per_game`, `poss_total`, `poss_per_game`
+- - Rates: `trueShootingPct`, `usage`, `rim_fg_pct`, `three_fg_pct`, `ft_pct`
+- - Spatial: `avg_shot_dist`, `corner_3_rate`, `corner_3_pct`, `xy_coverage`, `deep_3_rate`, `rim_purity`, `shot_dist_var`
+- - **Wide store** supports classic “final season + trajectory” models.
+- - **Long store** supports sequence/temporal models and allows reliability weighting by games/minutes.
+- - `age_at_season`, `class_year`, transfer indicators
+- - season-level normalization (ASTz, usage z-scores)
+- - confidence/uncertainty weights by exposure (minutes, games)
+
+## college_pbp_dev_impact_execution_spec.md
+
+### Headings
+- # College PBP + Development + Impact Execution Spec
+- ## 1. Purpose
+- ## 2. Current State Snapshot (verified)
+- ## 3. Artifacts to Produce
+- ### 3.1 Impact stack
+- ### 3.2 College development-rate labels
+- ### 3.3 Transfer context
+- ## 4. Statistical Rules
+- ## 5. Integration Points
+- ## 6. Implementation Checklist
+- ## 7. Validation Requirements
+- ## 8. Non-goals in this phase
+
+### Key Lines
+- This is the canonical implementation spec for assembling college-side modeling inputs beyond raw PBP features:
+- - Year-over-year development signals
+- - `fact_play_raw`: 2010-2025 (all seasons), participants available broadly.
+- - `stg_shots`: 2010-2025, strong coverage for shot-profile features.
+- - `stg_lineups` / `bridge_lineup_athletes`: materially available in modern seasons only.
+- - `college_features_v1.parquet`: broad multi-season feature surface exists.
+- - `prospect_career_v1.parquet` and `prospect_career_long_v1.parquet`: year-over-year structure and slope/breakout signals already present.
+- Grain: athlete-season (`athlete_id`, `season`)
+- - `impact_pm100_stint_non_garbage`
+- - Non-garbage: `rIPM_tot_non_garbage`, `rIPM_off_non_garbage`, `rIPM_def_non_garbage`
+- - Leverage-weighted: `rIPM_tot_lev_wt`, `rIPM_off_lev_wt`, `rIPM_def_lev_wt`
+- 4. Reliability and masks:
+- - `impact_poss_total`, `impact_seconds_total`, `impact_stints_total`
+- Grain: one row per athlete final college season (`athlete_id`, `final_college_season`)
+- - `college_dev_obs_years`, `college_dev_has_transfer`, `college_dev_model_version`
+- - `athlete_id`, `season_from`, `season_to`, `team_from`, `team_to`
+- 1. Missingness policy: never coerce unknown data to zero for modeling signals. Keep NaN + explicit masks.
+- 3. Transfer handling: detect team changes in long career panel; summarize pre/post deltas.
+- - career-stage breakout and within-season breakout remain separate axes.
+- Add coverage diagnostics for each new block in builder logs and audit scripts.
+- - Reasonable non-null rates by season for each block.
+- - Reliability monotonicity (higher exposure -> lower sd on average).
+- ## 8. Non-goals in this phase
+- - Perfect historical lineup reconstruction for all early seasons.
+- - Forcing sparse variants to appear where source coverage is absent.
+
+## college_rapm_roadmap.md
+
+### Headings
+- # Long-Term Strategy: NCAA Historical Data & RApM (2010-2025)
+- ## Phase 1: Data Ingestion & Reconstruction (COMPLETED)
+- ## Phase 2: Stint Aggregation & RApM (COMPLETED)
+- ## Phase 2.5: Enhanced RAPM Variants (COMPLETED - Jan 2025)
+- ## Phase 3: Integration & Global Feature Store (IN PROGRESS)
+- ## Phase 4: Model Training Parity
+- ## Phase 5: Advanced Enhancements (PLANNED)
+
+### Key Lines
+- - **Stint Detection**: Successfully identifies constant-lineup periods and pace-adjusted possessions using absolute clock.
+- - **Solver Settings**: Lambda = 1000.0, Ridge Regression via Conjugate Gradient.
+- - **Leverage Index**: Implemented `compute_leverage_index()` based on pbpstats.com methodology.
+- - Calculates expected WP swing from possession outcomes weighted by frequency.
+- - Buckets: `garbage`, `low`, `medium`, `high`, `very_high`.
+- - **RAPM Variants** (all computed per-season):
+- - `rapm_standard`: Possession-weighted (original).
+- - `rapm_leverage_weighted`: Weights stints by leverage index (clutch performance signal).
+- - `rapm_high_leverage`: Only high/very_high leverage stints (crunch time specialists).
+- - `rapm_non_garbage`: Excludes garbage time stints.
+- - **Spatial Data (Tier 2)**: Implemented "Hybrid Resolution" strategy.
+- - **Modern High-Res**: X,Y coordinates (Avg Dist, Corner 3) for 2019+ (Gated by `xy_shots >= 25`).
+- - **Usage Gap Fix**: Implemented derivation of Minutes and Turnovers from raw PBP to enable valid Usage Rate calculation for historical prospects.
+- - **Leakage Protection**: Ensure the allowlist handles 15 years of metadata without future-lookahead bias.
+- - **Context**: `leverage_poss_share` (how often player is on court in clutch).
+- - **Era Adjustment**: Robust z-score normalization within season to handle 3P revolution, pace changes, etc.
+- - **Multi-Season RAPM**: Rolling 2-3 year windows for stability.
+
+## college_side_stats_implementation_plan.md
+
+### Headings
+- # College Side Stats Feeding Plan (NCAA) — Executable Implementation Spec
+- ## 0. Modeling contract (what the college side must provide)
+- ### 0.1 Variable roles
+- ### 0.2 Strict anti-leakage rules (college side)
+- ## 1. Current repo state (what exists today)
+- ### 1.1 College PBP warehouse (DuckDB)
+- ### 1.2 College feature store v1
+- ### 1.3 Known gaps
+- ## 2. Desired end-state feature tables (what we must produce)
+- ### 2.1 Product A — `feat_college_season_split` (training/inference default)
+- ### 2.2 Product B — `feat_college_asof_windows` (optional in-season inference)
+- ### 2.3 Product C — `feat_college_career_summary` (joining layer / Phase 4 baseline)
+- ## 3. Input datasets (exact fields and how we use them)
+- ### 3.1 `stg_shots` (PBP shot events)
+- ### 3.2 `bridge_lineup_athletes` + `stg_lineups` (lineup stints)
+- ### 3.3 `dim_games` + derived views (season & home/away/neutral)
+- ### 3.4 `fact_team_season_stats` (team context)
+- ### 3.5 `fact_player_season_stats` (box score totals; currently partial coverage)
+- ## 4. Feature families (and how they map to latent traits)
+- ### 4.1 Shooting profile (shot diet + touch + efficiency)
+- ### 4.2 Creation vs finishing (assisted/unassisted structure)
+- ### 4.3 Leverage sensitivity and garbage filtering
+- ### 4.4 Lineup/on-court impact (college proxy for +/-)
+- ### 4.5 Advanced rate stats & normalization (ASTz, USG, TO, etc.)
+- ## 5. Temporal aggregation, splits, and weighting
+- ### 5.1 Splits (already implemented in v1)
+- ### 5.2 Windows (optional; recommended)
+- ### 5.3 Recency weighting (proposal recommendation)
+- ## 6. Transforms & stabilization (critical)
+- ### 6.1 Rate stabilization (empirical Bayes)
+- ### 6.2 Era normalization
+- ### 6.3 Missingness indicators (MAR handling)
+- ## 7. Execution plan (commands + artifacts)
+- ### Step 0 — Ensure DuckDB is built
+- ### Step 1 — Build/refresh feature store v1
+- ### Step 2 — Build career store (baseline joining layer)
+- ### Step 3 (optional) — Build windowed “as-of” tables
+- ## 8. Quality gates (must-pass checks)
+- ### 8.1 Uniqueness
+- ### 8.2 Range checks
+
+### Key Lines
+- - Current repo architecture (`cbd_pbp/`, `cbd_pbp/staging_layer.sql`, `college_scripts/build_college_feature_store_v1.py`, `college_scripts/build_prospect_career_store*.py`)
+- - Practical constraints discovered during Phase 4 (historical box-score gaps in `fact_player_season_stats`)
+- The goal is **not** to “stuff features into a parquet”. The goal is to create a stable, leakage-safe, interpretable set of observables \(x_{i,t}\) that make the latent trait \(z_i\) identifiable and transferable across eras and contexts.
+- ## 0. Modeling contract (what the college side must provide)
+- - **NBA outcomes** \(a, y\): never used as inputs for prospects; used only in training on historical NBA players (already implemented on NBA side).
+- ### 0.2 Strict anti-leakage rules (college side)
+- - Only use games **through the end of the player’s final college season** (or “as-of” snapshots if doing in-season inference).
+- - When computing “final season” snapshots used in Phase 4, do not include any college games after declared draft date (if we later model declared dates).
+- - **No circular labels**: do not mix NBA targets back into college features.
+- - `stg_shots`: shot events with `shot_range ∈ {three_pointer, rim, free_throw, jumper}`, `made`, `assisted`, leverage flags
+- - `college_features_v1.parquet` (**athlete-season-split**, 20 split rows + baseline)
+- - `prospect_career_v1.parquet` (**athlete**, longitudinal aggregates)
+- - Confirmed: includes `final_trueShootingPct`, `final_usage` (from v2 build)
+- - `fact_player_season_stats` in `warehouse.duckdb` currently has **only seasons 2005 and 2025**.
+- - This blocks historical usage/box-score features for 2006–2024 unless we ingest those seasons.
+- - PBP-derived features remain usable for seasons where `stg_shots` exists.
+- ## 2. Desired end-state feature tables (what we must produce)
+- ### 2.1 Product A — `feat_college_season_split` (training/inference default)
+- **Grain**: `(athlete_id, season, split_id)`
+- ### 2.2 Product B — `feat_college_asof_windows` (optional in-season inference)
+- **Grain**: `(athlete_id, season, teamId, asOfGameId, window_id)`
+- Use-case: “draft board mid-season”, “value of information”, and ASTz-like snapshot normalization.
+- ### 2.3 Product C — `feat_college_career_summary` (joining layer / Phase 4 baseline)
+- **Source**: `prospect_career_v1.parquet` (v2)
+- Use-case: bridging and “final season” baselines for adaptation gaps.
+- - Context: `is_high_leverage`, `is_garbage`
+- - Leverage-only variants: same stats filtered to high leverage, and downweight/flag garbage
+- - Opponent-adjusted: weight games by opponent strength proxy before season aggregation
+- - Shrinkage: impact values shrink toward 0 with variance inversely related to seconds
+- ### 3.3 `dim_games` + derived views (season & home/away/neutral)
+- Used to assign season, and split context (home/away/neutral) for competition splits.
+- ### 3.4 `fact_team_season_stats` (team context)
+- ### 3.5 `fact_player_season_stats` (box score totals; currently partial coverage)
+- - `minutes_total`, `tov_total`, `ast_total`, `stl_total`, `blk_total`, rebounds
+- - USG proxy \(\frac{FGA + 0.44·FTA + TOV}{poss}\) where poss is derived from team pace and minutes share
+- - AST/TO, TO%, STL%, BLK% (requires possessions/minutes)
+- **Counts** (per season & split):
+- ### 4.3 Leverage sensitivity and garbage filtering
+- - `garbage_att_rate`
+- - uncertainty inflation (clutch inference is noisy), and to avoid garbage-time stat bias
+- - shrinkage weights (seconds-based)
+- - gives early signal for “impact without usage” / connectors / defense value
+- - normalize freshman AST% across seasons and role buckets (StudentT hierarchical baseline)
+- - operational approximation (Phase 1): z-score within `(season, role_bucket)` using robust median/MAD; store uncertainty proxies
+- **Important**: true hierarchical StudentT is a modeling-layer concern; the feature store should export:
+- - season/role baseline stats (mean/std or median/MAD)
+- **Split axis 1: leverage**: `ALL`, `HIGH_LEVERAGE`, `LOW_LEVERAGE`, `GARBAGE`
+- - `season_to_date`, `rolling5`, `rolling10`, `rolling15`
+- - “as-of” features for scouting mid-season
+- - enables ASTz snapshot logic (“same date each season”) in a principled way
+- Add a recency-weighted season aggregate:
+- - Exponential weights over games with a tuned half-life (15–20 games)
+- - Precompute EWMA aggregates per athlete-season and store as an additional “window_id”
+- - choose \((\alpha,\beta)\) per bucket using league-wide priors per season
+- For rates with season drift (AST%, pace environments, 3P rates):
+- - season baseline mean/std (or robust equivalents)
+- For any feature that can be missing due to data coverage:
+- Modern CBD seasons:
+- - `python -m cbd_pbp.cli ingest-season --season <YEAR> --season-type regular --out data/warehouse.duckdb`
+- - `python -m cbd_pbp.cli build-derived --season <YEAR> --season-type regular --out data/warehouse.duckdb`
+- - `data/college_feature_store/coverage_report_v1.csv`
+- ### Step 2 — Build career store (baseline joining layer)
+- - `python college_scripts/build_prospect_career_store.py` (v1)
+- - `python college_scripts/build_prospect_career_store_v2.py`
+- - `data/college_feature_store/prospect_career_v1.parquet` (contains `final_trueShootingPct`, `final_usage`)
+- - `python -m cbd_pbp.cli build-windows --season <YEAR> --season-type regular --out data/warehouse.duckdb --windows season_to_date,rolling10,rolling15`
+- ## 8. Quality gates (must-pass checks)
+- `college_features_v1.parquet` must be unique on:
+- - `(athlete_id, season, split_id)`
+- - investigate join cardinality in `build_college_feature_store_v1.py`
+- ### 8.3 Coverage checks
+- - per season: fraction of athletes with non-null PBP features should exceed threshold
+- - for `final_usage`: verify seasons where `minutes_total` and `tov_total` exist; otherwise mark missing and do not compute usage gap targets
+- ### 9.1 Backfill `fact_player_season_stats` (2006–2024)
+- - historical `minutes_total`, `tov_total`, etc.
+- - stable usage proxies and many advanced rate stats
+- - Phase 4 `gap_usg_legacy` coverage
+- ### 9.3 Recency-weighted aggregates & “best 15 game window”
+- - `college_features_v1.parquet` provides leakage-safe \(x_{i,t}\) at season+split grain
+- - `prospect_career_v1.parquet` provides stable “final season” baselines for bridging tasks
+- - any missingness is explicit and safe to mask (no silent zeros)
+- - **Text is not usable for corner-vs-above-break**: `playText` almost never contains “corner” (single-digit to teens per season), so we should not attempt text heuristics for corner 3s.
+- - In `fact_play_raw.shotInfo.location`, older seasons (2010–2018) frequently contain JSON null / non-numeric placeholders.
+- - Practical implication: Tier-2 spatial features must be computed only from **shots with numeric X,Y**, and missingness must be explicit.
+- ### 11.2 Feature Tiers
+- We define two tiers of spatial features to strictly separate "Universal" from "Modern Enhanced".
+- **Tier 1: Universal Low-Res (2010-2025)**
+- **Tier 2: Modern High-Res (2019+)**
+- *Auxiliary features for modern precision.*
+- 2. **Coverage-aware feature construction**:
+- - Always export `xy_shots` (count of shots with numeric X,Y) and `xy_coverage = xy_shots / total_shots`.
+- - Else set Tier-2 features to NULL and rely on Tier-1.
+- 3. **Explicit Missingness**: Tier-2 features MUST be NULL/NaN (not 0) when not supported by the data (older seasons, or low `xy_shots`).
+- 4. **Feature Masking (Dropout)**: During training on 2019+ data, randomly mask Tier-2 features (set to NULL) ~20–30% of the time (or stratify by season) to prevent coordinate dependency.
+- - Corner 3 Bounding Box (NCAA): `abs(y_ft - 25) > 21` (within 4ft of sideline) AND `x_ft < 14` (short corner).
+- - Tier 2 Features (`avg_shot_dist`, `corner_3_rate`, `deep_3_rate`, `rim_purity`) are implemented in `college_features_v1`.
+
+## connectivity_proposal_v1.md
+
+### Headings
+- # Prospect Model Connectivity Proposal (Full Inputs, Full DAG)
+- ## 0) Source Of Truth (Non-Negotiable)
+- ## 1) End-To-End DAG (Data → Model → Outputs)
+- ### 1.1 Data Assembly DAG (Parquets)
+- ### 1.2 Modeling DAG (Tensors + Branches + Gates)
+- ## 2) Inputs → Branches (Exact Column Names)
+- ### 2.1 Tier 1 Branch: Final-Season Snapshot + Safe Context Anchors (`h_final`)
+- ### 2.2 Tier 2 Branch: Spatial/Shot Quality Details (`h_spatial`)
+- ### 2.3 Career Branch: Multi-Season Progression (`h_career`)
+- ### 2.4 Within-Season Branch: “Star Run” / Late-Season Form (`h_within`)
+- ### 2.5 Not Yet Implemented (Planned Branches)
+- ## 3) Gating Logic (Prevent Tiny-Sample Dominance)
+- ### 3.1 What We Gate Today (Phase 1.5)
+- ### 3.2 Why This Is “Nuanced” (Not Mud)
+- ### 3.3 What We Will Improve Next (Phase 2)
+- ## 4) Archetypes: Soft Matching + “Late Breakout Matters More For Some Types”
+- ### 4.1 Soft Matching (No Over-Match)
+- ### 4.2 “Breakout Importance Varies By Prototype”
+- ## 5) Boundary Cases (How The DAG Handles Them)
+- ### 5.1 Transfers (multi-team in one season)
+- ### 5.2 UDFAs / Missing `nba_id`
+- ### 5.3 Sparse Game Logs (within-season windows missing)
+- ## 6) What We Are *Not* Using From NBA Data (By Design)
+- ## 7) Next Steps (Concrete)
+
+### Key Lines
+- # Prospect Model Connectivity Proposal (Full Inputs, Full DAG)
+- **Scope**: Draft-time safe (college → NBA targets only), mask-safe (no fake zeros), handles transfers + variable career lengths.
+- 2. The **exact arrows** from parquet → tensors → encoder branches → gates → latent `z` → heads → outputs.
+- - **Explicit inputs** (verbatim column list): `docs/full_input_columns.md`
+- - **This doc** explains how those inputs connect and why.
+- - `models/player_encoder.py`: `TIER1_COLUMNS`, `TIER2_COLUMNS`, `CAREER_BASE_COLUMNS`, `WITHIN_COLUMNS`
+- This proposal describes the *connectivity*, but the above items define the *actual inputs*.
+- A --> C["fact_player_game + dim_games.startDate"]
+- C --> D["within_season_windows_v1.parquet"]
+- B --> E["build_prospect_career_store_v2.py"]
+- E --> F["prospect_career_v1.parquet (wide)"]
+- E --> G["prospect_career_long_v1.parquet (long)"]
+- X["dim_player_nba_college_crosswalk.parquet"] --> J["join keys"]
+- Y["NBA targets: peak RAPM + year1 EPM + gaps"] --> J
+- ### 1.2 Modeling DAG (Tensors + Branches + Gates)
+- L --> T1["tier1 tensor"]
+- L --> T2["tier2 tensor"]
+- L --> C0["career tensor"]
+- L --> W0["within tensor"]
+- L --> M2["tier2_mask (has_spatial_data)"]
+- L --> MW["within_mask (derived from final_has_ws_* flags)"]
+- T1 --> B1["Tier1BranchMLP → h_tier1"]
+- T2 --> B2["Tier2BranchMLP → h_tier2"]
+- C0 --> B3["CareerBranchMLP → h_career"]
+- W0 --> B4["WithinBranchMLP → h_within"]
+- M2 --> G2["Gate: g_tier2"]
+- MW --> GW["Gate: g_within"]
+- C0 --> GC["Gate: g_career"]
+- G2 --> Mx2["h_tier2 := g_tier2 * h_tier2"]
+- GW --> MxW["h_within := g_within * h_within"]
+- GC --> MxC["h_career := g_career * h_career"]
+- ## 2) Inputs → Branches (Exact Column Names)
+- The goal is that **every input has a clear “why”** and a clear branch destination.
+- ### 2.1 Tier 1 Branch: Final-Season Snapshot + Safe Context Anchors (`h_final`)
+- Tier 1 is the “draft class snapshot”: what the player looked like at the end of college.
+- - `college_minutes_total`
+- **Possession economy / ancillary value (RAPM-adjacent signals):**
+- - `final_usage_z`
+- - `final_usage_team_resid`
+- - This branch captures the “possession economy + shot diet + functional activity” mindset
+- ### 2.2 Tier 2 Branch: Spatial/Shot Quality Details (`h_spatial`)
+- Tier 2 exists because spatial is **not** available uniformly across all seasons.
+- Inputs:
+- Mask:
+- - `has_spatial_data` → `tier2_mask`
+- **Rule:** Tier 2 is never “faked.” Missing spatial is masked and replaced by a **learned default embedding**.
+- ### 2.3 Career Branch: Multi-Season Progression (`h_career`)
+- - 1-and-dones vs 4-year players
+- Inputs (exact names):
+- - `career_years`
+- - `final_trueShootingPct`, `final_usage`, `final_poss_total`
+- - `slope_trueShootingPct`, `slope_usage`
+- - `career_wt_trueShootingPct`, `career_wt_usage`
+- - `delta_trueShootingPct`, `delta_usage`
+- - `breakout_timing_*` is “career-stage” timing (freshman→senior axis).
+- ### 2.4 Within-Season Branch: “Star Run” / Late-Season Form (`h_within`)
+- This branch is the *within-season* axis (conference play / March form).
+- Inputs:
+- - `final_ws_minutes_last10`
+- Mask:
+- - `within_mask` is derived from the explicit window flags:
+- **Rule:** if the game log coverage is sparse, these remain `NaN` in storage and become
+- `0` only at tensor conversion time *together with mask=0*, so the branch is gated out.
+- - “1/3 through freshman year” is within-season timing.
+- - “1/3 through a 4-year career” is career-stage timing.
+- - missingness mask for prospects without `nba_id`
+- - per-game weighting vs top-220 / tiers (needs richer game/opponent coverage)
+- - a player goes hot for 3–7 games → within-season features explode → the model overreacts
+- ### 3.1 What We Gate Today (Phase 1.5)
+- - `g_tier2 = sigmoid(Linear(tier2_mask))`
+- - `g_career = sigmoid(Linear(log1p(career_years)))`
+- - `g_within = sigmoid(Linear([within_mask, log1p(ws_minutes_last10)]))`
+- - `h_tier2 := g_tier2 * h_tier2`
+- - `h_career := g_career * h_career`
+- - `h_within := g_within * h_within`
+- Tier 1 is not gated (it’s the anchor snapshot).
+- - and reliability should modulate influence.
+- Right now gates are intentionally tiny (few inputs) to avoid adding a second model.
+- 1. Add exposure signals: `final_games_played`, `final_poss_per_game`, etc.
+- - the encoder produces `z` from all branches + gates,
+- - for archetype A, late-season form is highly predictive
+- - for archetype B, late-season form is noise
+- ### 5.1 Transfers (multi-team in one season)
+- - aggregate same-season multi-team rows (counts sum)
+- - select `college_teamId` from max-minutes team for team-context residuals
+- - Tier 1 remains a valid snapshot
+- - Tier 1 + career + optional within still work
+- ### 5.3 Sparse Game Logs (within-season windows missing)
+- If we lack `fact_player_game` coverage:
+- - within-season features are `NaN` in parquet
+- - in tensors they become 0 **but within_mask=0**
+- - within branch is replaced by a learned default and gated ~0
+- NBA warehouse tables are used as **targets only**.
+- We explicitly forbid:
+- - any year-1 box stats / EPM inputs
+- - `nba_scripts/nba_data_loader.py` (`FORBIDDEN_FEATURE_COLUMNS`)
+- - whether `h_within` is properly downweighted when `ws_minutes_last10` is tiny
+- 2. If behavior looks good, expand within-season coverage by ingesting more `fact_player_game`.
+
+## data_assembly_and_model_connectivity_plan.md
+
+### Headings
+- # Data Assembly + Model Connectivity Plan (Nuanced, Not “Mud at Wall”)
+- ## 1) Goals
+- ## 2) What Exists Today (Verified Wiring)
+- ## 2.1) How *Current* Model Inputs Map Into The Connectivity Plan
+- ### Current Encoder Topology (What We Actually Do Today)
+- ### Mapping: Implemented Inputs → Planned Branches
+- #### A) Final-season “Skill Snapshot” (Planned) == Tier 1 (Implemented)
+- #### B) Spatial / Shot Quality Details (Planned) == Tier 2 (Implemented)
+- #### C) Career Progression (Planned) == Career Branch (Implemented)
+- #### D) Within-season “Star Run” (Planned) == Within Branch (Implemented)
+- #### E) Physical / Measurements (Planned) == Not Implemented Yet
+- #### F) Context / Competition Strength (Planned) == Partially Implemented
+- ### What This Means (Short)
+- ## 3) Data Assembly DAG (Actual Components)
+- ## 4) Nuanced Connectivity: How Inputs Should Flow Into z
+- ### 4.1 Recommended Input “Branches”
+- ### 4.2 Connectivity Pattern (Encoder)
+- ### 4.3 Connectivity Pattern (Decoders)
+- ## 5) Avoiding Archetype Over-Match (What We Do)
+- ## 6) Era / Team Adjustment Plan (Beyond Simple Z-Scores)
+- ## 7) “RAPM-Style” Adjustment for Non-Point Outcomes (Phase 2)
+- ## 8) Test / Verification Strategy (Boundary Cases)
+- ## 9) Next Implementation Steps (Concrete)
+
+### Key Lines
+- This document describes how we assemble college + NBA supervision data and how we connect inputs (final season, career, within-season, physical/context) into a latent model in a principled way.
+- ## 1) Goals
+- 1. **Draft-time safe inputs** only (no post-draft leakage).
+- 2. Handle **variable careers** (one-and-done, transfers, 4-year, late bloomers).
+- 3. Handle **within-season form** (late-season “star run”) without overfitting.
+- 5. Build a modular system where missingness stays **NaN + mask** (never fake zeros).
+- - `docs/end_to_end_wiring.md` (high-level wiring + leakage rules)
+- - Career store: `college_scripts/build_prospect_career_store_v2.py`
+- - Within-season windows: `college_scripts/build_within_season_windows_v1.py`
+- ## 2.1) How *Current* Model Inputs Map Into The Connectivity Plan
+- (`h_final`, `h_career`, `h_within`, `h_phys`, `h_context`). This section maps
+- - `models/player_encoder.py` (`TIER1_COLUMNS`, `TIER2_COLUMNS`, `CAREER_BASE_COLUMNS`, `WITHIN_COLUMNS`)
+- - `h_tier1 = MLP(tier1_features)`
+- - `h_tier2 = MLP(tier2_features)` with a mask-aware default when spatial is missing
+- - `h_career = MLP(career_features)` (multi-season progression)
+- - `h_within = MLP(within_features)` (within-season windows / “star run”)
+- - gates: `g_tier2`, `g_career`, `g_within` (mask/exposure-aware scalars in [0,1])
+- - `z = FusionMLP(concat(h_tier1, g_tier2*h_tier2, g_career*h_career, g_within*h_within))`
+- So the “connectivity” is **four branches + gated fusion**.
+- This is the “nuance upgrade” that prevents tiny-sample within-season windows from dominating.
+- ### Mapping: Implemented Inputs → Planned Branches
+- #### A) Final-season “Skill Snapshot” (Planned) == Tier 1 (Implemented)
+- Tier 1 currently includes (exact column names):
+- - Shotmaking / efficiency (final-season snapshot):
+- `college_shots_total`, `college_fga_total`, `college_ft_att`, `college_minutes_total`
+- - “Impact-adjacent” activity rates (possession economy / ancillary value):
+- - Era drift mitigation (season z-scores):
+- `college_three_fg_pct_z`, `college_three_share_z`, `final_trueShootingPct_z`, `final_usage_z`
+- - Team context mitigation (team-season residuals):
+- `final_trueShootingPct_team_resid`, `final_usage_team_resid`
+- This is the direct “possession economy + shot diet + stress-tested anchors” lane
+- #### B) Spatial / Shot Quality Details (Planned) == Tier 2 (Implemented)
+- Tier 2 currently includes (exact column names):
+- Tier 2 is mask-safe: if spatial is missing, we **do not use fake zeros**; we use a
+- learned default embedding via `tier2_mask`.
+- #### C) Career Progression (Planned) == Career Branch (Implemented)
+- The career branch currently mixes:
+- **Career stability / progression:**
+- - `career_years`
+- - final anchors: `final_trueShootingPct`, `final_usage`, `final_poss_total`, `final_rim_fg_pct`, `final_three_fg_pct`, `final_ft_pct`
+- - slopes: `slope_trueShootingPct`, `slope_usage`
+- - weighted means: `career_wt_trueShootingPct`, `career_wt_usage`
+- - deltas: `delta_trueShootingPct`, `delta_usage`
+- **Career-stage breakout timing (year-to-year axis):**
+- This is the “late/early breakout” you described in *career progression terms*.
+- #### D) Within-season “Star Run” (Planned) == Within Branch (Implemented)
+- Within-season windows now live in their **own branch** (mask + exposure gated):
+- - `final_has_ws_last10`, `final_ws_minutes_last10`
+- “1/3 of freshman year” is a *within-season* axis; “1/3 of whole career” is a
+- *career-stage* axis. They’re separate signals.
+- We explicitly gate this branch using:
+- - `within_mask` derived from `final_has_ws_*` flags
+- - `ws_minutes_last10` as an exposure proxy
+- Not in the latent model inputs yet. Planned:
+- - keep missingness masks so unknown prospects still work
+- - `h_final ≈ h_tier1`
+- - `h_spatial ≈ h_tier2`
+- - `h_career + h_within ≈ h_career` (currently combined)
+- The next “nuance upgrade” is to split `h_career` vs `h_within` and fuse with gates
+- that depend on exposure + masks (so “star runs” don’t overweight tiny samples).
+- A --> C["fact_player_game + dim_games.startDate"]
+- C --> D["within_season_windows_v1.parquet"]
+- B --> E["prospect_career_store_v2.py (joins D when present)"]
+- E --> F["prospect_career_v1.parquet (wide)"]
+- E --> G["prospect_career_long_v1.parquet (long)"]
+- X["crosswalk: athlete_id → nba_id"] --> J["join keys"]
+- Y["NBA targets (warehouse_v2)"] --> J
+- ## 4) Nuanced Connectivity: How Inputs Should Flow Into z
+- The key idea: **different inputs carry different kinds of signal**, and we should connect them in a way that respects:
+- - time structure (career vs within-season),
+- Instead of a single flat vector, we treat inputs as *typed modules*:
+- 1. **Final-season “Skill Snapshot”** (highest signal for draft class)
+- 2. **Career Progression** (stability + trend)
+- - `career_years`, slopes, deltas, recency-weighted means
+- - *career-stage breakout timing* (year-to-year timing)
+- 3. **Within-season “Star Run”** (form + late improvement)
+- - last5/last10 deltas and timing features (mask-safe)
+- - should be downweighted when only a few games exist
+- - season-level drift handled by z-scores
+- - team context handled by team-season residualization
+- - `h_final`, `h_career`, `h_within`, `h_phys`, `h_context`
+- 2. Fuse with **gated attention**:
+- - gates are learned from exposure + masks
+- - example: if within-season windows are missing, gate it out
+- - Missing branches don’t silently become zeros; they are gated out.
+- - per-season z-scoring for drift-prone stats
+- - team-season residualization for key stats (player vs team context)
+- - normalize within (season, position_bucket) to avoid mixing bigs/guards
+- - position bucket can be approximated using usage + shot mix + (when available) height
+- - weight player-game contributions by opponent SRS tier (top-220 cutoff idea)
+- 3. **Reliability-aware shrinkage**
+- - for rates: empirical Bayes toward season mean with exposure-based variance
+- Goal: create *adjusted* impact-like estimates for events like:
+- - Build stint-level outcomes (per 100 poss) for each event
+- - event definitions must be stable across eras
+- - low counts → high variance (needs shrinkage and exposure weights)
+- - lineup completeness gates (len=5)
+- - stability checks vs minutes thresholds
+- 1. **No leakage**
+- - forbid NBA post-draft columns in X
+- - unit test should fail if forbidden columns appear
+- - within a season: multiple teams aggregate counts, pick max-minutes teamId for team context
+- - inference path must work without crosswalk
+- 4. **Missing within-season windows**
+- - windows features must be NaN + masks=0
+- - `college_scripts/utils/validate_within_season_windows_v1.py`
+- 1. Add a dedicated “branching encoder” (separate embeddings + gated fusion) for:
+- - final season
+- - career progression
+- - within-season windows
+- - gates depend on minutes/games + masks
+- 3. Add “stress-tested” opponent-weighted versions once we have opponent SRS tiers per game.
+
+## data_quality_master_log.md
+
+### Headings
+- # Data Quality Master Log
+- ## Purpose
+- ## Latest Artifacts
+- ## Latest Hardening Stage Results
+- ## Latest Granular Coverage Snapshot
+- ## Current Hard-Fail Policy
+- ## Open Issues (Latest Run)
+- ### Dead Inputs
+- ### Low-Coverage Inputs
+- ## Notes
+
+### Key Lines
+- - Hardening audit: `/Users/akashc/my-trankcopy/ml model/data/audit/hardening_run_20260219_050538/final_release_audit.json`
+- - Granular audit: `/Users/akashc/my-trankcopy/ml model/data/audit/granular_pipeline_audit_20260218_212112/summary.json`
+- - Pretrain gate: `/Users/akashc/my-trankcopy/ml model/data/audit/nba_pretrain_gate_20260218_210643.json`
+- ## Latest Hardening Stage Results
+- - `stage0_snapshot`: **PASS** (critical_failure=False)
+- - `stage1_college_validation`: **FAIL** (critical_failure=False)
+- - `cardinality` (critical=False): college_features duplicate athlete/season/split rows=449638
+- - `stage2_nba_target_hardening`: **PASS** (critical_failure=False)
+- - `stage3_crosswalk_validation`: **PASS** (critical_failure=False)
+- - `stage4_unified_rebuild`: **PASS** (critical_failure=False)
+- - `stage5_gate_checks`: **PASS** (critical_failure=False)
+- - `stage6_training`: **PASS** (critical_failure=False)
+- - `stage7_inference`: **PASS** (critical_failure=False)
+- ## Latest Granular Coverage Snapshot
+- - `approx_checks_inputs_targets`: `1376`
+- - `duplicate_nba_id_crosswalk`: `0`
+- - `duplicate_athlete_id_crosswalk`: `0`
+- - Stop on duplicate target keys, missing contract columns, or gate failures.
+- ### Dead Inputs
+- ### Low-Coverage Inputs
+- - `career_wt_three_fg_pct`
+- - `college_recruiting_rank`
+- - Low coverage can be expected for optional branches (transfer/dev/spatial) depending on source availability.
+- - Ranking quality failures are tracked separately from wiring integrity; both must pass before declaring readiness.
+
+## docs_code_realignment_2026-02-18.md
+
+### Headings
+- # Docs-to-Code Realignment (2026-02-18)
+- ## Why this pass
+- ## What was checked
+- ## Mismatches found and fixed
+- ### 1) Within-season branch was disabled
+- ### 2) Career timing inputs were incomplete
+- ### 3) Era/year context was under-explicit
+- ### 4) Inference ranking drifted to hand-tuned blend
+- ### 5) Archetype narratives referenced non-existent features
+- ## Coverage verification (post-fix)
+- ## What is still genuinely missing (not patched here)
+- ### Age/class features
+- ### Note on leakage contract
+- ## Next actions (execution order)
+
+### Key Lines
+- - too much post-model ranking logic in inference,
+- - missing career timing signals in active encoder inputs,
+- - within-season inputs disabled despite populated fields.
+- ### 1) Within-season branch was disabled
+- - **Issue**: `WITHIN_COLUMNS` was empty in `models/player_encoder.py`, while `final_ws_*` and `final_has_ws_*` columns are populated and intended for in-season development signals.
+- - **Fix**: Re-enabled 6 within-season columns:
+- - `final_ws_minutes_last10`
+- ### 2) Career timing inputs were incomplete
+- - **Issue**: `breakout_timing_usage` and `breakout_timing_eff` were not active in the career branch.
+- - **Fix**: Added both to `CAREER_BASE_COLUMNS`.
+- ### 3) Era/year context was under-explicit
+- - **Issue**: season-level normalization exists, but explicit year context was not fed through encoder.
+- - **Fix**: Added `college_final_season` to `CAREER_BASE_COLUMNS` as draft-time-safe era context.
+- ### 4) Inference ranking drifted to hand-tuned blend
+- - **Issue**: ranking used hardcoded post-model weighted z-score blend, which drifted from model-based contract.
+- - **Fix**: kept diagnostic z-score columns but restored ranking to model output:
+- - `pred_peak_rapm_rank_score = pred_peak_rapm`
+- - **Fix**: replaced with valid high-coverage defensive proxy feature:
+- - `college_stl_total_per100poss`
+- ## Coverage verification (post-fix)
+- - Tier1 missing: 0
+- - Tier2 missing: 0
+- - Career missing: 0
+- - Within missing: 0
+- - Within columns listed above: all present and non-null in current unified table.
+- - Inference table: all restored timing + within fields present and non-null.
+- ### Age/class features
+- - `age_at_season`, `class_year`, `season_index` are not currently present in the assembled feature store outputs.
+- - `career_years`
+- - `breakout_rank_*`, `breakout_timing_*`
+- - `college_final_season` (era context)
+- ### Note on leakage contract
+- - NBA Year-1 and post-draft signals remain targets/auxiliary only.
+- 1. Retrain latent model with restored within/timing/year context.
+- 2. Run inference + season ranking export.
+- 3. Run granular audit and publish updated coverage + sanity in `docs/data_quality_master_log.md`.
+- 4. If ranking quality still weak, tune model/loss/regularization first (not post-hoc rank blending).
+
+## docs_contract_digest_2026-02-18.md
+
+### Headings
+- # Docs Contract Digest (Auto-compiled)
+- ## INDEX.md
+- ### Headings
+- ### Key Lines
+- ## WORKSPACE_STATUS.md
+- ### Headings
+- ### Key Lines
+- ## antigravity_review_2012_integration.md
+- ### Headings
+- ### Key Lines
+- ## antigravity_review_followup_2026-02-19.md
+- ### Headings
+- ### Key Lines
+- ## api_aligned_ingest_playbook.md
+- ### Headings
+- ### Key Lines
+- ## career_feature_spec.md
+- ### Headings
+- ### Key Lines
+- ## college_pbp_dev_impact_execution_spec.md
+- ### Headings
+- ### Key Lines
+- ## college_rapm_roadmap.md
+- ### Headings
+- ### Key Lines
+- ## college_side_stats_implementation_plan.md
+- ### Headings
+- ### Key Lines
+- ## connectivity_proposal_v1.md
+- ### Headings
+- ### Key Lines
+- ## data_assembly_and_model_connectivity_plan.md
+- ### Headings
+- ### Key Lines
+- ## data_quality_master_log.md
+- ### Headings
+- ### Key Lines
+- ## docs_code_realignment_2026-02-18.md
+- ### Headings
+- ### Key Lines
+
+### Key Lines
+- - - `missing_data_closure_runbook.md` — quota-safe closure operations + dual-gate readiness
+- - - `end_to_end_wiring.md` — what’s wired together (college→targets→models) + what NBA data is/ isn’t used
+- - - `full_input_columns.md` — verified explicit column list for every model input + targets/masks
+- - - `latent_input_plan.md` — input plan for latent model (multi-season handling)
+- - - `within_season_breakout_pipeline.md` — within-season windows + breakout timing pipeline (March breakout)
+- - - `career_feature_spec.md` — career store schema spec
+- - - `nba_pretrain_gate.md` — pre-train critical QA gate (coverage + drift + key integrity)
+- - ## Career Data Formatting (Current)
+- - ## Within-Season Breakout (Current)
+- - - Career store builder outputs both wide and long formats.
+- - - `ml model/docs/career_feature_spec.md`
+- - 1. Finish historical scraping for missing seasons, then clean:
+- - 2. Backfill minutes and turnovers from historical PBP:
+- - - `college_scripts/derive_minutes_from_historical_pbp.py`
+- - - `data/college_feature_store/prospect_career_v1.parquet`
+- - - `data/warehouse_v2/dim_player_nba_college_crosswalk.parquet`
+- - - `data/warehouse_v2/fact_player_year1_epm.parquet`
+- - ## Career Data Formatting (Current)
+- - The career store builder produces two artifacts:
+- - - Wide career summary: `data/college_feature_store/prospect_career_v1.parquet`
+- - - Final-season snapshot, career slopes, deltas, and recency-weighted averages.
+- - - Long career table: `data/college_feature_store/prospect_career_long_v1.parquet`
+- - - One row per athlete-season (ALL__ALL only) with per-season metrics and
+- - optional `games_played`, `minutes_per_game`, and `poss_per_game`.
+- - - One row per athlete with list-valued season sequences (for future sequence models).
+- - ## Within-Season Breakout (Current)
+- - - Builder: `college_scripts/build_within_season_windows_v1.py`
+- - - Output: `data/college_feature_store/within_season_windows_v1.parquet`
+- - - Joined into career store outputs when present.
+- - This split supports both trajectory modeling (long) and final-season modeling (wide).
+- - - Keep Tier 2 spatial features as `NaN` when coverage thresholds are unmet.
+- - - Avoid leakage by excluding post-draft NBA stats from features.
+- - # Process each season
+- - Antigravity successfully integrated 2012 data into the pipeline. The key fix was removing hardcoded seasons in `calculate_historical_rapm.py`, making it dynamically detect seasons. I've made additional improvements:
+- - 1. ✅ **File Naming**: Updated to include both years (2012-2013, 2015-2016, 2017-2018)
+- - **Problem**: `calculate_historical_rapm.py` had hardcoded seasons `[2015, 2017]`, preventing 2012 from being processed.
+- - **Antigravity's Fix**: Changed to dynamically detect seasons:
+- - unique_seasons = sorted(stints['season'].unique())
+- - logger.info(f"Target seasons found: {unique_seasons}")
+- - for season in unique_seasons:
+- - # Process each season
+- - **Review**: ✅ **CORRECT** - This is the right approach. The script now processes all seasons in the combined file automatically.
+- - **Problem**: Folders were named with single year (2012, 2015, 2017), but NCAA seasons span two calendar years.
+- - - Extract season from folder name: `2012-2013` → `2012` (first year)
+- - 2. Derive minutes/turnovers
+- - - `--seasons` flag to specify which seasons to process
+- - - Validation checks (ensures combined file has required seasons)
+- - **Usage**:
+- - python college_scripts/run_full_pipeline.py --seasons 2012 2015
+- - - **Cleaned PBP**: 4,439,305 rows (up from 3M, includes all 3 seasons)
+- - - **Backfill (2012)**: 1,132,470 minutes, 60,776 turnovers
+- - - **Backfill (2015)**: 1,166,158 minutes, 57,726 turnovers
+- - - **RAPM**: Calculated for all seasons (2012, 2015, 2017)
+- - - 2012: 5,761 games processed
+- - - 2015: 5,926 games processed
+- - - Minutes totals match expected (~200 min/game)
+- - 1. **Dynamic Season Detection**: Correct fix, makes script more maintainable
+- - 1. **File Naming**: More accurate (reflects actual NCAA season spans)
+- - - **Seasons**: 2012, 2015, 2017
+- - - **Status**: ✅ All seasons present
+- - - **2012**: 1,132,470 minutes, 60,776 turnovers
+- - - **2015**: 1,166,158 minutes, 57,726 turnovers
+- - - **Status**: ✅ All seasons processed
+- - 3. **Usage Gap Analysis**: Re-run Phase 4 gap analysis with new minutes data
+- - - `usage`, `games_played`, and `poss_per_game` were sparse/all-null for most pre-2025 rows in `prospect_career_long_v1.parquet`.
+- - - Kept `usage` derivation fallback from `fga_total`, `ft_att`, `tov_total`, `poss_total`.
+- - - Retained `usage` and creation-rate derivations from populated columns.
+- - - If present in crosswalk, wingspan columns are carried through; otherwise nullable defaults are added.
+- - - Historical impact coverage is still source-limited by available lineup/impact records.
+- - # API-Aligned Ingest Playbook (Regular + Postseason + Bio)
+- - ## Goal
+- - ## Season stats endpoints
+- - ## 2) Pre-Run Code Fixes (must do first)
+- - ## Step B: Season loop (regular + postseason)
+- - ## 6) QA Gates (must pass)
+- - ## Coverage gate: games
+- - ## Coverage gate: facts
+- - ## Completeness gate: player seasons
+- - ## Bio gate
+- - ## RAPM gate
+- - ## 8.2) Dual-Gate Readiness
+- - # API-Aligned Ingest Playbook (Regular + Postseason + Bio)
+- - ## Goal
+- - 1. Full regular + postseason game coverage
+- - - `GET /games`
+- - - `GET /games/players`
+- - ## Season stats endpoints
+- - - `GET /stats/player/season`
+- - - `GET /stats/player/shooting/season`
+- - - `GET /stats/team/season`
+- - - `GET /stats/team/shooting/season`
+- - - `GET /ratings/adjusted`, `GET /ratings/srs`, `GET /rankings`, `GET /lines`
+- - ## 2) Pre-Run Code Fixes (must do first)
+- - 1. `ingest_games_only(...)` does **not** filter `dim_games` by season/seasonType.
+- - - It currently loads all game IDs from `dim_games`.
+- - - Fix: query `WHERE season = ? AND seasonType = ?`.
+- - 2. `ingest_games_only(...)` has lineups disabled.
+- - - Add structured failure table, e.g. `ingest_failures(gameId, season, seasonType, endpoint, error, ts)`.
+- - Run static pulls before season loops:
+- - python -m cbd_pbp.cli ingest_season_cmd --season 2025 --season-type regular --out data/warehouse.duckdb
+- - (First run seeds static dims + one season. Additional seasons below.)
+- - ## Step B: Season loop (regular + postseason)
+- - For each target season `Y`:
+- - 2. Pull `postseason`
+- - python -m cbd_pbp.cli ingest_season_cmd --season Y --season-type regular --out data/warehouse.duckdb
+- - python -m cbd_pbp.cli ingest_season_cmd --season Y --season-type postseason --out data/warehouse.duckdb
+- - python -m cbd_pbp.cli build_derived --season Y --season-type regular --out data/warehouse.duckdb
+- - - For historical years where API lineup/sub coverage is weak, merge NCAA.org reconstructed lineups after this pass.
+- - - If API supports `preseason` and you need it, run an explicit third pass.
+- - After initial season pulls, run a targeted resume on missing IDs only (not whole-table blind rerun).
+- - Command (after fixing season filter + lineup skip):
+- - python -m cbd_pbp.cli resume_ingest --season Y --season-type regular --out data/warehouse.duckdb
+- - python -m cbd_pbp.cli resume_ingest --season Y --season-type postseason --out data/warehouse.duckdb
+- - When API lineup coverage is incomplete for older seasons:
+- - 1. Use `data/manual_scrapes/{YEAR}/` raw files
+- - 3. Map game IDs to `dim_games.id/sourceId`
+- - 4. Map athlete name -> athleteId crosswalk
+- - - keys: `(teamId, season, player_source_id)`
+- - - fields: team/conference/season, player id/sourceId
+- - - keys: `(player_source_id, season)`
+
+## end_to_end_wiring.md
+
+### Headings
+- # End-to-End Wiring (College → Targets → Models)
+- ## What We’re Wiring Together
+- ## Player Linking (Identity)
+- ## What NBA Data We Use vs Don’t Use
+- ## DAG (Training + Inference)
+- ## Inference Path (UDFAs, Current Prospects, Missing nba_id)
+- ## Boundary Cases (Design Intent)
+
+### Key Lines
+- # End-to-End Wiring (College → Targets → Models)
+- 2. Optional career progression (multi-season)
+- 3. Optional within-season breakout windows (late-season form)
+- 4. NBA targets (labels only)
+- Training linkage uses a crosswalk:
+- - Source file: `data/warehouse_v2/dim_player_nba_college_crosswalk.parquet`
+- We use NBA data only as **targets / supervision**:
+- - Primary: `y_peak_ovr` (peak 3-year RAPM) + components `y_peak_off`, `y_peak_def`
+- - Aux: `year1_epm_*`, `gap_ts_legacy`, `gap_usg_legacy` when available
+- - Survival label: `made_nba = (year1_mp >= 100)` (derived)
+- We do **not** use post-draft NBA performance stats as inputs (leakage risk). The explicit forbidden list lives in:
+- - `nba_scripts/nba_data_loader.py` (`FORBIDDEN_FEATURE_COLUMNS`)
+- A["College Feature Store (college_features_v1.parquet)"] --> B["Final Season Extract (college_*)"]
+- A --> C["Career Store Build (prospect_career_v1.parquet / long)"]
+- D["DuckDB player-game (fact_player_game)"] --> E["Within-Season Windows (within_season_windows_v1.parquet)"]
+- X["Crosswalk (athlete_id → nba_id)"] --> F["Join Keys"]
+- Y["NBA Targets (warehouse_v2)"] --> F
+- - UDFAs / undrafted: training still works if they have an `nba_id` + targets; inference always works regardless.
+- - Transfers: multi-season career features are computed at athlete-season grain; within-season windows are per season.
+- - Missing historical player-game coverage: within-season windows remain `NaN` with `has_ws_* = 0`.
+- - `college_scripts/utils/validate_within_season_windows_v1.py`
+
+## full_input_columns.md
+
+### Headings
+- # Full Input Columns (Verified)
+- ## Model Inputs
+- ### Tier 1 (Universal)
+- ### Tier 2 (Spatial)
+- ### Career (Progression)
+- ### Within-Season Windows (Star Run)
+- ## Targets (Labels Only)
+- ## Masks / Coverage Flags
+- ## Notes
+
+### Key Lines
+- ## Model Inputs
+- ### Tier 1 (Universal)
+- - `college_games_played`
+- - `college_poss_proxy`
+- - `college_minutes_total`
+- - `college_ast_total_per100poss`
+- - `college_tov_total_per100poss`
+- - `college_stl_total_per100poss`
+- - `college_blk_total_per100poss`
+- - `final_usage_z`
+- - `final_usage_team_resid`
+- - `college_recruiting_rank`
+- ### Tier 2 (Spatial)
+- ### Career (Progression)
+- - `career_years`
+- - `college_final_season`
+- - `draft_year_proxy`
+- - `final_usage`
+- - `final_poss_total`
+- - `slope_usage`
+- - `career_wt_trueShootingPct`
+- - `career_wt_usage`
+- - `delta_usage`
+- - `career_wt_rim_fg_pct`
+- - `career_wt_three_fg_pct`
+- - `career_wt_ft_pct`
+- - `breakout_timing_usage`
+- - `breakout_rank_eff`
+- - `breakout_rank_volume`
+- - `breakout_rank_usage`
+- ### Within-Season Windows (Star Run)
+- - `final_ws_minutes_last10`
+- ## Targets (Labels Only)
+- - `year1_epm_tot`
+- - `year1_epm_off`
+- - `year1_epm_def`
+- ## Masks / Coverage Flags
+- - NBA data is used as targets only; see `docs/end_to_end_wiring.md` and `nba_scripts/nba_data_loader.py` for leakage rules.
+
+## generative_model_dag.md
+
+### Headings
+- # Generative Prospect Model: Visual Guide
+- ## The Big Picture (One Sentence)
+- ## Simple Analogy
+- ## The DAG (Directed Acyclic Graph)
+- ## Key Concepts Explained Simply
+- ### 1. Latent Traits (z)
+- ### 2. ARD Shrinkage (Automatic Relevance Determination)
+- ### 3. Horseshoe Prior (For Interactions)
+- ### 4. The Forked Structure (Aux + Impact)
+- ## What Makes This Different From Basic ML?
+- ## Flow Summary
+- ## Why This Matters for Scouting
+
+### Key Lines
+- ║   (We start with 32 possible traits, but most shrink to zero = not needed)     ║
+- ║                         │    ARD SHRINKAGE        │                            ║
+- ║     AUX HEAD: p(NBA stats | z) ║    ║      IMPACT HEAD: p(RAPM | z, h)       ║
+- ║   what NBA stats should you    ║    ║   actual winning impact?"              ║
+- ### 2. ARD Shrinkage (Automatic Relevance Determination)
+- **What**: We start with 32 possible trait dimensions, but the model automatically figures out which ones actually matter.
+- **Analogy**: Like starting with 32 possible spices for a recipe, then realizing only 8-12 actually contribute to the flavor.
+- **Why it matters**: With 32 traits, there are 496 possible pairs. Without the horseshoe, we'd overfit to noise. The horseshoe lets the data tell us which pairs actually matter.
+- ### 4. The Forked Structure (Aux + Impact)
+- - **Aux Head**: Sanity check. "If we say this player has high 'rim pressure' trait, they should actually score well at the rim in the NBA." If not, our traits are meaningless.
+- AUX HEAD                             IMPACT HEAD
+
+## historical_data_pipeline.md
+
+### Headings
+- # Historical PBP Reconstruction Pipeline
+- ## 1. The Challenge of "Ghost Players"
+- ## 2. The Holistic Solver Algorithm
+- ### Pass 1: Global Game Sweep
+- ### Pass 2: Checkpoint Anchoring
+- ### Pass 3: Bidirectional Propagation
+- ### Pass 4: Participation Gap Filling (The "Ghost" Fix)
+- ## 3. Data Integration
+- ## 4. Advanced Feature Handling
+
+### Key Lines
+- The resulting dataset is exported as `fact_play_historical.parquet`, mimicking the schema of `fact_play_raw` (2025). This allows the RApM engine to treat 2015 and 2025 data as identical inputs.
+- +*   **Historical Missingness**: For 2010-2018 where raw text lacks X,Y, the pipeline exports `loc_x=NULL`, ensuring Tier 2 features (`avg_shot_dist`) stay `NaN` without breaking the regression.
+- +### Volume & Usage
+- +*   **Minutes Reconstruction**: Successfully derived from PBP text via sub-event timestamps for specific validation blocks (2015, 2017).
+- +*   **Volume Proxy**: `poss_total` (total possessions where player was on floor) is used as the universal volume denominator for Usage Rates across all eras, providing a robust box-score-independent metric.
+
+## latent_input_plan.md
+
+### Headings
+- # Latent Model Input Plan (Multi-Season Career Handling)
+- ## Goal
+- ## Data Sources
+- ## Core Representation
+- ## Handling Variable Career Lengths (Cam Johnson vs Rob Dillingham)
+- ## Late/Early Breakout (Update)
+- ### Two Different "Late Breakout" Notions (Clarification)
+- ### Why This Isn't Hardcoding
+- ### Making It Prototype-Dependent (Archetype-Conditioned)
+- ### Missing Data / Era Safety
+- ## Reliability Weighting (Exposure-Aware)
+- ## Recommended Encoder Design
+- ### 1. Season Encoder (Per-Season MLP)
+- ### 2. Sequence Encoder (Time-Aware)
+- ### 3. Gated Fusion with Final Season
+- ## Transfer & Role Change Handling
+- ## Bayesian / Hierarchical Extension (Advanced)
+- ## Suggested Inputs to Latent Encoder
+- ## Output
+- ## Next Implementation Step
+
+### Key Lines
+- # Latent Model Input Plan (Multi-Season Career Handling)
+- **Status**: Proposed plan for sequence inputs into the latent model
+- ## Goal
+- Use multi-season college careers without confusing career length with NBA longevity. The input should represent **college trajectory** only, while treating short careers (one-and-done, transfers) and long careers (senior seasons, late bloomers) fairly.
+- - Long career table: `data/college_feature_store/prospect_career_long_v1.parquet`
+- - Wide career table: `data/college_feature_store/prospect_career_v1.parquet`
+- Each player is represented by a sequence of seasons:
+- Player i: [Season_1, Season_2, ..., Season_T]
+- Where each `Season_t` contains:
+- - Rates (TS%, usage, 3PT%, rim_fg_pct, etc.)
+- - Volume (minutes, games, poss_total)
+- - Spatial (Tier 2) with explicit `NaN` and mask
+- ## Handling Variable Career Lengths (Cam Johnson vs Rob Dillingham)
+- We treat **season count as context**, not as signal of quality. The model sees T via:
+- - `season_index` (1..T)
+- - `career_years` (T)
+- - `age_at_season` or `class_year` (if available)
+- The model is **not allowed to treat longer careers as better** by default.
+- - `breakout_timing_volume`: where along the career the player's volume peaks
+- - `breakout_timing_usage`: where along the career the player's usage peaks
+- - `breakout_timing_eff`: where along the career the player's efficiency peaks
+- These are normalized to `[0, 1]` by season rank: `0 = early`, `1 = late`.
+- 1. **Career-stage breakout (year-to-year):** “Did you peak early in your college *career* or late?”
+- - Normalization is by **season rank within career** (freshman=early, senior=late).
+- 2. **Within-season breakout (“star run”):** “Did you surge late in the *season* (e.g. conference play / March)?”
+- - This is represented by the `ws_*` (within-season window) features like:
+- - These are normalized within the **single season timeline**, not the career timeline.
+- - If we don’t have the necessary game logs, these stay `NaN` and are gated by masks like `final_has_ws_last5`
+- The “1/3 through freshman year” vs “1/3 through a 4-year career” concern is exactly why we keep these as
+- 1. **Career-stage breakout** (what we implement now)
+- - *Question*: did the player peak early in their college career or late?
+- - *Normalization*: by `season_rank` within the player's college career.
+- - This captures “4-year late bloomers vs one-and-dones”, *but it cannot* distinguish
+- “March breakout” inside a season.
+- 2. **Within-season breakout** (planned next)
+- - *Question*: did the player improve late in the season (conference play / March),
+- or were they strong all year?
+- - *Normalization*: by game index/date within a season (0 = early season, 1 = late season).
+- These are complementary, and we should not force one to stand in for the other.
+- - Breakout features are *contextual*, not targets.
+- - If a player-season lacks the required inputs (minutes/games, windows), the corresponding breakout
+- features should be `NaN` and accompanied by masks (e.g., `has_within_season_windows = 0`).
+- Season observations are noisy when minutes/games are low. We weight season inputs by exposure:
+- reliability_t = min(1, minutes_t / 800) * min(1, games_t / 20)
+- 1. **Feature shrinkage** (empirical Bayes):
+- - `x_t_shrunk = w_t * x_t + (1 - w_t) * career_mean`
+- 2. **Attention pooling**: higher exposure seasons get more weight when the model aggregates.
+- ### 1. Season Encoder (Per-Season MLP)
+- Encodes each season into a season embedding `h_t`.
+- - Attention weights are a function of `h_t`, `season_index`, and `reliability_t`
+- - Aggregates into a single career embedding
+- - Uses time embeddings (`season_index`, `age_at_season`)
+- ### 3. Gated Fusion with Final Season
+- The final season is the strongest signal for draft projection. We gate between:
+- career_embedding = g * final_season_embedding + (1 - g) * pooled_embedding
+- Where `g` is learned from career length, exposure, and variance. This prevents
+- long careers from overpowering a strong final season (e.g., Cam Johnson late leap)
+- while still allowing multi-year stability to inform the latent embedding.
+- - `team_change_flag` per season
+- - `role_shift_flag` (usage or minutes jump above threshold)
+- `role_shift_flag` when usage or minutes changes by > 25% YoY.
+- For small sample seasons, use partial pooling within each player:
+- sigma_t = sigma0 / sqrt(minutes_t)
+- This allows unstable seasons to shrink toward the player-level mean instead
+- of being treated as equally precise as high-minute seasons.
+- ## Suggested Inputs to Latent Encoder
+- Baseline input vector per season:
+- - `trueShootingPct`, `usage`, `rim_fg_pct`, `three_fg_pct`, `ft_pct`
+- - `minutes_per_game`, `poss_per_game`, `games_played`
+- - `has_spatial_data` mask
+- - `season_index`, `career_years`, `age_at_season` (if available)
+- representation of the college career.
+- 1. Generate trajectory stub from `prospect_career_long_v1.parquet`
+- 2. Build a simple attention pooling encoder over seasons
+- 3. Add reliability weighting based on minutes/games
+- 4. Evaluate against baseline using final-season-only features
+
+## latent_space_architecture.md
+
+### Headings
+- # Latent Space Architecture: Player Archetypes
+- ## Why Latent Space?
+- ## Architecture Overview
+- ## Key Design Decisions
+- ### 1. Latent Dimension: 32
+- ### 2. Tier 2 Masking Strategy
+- # During training, randomly mask Tier 2 features (even when available)
+- # This teaches the model to work without spatial data
+- ### 3. Archetype Discovery
+- ### 4. Loss Function
+- ## Multi-Season Career Handling (Update)
+- ## Archetype Interpretations
+- ### Discovering Archetypes
+- # Get all player embeddings
+- # Cluster
+- # Interpret by examining cluster centers
+- ### Example Archetypes (Hypothetical)
+- ### Narrative Generation
+- # Find nearest archetype
+- # Find similar NBA players
+- ## Implementation Plan
+- ## Comparison: XGBoost vs Latent
+- ## Next Steps
+
+### Key Lines
+- │   Tier 1: rim_fg_pct, three_share, usage, on_net_rating, ...            │
+- │   Tier 2: avg_shot_dist, corner_3_rate, rim_purity (masked)             │
+- │   Career: slope_ts, career_years, delta_usage                           │
+- │   │  Tier1 MLP  │    │  Tier2 MLP  │    │ Career MLP  │                 │
+- │   │  (always)   │    │  (masked)   │    │  (always)   │                 │
+- │  z → year1_epm        │ │  Binary CE loss │ │  Soft clustering or     │
+- ### 2. Tier 2 Masking Strategy
+- # During training, randomly mask Tier 2 features (even when available)
+- tier2_features = zeros  # Dropout
+- tier2_mask = 0
+- - Loss encourages players to be close to one prototype
+- + λ_epm  * MSE(year1_epm)           # Early signal
+- ## Multi-Season Career Handling (Update)
+- **Problem**: College careers vary wildly (one-and-done vs 4-year vs transfers), so the latent input must treat season count as *context*, not as *quality*.
+- **Approach**: Encode each season, then pool into a career embedding with exposure-aware weighting. Fuse the final-season embedding with the pooled career embedding so late bloomers (e.g., 4th-year jumps) are not diluted by earlier seasons.
+- - Per-season encoder → sequence pooling (attention or GRU/Transformer)
+- - Reliability weighting by minutes/games
+- - Gated fusion with final season embedding
+- - Transfer/role change flags as inputs
+- - Continuous breakout timing features (volume/usage/efficiency), learned in an archetype-conditioned way
+- print(f"  Avg Usage: {players_in_k.usage.mean():.3f}")
+- | **Rim Runner** | High rim%, low usage, high ast'd% | +1.5 RAPM, 90% make it | Clint Capela, DeAndre Jordan |
+- | **3-and-D Wing** | High 3PT%, low usage, good +/- | +0.8 RAPM, 85% make it | Mikal Bridges, OG Anunoby |
+- | **Shot Creator** | High usage, mid TS%, ball handling | +0.5 RAPM, 70% make it | Varies widely |
+- 1. Implement `PlayerEncoder` with Tier 1/2/Career branches
+
+## missing_data_closure_runbook.md
+
+### Headings
+- # Missing Data Closure Runbook
+- ## Scripts Added
+- ## CLI Extension Added
+- ## Suggested Execution
+- ## No-Waste Rules
+
+### Key Lines
+- - `data/audit/missing_games_by_endpoint.csv`
+- - `data/audit/missing_games_by_season.csv`
+- - `data/audit/model_readiness_gate.json`
+- - `data/audit/source_void_games.csv`
+- - Deterministically collapses duplicate `(season, athlete_id, split_id)` rows.
+- - Backfills `team_pace` and `conference` from team-season references.
+- - Orchestrates staged backfill:
+- 1. Postseason manifest fetch for missing seasons
+- - New endpoint-scoped ingest command to enforce staged backfill order.
+- - `python -m cbd_pbp.cli resume-ingest-endpoints --season 2018 --season-type regular --endpoints plays --out data/warehouse.duckdb`
+- - `python -m cbd_pbp.cli resume-ingest-endpoints --season 2018 --season-type regular --endpoints subs --out data/warehouse.duckdb`
+- - `python -m cbd_pbp.cli resume-ingest-endpoints --season 2018 --season-type regular --endpoints lineups --out data/warehouse.duckdb`
+- 5. Validate gates:
+- - API execution gate: `data/audit/model_readiness_gate.json`
+- - Dual-source availability gate: `data/audit/model_readiness_dual_source.json`
+- 3. Prefer manual-source coverage for availability accounting when API is source-empty.
+
+## ml_model_master_plan.md
+
+### Headings
+- # ML Model Master Plan: "The Oracle"
+- ## 🌎 1. Zone A: Data Ingestion (The Foundation)
+- ### 1.1 The Source Hierarchy
+- ### 1.2 The Reconstruction Pipeline (Status: ACTIVE)
+- ## 🏗️ 2. Zone B: The Feature Store (Input Layer)
+- ### 2.1 Feature Tier Strategy (Bias Mitigation)
+- ### 2.2 Coverage Masks
+- ## 🧠 3. Zone C: Model Architecture (The Brain)
+- ### 3.1 The Target Variables (Y)
+- ### 3.2 Loss Function Strategy
+- ### 3.3 The "Time Machine" Validation
+- ## 🚀 4. Zone D: Inference (The Product)
+- ### 4.1 Input Pipeline
+- ### 4.2 Prediction
+- ## 🗓️ 5. Implementation Roadmap (The "Next Steps")
+- ### Phase 2: Feature Store Hardening
+- ### Phase 3: Model Training
+- ### Phase 4: Validation
+
+### Key Lines
+- **Goal**: Create a seamless 15-year dataset (2010-2025) despite massive structural changes in source data.
+- *   Official Box Scores (Minutes, TOV, Usage)
+- *   **Missing Box Scores**: No official Minutes/Turnovers (Usage Gap).
+- *   **Improvement (Planned)**: Move from "Global Most Active" filler to "Windowed Activity" filler (e.g., utilize Rolling 10-minute substitution patterns) to reduce error in blowout minutes.
+- 2.  **Volume Backfill (`derive_minutes_from_historical_pbp.py`)**:
+- *   Derives Minutes/Turnovers from PBP text.
+- *   **Output**: `fact_player_season_stats_backfill.parquet`.
+- 3.  **Crosswalk**: Links 145k College IDs to NBA IDs (Fuzzy Matching).
+- **Goal**: Normalize features so a 2012 player looks like a 2024 player to the model, without "leaking" the fact that they are from the dark ages.
+- ### 2.1 Feature Tier Strategy (Bias Mitigation)
+- | Tier | Description | Availability | Strategy |
+- | **Tier 1 (Universal)** | Usage, efficiency (TS%), shot zones (Rim/Mid/3), height, team strength. | **100% (2010-2025)** | **Always Active**. The backbone of the model. |
+- | **Tier 2 (Spatial)** | `avg_shot_dist`, `corner_3_rate`, `rim_purity`. | **~25% (2019+)** | **Dropout / Masking**. During training, randomly mask these features even for modern players so the model learns to predict without them. |
+- ### 2.2 Coverage Masks
+- We must explicitly pass simple boolean flags to the model so it *knows* if data is missing (vs just being zero).
+- **Goal**: A Multi-Task Transfomer/Regression hybrid that predicts *Translation*, not just raw production.
+- *   **Why Peak?** Captures "ceiling" (best 3 consecutive years), avoids injury/decline noise.
+- *   **Auxiliary Targets**:
+- *   `gap_ts_legacy` (NBA Year-1 TS% - College Final TS%). Efficiency translation.
+- *   `gap_usg_legacy` (NBA Year-1 Usage - College Final Usage). Role translation.
+- *   `nba_year1_minutes` (Survival Proxy). Binary: `made_nba = (minutes >= 100)`.
+- *   Auxiliary targets provide additional signal (efficiency, role translation).
+- *   **Heteroscedastic Variance**: Weight by exposure (variance ∝ 1/(minutes+ε)) to downweight noisy observations.
+- We cannot use standard K-Fold CV. We must use **Walk-Forward Validation**.
+- *   **Train**: 2010-2017 (8 seasons, ~15k player-seasons)
+- *   **Val**: 2018-2019 (transition period, ~4k player-seasons)
+- *   **Test**: 2020-2022 (modern era, ~5k player-seasons)
+- *   **Excluded**: 2023-2025 (too recent for 3yr NBA targets)
+- **Goal**: Generate a "Draft Board" ranking for the current class.
+- 1.  Ingest current CBD season (`ingest-season`).
+- 2.  Run `build_college_feature_store_v1.py` (Tier 1 & Tier 2 populated).
+- 3.  Run `build_prospect_career_store_v2.py` (final season features).
+- 3.  Generate coverage masks (`has_spatial_data`, `has_athletic_testing`).
+- 2.  Normalize features to current season baseline.
+- - Model receives: `[PlayerFeatures, Tier2_Mask, Has_Spatial, Has_Athletic]`
+- - `predicted_made_nba`: Probability of making NBA (≥100 minutes).
+- *   **2.1**: Finish Historical Backfill (Run `derive_minutes` on 2010-2018).
+- *   **3.2**: Implement Tier 2 Masking (Dropout).
+- *   Status: ✅ **COMPLETE**. `has_spatial_data` mask in unified table, NaN handling in XGBoost.
+- *   Includes: Walk-forward validation, multi-task targets, feature importance.
+
+## model_architecture_dag.md
+
+### Headings
+- # Model Architecture DAG: NCAA → NBA Prospect Pipeline
+- ## Visual DAG (ASCII)
+- ## Data Flow Summary (Mermaid Format)
+- ## File Dependency Graph
+- ## Feature Categories (60+ Features)
+- ### Tier 1: Universal (2010-2025, 100% Coverage)
+- ### Tier 2: Spatial (2019+, ~25% Coverage, Masked)
+- ### Coverage Masks
+- ## Target Variables
+- ## Scripts to Create
+
+### Key Lines
+- │   │  - Play-by-Play  │    │   (2010-2018)    │    │  - Year 1 Stats  │              │
+- │   │  - Box Scores    │    │  - No Coords     │    │  - Minutes       │              │
+- │   │  - fact_play_raw (2019+)                 │    │    year1_epm     │              │
+- │   │  │   TIER 1        │  │   TIER 2        │  │   IMPACT        │             │    │
+- │   │  │ • three_att/made│  │ • corner_3_rate │  │ • rapm_leverage │             │    │
+- │   │  │ 100% Coverage   │  │ xy_shots >= 25  │  │ 100% Coverage   │             │    │
+- │   │                    Key: (athlete_id, season, split_id)                      │    │
+- │   │                    build_prospect_career_store_v2.py                        │    │
+- │   │  Aggregates multi-season college career into final features:                │    │
+- │   │  • final_trueShootingPct (last season TS%)                                  │    │
+- │   │  • final_usage (last season usage rate)                                     │    │
+- │   │  • career_years (number of college seasons)                                 │    │
+- │   │  • career_wt_* (career-weighted averages)                                   │    │
+- │   │                    prospect_career_v1.parquet                               │    │
+- │                              CROSSWALK LAYER                                         │
+- │   │   College Features      │         │   NBA Targets           │                   │
+- │                    │      _crosswalk         │                                       │
+- │   │  • gap_ts_legacy: NBA Year-1 TS% - College Final TS% (859 players)          │    │
+- │   │  • gap_usg_legacy: NBA Year-1 Usage - College Final Usage (2 players)       │    │
+- │   │  INPUTS:                          OUTPUTS:                                  │    │
+- │   │  ├─ prospect_career_v1.parquet    │                                         │    │
+- │   │  ├─ crosswalk.parquet             │  Columns:                               │    │
+- │   │  ├─ fact_player_year1_epm         │  ├─ IDENTIFIERS                         │    │
+- │   │  └─ fact_player_gaps.parquet      │  │   • draft_year, college_final_season │    │
+- │   │  ├─ Era normalization (z-score)   │  │   • Tier 1: 40+ columns              │    │
+- │   │  ├─ Logit for bounded rates       │  │   • Tier 2: 6 columns (masked)       │    │
+- │   │  ├─ Log for counts                │  │   • Career: 10+ columns              │    │
+- │   │  └─ Coverage masks                │  │   • Masks: has_spatial, has_athletic │    │
+- │   │                                   │  └─ TARGETS (Y)                         │    │
+- │   │                                   │      • gap_ts_legacy (auxiliary)        │    │
+- │   │                                   │      • year1_epm_tot (auxiliary)        │    │
+- │   │   ~15k player-seasons      ~4k player-seasons      ~5k player-seasons        │   │
+- │   │   ※ 2023-2025 EXCLUDED: Too recent for 3yr NBA targets                       │   │
+- │   │   │   separate models   │    │ • Task-specific     │    │   over seasons │  │   │
+- │   │   │ • Fast iteration    │    │ • Dropout for Tier2 │    │   embedding    │  │   │
+- │   │   │                     │    │   masking           │    │                │  │   │
+- │   │   │ Goal: RMSE < 2.0    │    │ Goal: Beat XGBoost  │    │ Goal: SOTA     │  │   │
+- │   │           + w2 × MSE(gap_ts)        [AUXILIARY: Efficiency translation]      │   │
+- │   │           + w3 × MSE(year1_epm)     [AUXILIARY: Year-1 performance]          │   │
+- │   │           + w4 × BCE(made_nba)      [AUXILIARY: Survival/binary]             │   │
+- │   │   Heteroscedastic: Weight by exposure (variance ∝ 1/(minutes + ε))           │   │
+- │   │  ├─ Current season college features    ├─ predicted_gap_rapm                 │   │
+- │   │  ├─ Coverage masks                     ├─ predicted_gap_ts                   │   │
+- CF --> PCV2[build_prospect_career_store_v2.py]
+- PCV2 --> PC[prospect_career_v1.parquet]
+- subgraph Crosswalk
+- PC --> XW{dim_player_nba_college_crosswalk}
+- data/manual_scrapes/{YEAR}/
+- └── prospect_career_v1.parquet      ← build_prospect_career_store_v2.py
+- ├── dim_player_nba_college_crosswalk.parquet
+- ├── fact_player_year1_epm.parquet
+- ### Tier 1: Universal (2010-2025, 100% Coverage)
+- | **Leverage** | high_lev_att_rate, garbage_att_rate, leverage_poss_share | 3 |
+- | **Volume** | seconds_on, games_played, poss_on | 3 |
+- | **Context** | team_pace, is_power_conf, opp_rank | 3 |
+- | **Career** | final_ts, final_usage, career_years, slope_*, career_wt_* | 10 |
+- ### Tier 2: Spatial (2019+, ~25% Coverage, Masked)
+- ### Coverage Masks
+- | Mask | Description |
+- | Target | Formula | Coverage | Use |
+- | **gap_ts_legacy** | NBA Y1 TS% - College Final TS% | 859 | Auxiliary |
+- | **year1_epm_tot** | NBA Year-1 EPM | ~1000 | Auxiliary |
+- | **made_nba** | 1 if NBA minutes >= 100 | ~1100 | Binary |
+
+## nba_feeding_plan.md
+
+### Headings
+- # NBA Data Feeding Plan for Prospect Model
+- ## Executive Summary
+- ## 1. Current State vs. Future State
+- ## 2. Implementation Plan
+- ### Phase 1: Deepen "Year 1" Resolution [COMPLETED]
+- ### Phase 2: Trajectory Monitoring (Years 1-3)
+- ### Phase 3: Physical Context (Wingspan)
+- ### Phase 4: The "Adaptation Gap" [IMPLEMENTED]
+- ## 3. Data Dictionary for New Columns (to be added to Warehouse)
+- ## 4. Reasonings & Notes for Cursor
+- ### A. Why "Assisted %" (`astd_`) is Critical
+- ### B. Tracking Data (`tk_`) as "Eye Test" Proxy
+- ### C. On/Off Splits vs EPM
+- ### D. The Adaptation Gap (Gap Features)
+- ## 5. Editorial Notes (cursor)
+- ## 6. Antigravity Review (Manager Sign-Off)
+- ### A. The "Bridge Schema" (Mapping College to NBA)
+- ### B. Phase 1 Authorization
+- ### C. The "Adaptation Gap" Mandate
+- ## 7. Cursor Review (Implementation Audit & Execution Plan)
+- ### A. Critical Schema Discrepancies
+- ### B. Concrete Phase 1 Implementation Steps
+- # In build_warehouse_v2.py, modify build_fact_year1_epm() signature:
+- # ... existing EPM extraction ...
+- # NEW: Extract Basketball-Excel Year-1 stats
+- # Extract Phase 1 columns
+- # Pull-up frequency: use tk_fga_2p_pu / (fga_0_4 + fga_4_14 + fga_14_3p + fga_3p)
+- # Merge with existing fact table
+- # Change call from:
+- # To:
+- # ... existing ...
+- ### C. Phase 4 Prerequisites (Must Complete Before Phase 4)
+- ### D. Execution Pipeline (Corrected Order)
+- ### E. Data Quality Checks
+- ### F. Recommendations
+- ### G. Open Questions
+- ## 8. Antigravity Review (Lead Architect Sign-Off)
+- ### A. Immediate Action Items (The "Fix-It" List)
+- ### B. Final Schema Ruling (Bridge Zone)
+- ### C. Execution Order (Revised)
+
+### Key Lines
+- This document outlines the strategy for expanding **NBA Auxiliary Observations** to improve the Generative Prospect Model.
+- **Goal**: Feed the model a rich, high-resolution view of "What a player became in the NBA" (Auxiliary $a$) to help it learn a better latent representation $z$ from college features $x$.
+- > **Strict Separation**: This plan focuses **solely** on NBA-side data ingestion. College inputs are out of scope for this document.
+- | Data Category | Current State (What we feed now) | Future State (What we MUST feed) | Why it matters |
+- | **Trajectory** | Year 1 Only | **Years 1-3 Trajectories** | Latent space should encode "Growth Potential", not just "Rookie Readiness". |
+- ### Phase 1: Deepen "Year 1" Resolution [COMPLETED]
+- **Source**: `data/basketball_excel/players_{year}_regular.csv`
+- **Action**: Extended `build_fact_year1_epm` to ingest unused tracking and role-based columns.
+- **Metrics**: `year1_corner_3_att`, `year1_dunk_att`, `year1_ast_rim_pct`, `year1_pullup_2p_freq`, `year1_deflections`, `year1_on_ortg`, `year1_off_ortg`, `year1_dist_3p`.
+- ### Phase 2: Trajectory Monitoring (Years 1-3)
+- **Concept**: A player's "outcome" isn't just their Year 1 stats. It's their **adaptation curve**.
+- *   Iterate through Years 1, 2, and 3.
+- *   Capture `delta_usg` (Did they scale usage?), `delta_ts` (Did efficiency hold?), `delta_bpm`.
+- *   **Modeling Utility**: These serve as additional Auxiliary Tasks. "Predict not just who they are as a rookie, but who they become in Year 3."
+- **Concept**: Instead of treating NBA Year 1 stats in isolation, model the **magnitude of the drop** from College.
+- *   Most prospects see a crash in efficiency and usage.
+- **Action**: Create derived auxiliary features:
+- 1.  `gap_ts_pct = nba_year1_ts - cbb_final_ts` (Usually negative)
+- 2.  `gap_usage = nba_year1_usg - cbb_final_usg`
+- 3.  `gap_dist = nba_year1_3p_dist - cbb_3p_dist` (Did they get pushed further out?)
+- *   This explicitly links the Input $x$ (College) to the Auxiliary $a$ (NBA), forcing the latent $z$ to encode "translation ability".
+- - **College Side**: Derived `final_trueShootingPct` and `final_usage` were added to `prospect_career_v1.parquet` (V2 build).
+- - **Usage Formula**: `PlayEnds / (Minutes / 40 * TeamPace)` (TeamPace proxy = 68.0 if missing).
+- - **Bridge**: Crosswalk built using `stg_shots.shooter_name` fuzzy matching.
+- - **Crosswalk**: Matched 1,114 players (45.3% of NBA cohort). Match rate limited by lack of Play-by-Play data before 2010. 99.3% high-confidence matches (score >= 0.95).
+- - **Usage Gap**: Successfully computed for only 2 players. **UPDATE (2026-01-29)**: Partially resolved for 2015/2017 via PBP derivation. established `final_poss_total` as volume proxy for remaining eras.
+- | **Role** | `year1_corner_3_att` | `fga_sb3` | Short-break (Corner) 3s |
+- | **Role** | `year1_dunk_att` | `fga_dunk` | Rim aggression |
+- | **Role** | `year1_ast_rim_pct` | `astd_0_4` | % of Rim makes that were assisted |
+- | **Skill** | `year1_pullup_2p_freq` | `tk_fga_2p_pu` / `fga` | Frequency of mid-range self-creation |
+- | **Skill** | `year1_dist_3p` | `fga_3p_dist` | Avg shot distance (Range indicator) |
+- | **Defense** | `year1_deflections` | `tk_17_deflection` | Active hands / disruptive event creation |
+- | **Impact** | `year1_on_ortg` | `on_off_on_ortg` | Team ORTG when ON court |
+- | **Impact** | `year1_off_ortg` | `on_off_off_ortg` | Team ORTG when OFF court |
+- | **Adapt** | `gap_usg` | Derived | NBA Y1 Usage - College Final Usage |
+- **Reasoning**: EPM is a black box. `on_off_on_ortg` vs `on_off_off_ortg` provides raw, noisy, but truthful signal about lineup impact. It helps the model handle low-usage but high-impact players (Connectors) better than box stats alone.
+- **Reasoning**: We strongly recommend implementing the **Gap Features** (Phase 4). Raw NBA stats don't tell the whole story. The *change* in efficiency from College to NBA is the cleanest signal of "NBA Readiness". By making this an auxiliary target, we ask the model to predict *how much a player's game will translate*, which is the core problem of scouting.
+- - The overall direction is consistent with the current warehouse and data dictionary. However, **Phase 4 (Adaptation Gap)** implicitly depends on specific college feature names (e.g., `cbb_final_ts`, `cbb_final_usg`) that do not yet exist in the codebase. Before implementation, we should:
+- - The opening “Strict Separation” note (“NBA-side only”) is slightly at odds with Phase 4, which is intentionally **bridge logic** (NBA × NCAA). That’s totally fine, but we should call it out as a *Bridge Zone* so it’s clear that it touches both warehouses.
+- - For `year1_pullup_2p_freq`, the spec references `tk_fga_2p_pu / fga`. In the actual data:
+- - `tk_fga_2p_pu` exists (per `nba_aux_whitelist_v2.yaml` and `DATA_DICTIONARY.md`).
+- - To keep things consistent with how `fact_player_year1_epm` already uses EPM stats, I’d recommend defining:
+- - Either `year1_pullup_2p_freq = tk_fga_2p_pu / max(fga_75, eps)` if we want an EPM-aligned denominator, **or**
+- - Build a derived `year1_fga_total = fga_0_4 + fga_4_14 + fga_14_3p + fga_3p` inside the warehouse and use that as the denominator.
+- - For “`nba_year1_ts` / `nba_year1_usg`” in Phase 4, the warehouse already uses `year1_tspct` and `year1_usg`. I’d suggest updating the doc to use the **actual column names** to avoid drift between spec and implementation.
+- - All the highlighted raw inputs for Phases 1–2 (`fga_sb3`, `fga_dunk`, `astd_0_4`, `tk_17_deflection`, `tk_17_contested_shots`, `on_off_on_ortg`, `on_off_off_ortg`, `tk_fga_2p_pu`, etc.) are:
+- - Already explicitly whitelisted in `config/nba_aux_whitelist_v2.yaml`.
+- - Extending `build_warehouse_v2.build_fact_year1_epm` to compute the new `year1_*` columns.
+- - Updating `nba_data_loader.get_feature_columns()` and `nba_feature_transforms.apply_all_transforms()` to register them as auxiliary observations and (if needed) z-score / logit them.
+- **Leakage & Modeling Contract**
+- - Everything in this doc is framed correctly as **auxiliary observations/targets** (post-draft) rather than input features, which respects the existing leakage guardrails in `nba_data_loader.py`.
+- - When we implement the adaptation gaps (`gap_ts_pct`, `gap_usg`), we should:
+- - Keep them **out of the input feature set X** and treat them as additional auxiliary heads.
+- - Add them to the leakage checks in `assert_no_leakage` so they can never accidentally be used as direct inputs.
+- - Extend `build_fact_year1_epm` to compute a minimal but high-signal subset: `year1_corner_3_att`, `year1_dunk_att`, `year1_ast_rim_pct`, `year1_deflections`, `year1_on_ortg`, `year1_off_ortg`, and a carefully defined `year1_pullup_2p_freq`.
+- - Wire those into `nba_data_loader` as aux observations and into `nba_feature_transforms` with appropriate transforms (ratios → logit or z-score by era).
+- ## 6. Antigravity Review (Manager Sign-Off)
+- I have reviewed the editorial notes from Cursor and the current state of `prospect_career_v1.parquet`. The plan is solid. Here is the definitive ruling on the open questions:
+- Cursor correctly identified that Phase 4 (Adaptation Gap) requires precise column names. We will use the following **Canonical Mapping** to bridge the `prospect_career_store` (College) to the `fact_player_nba_trajectory` (NBA):
+- | Concept | NBA Variable (Year 1) | College Variable (Final) | Gap Formula (NBA - College) |
+- | **Efficiency** | `year1_tspct` | `final_trueShootingPct` | `delta_efficiency_leap` |
+- | **Usage** | `year1_usg` | `final_usage` | `delta_usage_leap` |
+- | **Role** | `year1_dist_3p` | `final_avg_shot_dist` | `gap_dist_leap` |
+- *   **Directive**: Treat the `Gap` features as **Auxiliary Targets** (Multi-task learning), NOT Inputs. Use them to supervise the latent space $z$.
+- 1.  **Execute Phase 1** (Year 1 extraction).
+- I've audited the plan against the current codebase and data files. The overall direction is sound, but several **critical discrepancies** must be resolved before execution. Below are findings and a concrete execution pipeline.
+- - **Plan Claims**: `final_trueShootingPct`, `final_usage` exist in `prospect_career_v1.parquet`
+- - `final_minutes_total`, `final_fga_total`, `final_ast_total`, etc. (totals)
+- - **Missing**: No `final_trueShootingPct`, no `final_usage`, no TS% calculation
+- - **Option B**: Add TS% calculation to `build_prospect_career_store.py` before Phase 4
+- - **Usage**: Need to add usage calculation to college store. Usage = `(final_fga_total + 0.44 * final_fta_total + final_tov_total) / (team_poss * final_minutes_total / team_minutes_total)` - requires team context
+- - **Plan Assumes**: Direct join from `fact_player_year1_epm` to `prospect_career_v1.parquet`
+- - **Reality**: No crosswalk table exists linking `nba_id` → `athlete_id` (college)
+- - Create `dim_player_nba_college_crosswalk.parquet` with columns: `nba_id`, `athlete_id`, `college_team_id`, `match_confidence`
+- - Join strategy: Use `bbr_id` from `dim_player_crosswalk` → match to college records via name/team/year fuzzy matching
+- - **Implementation**: New script `build_nba_college_crosswalk.py` (separate task, prerequisite for Phase 4)
+- **Issue 3: Basketball-Excel Year-1 Extraction Missing**
+- - **Current State**: `build_fact_year1_epm()` only extracts from EPM source, ignores Basketball-Excel
+- - **Action Required**: Extend `build_fact_year1_epm()` to:
+- 1. Load Basketball-Excel Year-1 data (filter `raw_be` where `season_year == rookie_season_year`)
+- 4. Handle missingness: add `has_year1_be` flag
+- **Step 1.1: Extend `build_fact_year1_epm()` Function**
+- # In build_warehouse_v2.py, modify build_fact_year1_epm() signature:
+- def build_fact_year1_epm(raw_epm, raw_be, dim_player):
+- # NEW: Extract Basketball-Excel Year-1 stats
+- be_y1 = raw_be[raw_be['season_year'] == dim_player['rookie_season_year']].copy()
+- be_extract['year1_corner_3_att'] = be_y1['fga_sb3']
+- be_extract['year1_dunk_att'] = be_y1['fga_dunk']
+- be_extract['year1_ast_rim_pct'] = be_y1['astd_0_4'] / (be_y1['fgm_0_4'] + 1e-6)  # Assisted rim makes / total rim makes
+- be_extract['year1_deflections'] = be_y1['tk_17_deflection']
+- be_extract['year1_on_ortg'] = be_y1['on_off_on_ortg']
+- be_extract['year1_off_ortg'] = be_y1['on_off_off_ortg']
+- be_extract['year1_dist_3p'] = be_y1['fga_3p_dist']
+- be_extract['year1_pullup_2p_freq'] = be_y1['tk_fga_2p_pu'] / (total_fga + 1e-6)
+- fact['has_year1_be'] = fact['year1_corner_3_att'].notna().astype(int)
+- fact_y1 = build_fact_year1_epm(raw_epm, dim_player)
+- fact_y1 = build_fact_year1_epm(raw_epm, raw_be, dim_player)
+- - Add new columns to `get_feature_columns()['aux_observations']`:
+- 'aux_observations': [
+- 'year1_corner_3_att', 'year1_dunk_att', 'year1_ast_rim_pct',
+- 'year1_pullup_2p_freq', 'year1_dist_3p', 'year1_deflections',
+- 'year1_on_ortg', 'year1_off_ortg',
+- - `year1_ast_rim_pct`, `year1_pullup_2p_freq` → logit transform (percentages)
+- - `year1_corner_3_att`, `year1_dunk_att`, `year1_deflections` → z-score by era (counts/rates)
+- - `year1_on_ortg`, `year1_off_ortg` → z-score by era (ratings)
+- - Verify new columns exist in `fact_player_year1_epm.parquet`
+- - Check coverage: `has_year1_be.sum() / len(fact_y1)` should be > 0.8 (most players have BE data)
+- ### C. Phase 4 Prerequisites (Must Complete Before Phase 4)
+- - **File**: `college_scripts/build_prospect_career_store.py`
+- - `final_usage`: Requires team possessions context (may need to join `fact_team_game` or compute from pace)
+- - **Note**: Usage calculation is complex; consider using `final_fga_total / final_minutes_total` as proxy if team context unavailable
+- **Prerequisite 2: NBA-College Crosswalk**
+- - **New File**: `build_nba_college_crosswalk.py`
+- 1. Load `dim_player_crosswalk` (has `nba_id`, `bbr_id`, `player_name`)
+- 2. Load `prospect_career_v1.parquet` (has `athlete_id`, need to join to get names)
+- 3. Fuzzy match on `player_name` + `draft_year` + college team
+- 4. Output: `dim_player_nba_college_crosswalk.parquet` with `nba_id`, `athlete_id`, `match_confidence`
+- | **Efficiency** | `year1_tspct` | `final_trueShootingPct`* | `delta_efficiency_leap = year1_tspct - final_trueShootingPct` |
+- | **Usage** | `year1_usg` | `final_usage`* | `delta_usage_leap = year1_usg - final_usage` |
+- | **3P Distance** | `year1_dist_3p` | `final_three_fg_pct` (proxy) | `gap_3p_role = year1_dist_3p - (proxy from three_fg_pct)` |
+
+## nba_pretrain_gate.md
+
+### Headings
+- # NBA Pre-Train Gate
+- ## Purpose
+- ## Script
+- ## Usage
+- ## Output
+- ## Notes
+
+### Key Lines
+- # NBA Pre-Train Gate
+- - target coverage thresholds
+- - source-overlap drift checks by rookie season
+- `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_nba_pretrain_gate.py`
+- ## Usage
+- - Run gate and fail on critical checks:
+- - `python3 "/Users/akashc/my-trankcopy/ml model/nba_scripts/run_nba_pretrain_gate.py" --fail-on-gate`
+- - `python3 "/Users/akashc/my-trankcopy/ml model/nba_scripts/run_training_pipeline.py" --gate`
+- - `/Users/akashc/my-trankcopy/ml model/data/audit/nba_pretrain_gate.json`
+- - `/Users/akashc/my-trankcopy/ml model/data/audit/nba_pretrain_gate_YYYYMMDD_HHMMSS.json`
+- - The gate is intended to block training only on critical failures.
+
+## next_steps_plan.md
+
+### Headings
+- # Next Steps Plan: NCAA Data Pipeline & Model Development
+- ## Executive Summary
+- ## Phase 1: Data Ingestion & Quality Assurance (Weeks 1-4)
+- ### 1.1 Historical Scraping Continuation
+- ### 1.2 Historical Box Score Backfill (Critical Blocker)
+- ### 1.3 Data Quality Validation Suite
+- ## Phase 2: Feature Store Enhancements (Weeks 5-8)
+- ### 2.1 ASTz Implementation (Era-Normalized Assist Rate)
+- ### 2.2 Recency-Weighted Aggregates & "Best 15-Game Window"
+- ### 2.3 Extended Spatial Features (Left/Right Corner, Shot Dispersion)
+- ## Phase 3: Model Integration & Training Prep (Weeks 9-12)
+- ### 3.1 Data Loader Integration
+- ### 3.2 Feature Transform Pipeline Updates
+- ### 3.3 Training Dataset Builder
+- ## Phase 4: Model Architecture & Training (Weeks 13-16)
+- ### 4.1 Model Architecture Design
+- ### 4.2 Training Pipeline
+- ### 4.3 Model Validation & Backtesting
+- ## Phase 5: Production Deployment & Monitoring (Weeks 17-20)
+- ### 5.1 Inference Pipeline
+- ### 5.2 Monitoring & Retraining
+- ## Dependencies & Blockers
+- ### Critical Blockers
+- ### Nice-to-Have (Not Blocking)
+- ## Success Criteria (Overall)
+- ## Next Immediate Actions (This Week)
+- ### ✅ COMPLETED (2026-02-01)
+- ### ⏳ IN PROGRESS (Background)
+- ### 🔜 NEXT UP (When Data Ready)
+
+### Key Lines
+- - ✅ Spatial Tier 2 features implemented (`corner_3_rate`, `deep_3_rate`, `rim_purity`, `shot_dist_var`)
+- - ✅ Coverage-aware gating logic validated
+- **Goal**: Expand historical coverage to maximize training data for the 15-year RApM model.
+- 1. **Prioritize Missing Seasons**:
+- - **Medium Priority**: 2016, 2018-2019 (fill gaps between validated years)
+- - Run `college_scripts/scrapers/scrape_ncaa_master.py` for target seasons
+- - Store raw CSVs in `data/manual_scrapes/{YEAR}/`
+- - **Validation Checkpoint**: After each season batch, verify:
+- - Run `college_scripts/utils/clean_historical_pbp_v2.py` for newly scraped seasons
+- - Output: `data/fact_play_historical_{YEAR}_clean.parquet`
+- - **Quality Gate**: Verify 5-on-floor consistency (no 4-player or 6-player lineups)
+- - Coverage report: `data/historical_coverage_report.csv` (seasons × games × players)
+- - Historical coverage: 2010-2025 (16 seasons) with ≥80% game coverage per season
+- - Lineup reconstruction: ≥95% of games have valid 5-on-floor lineups
+- **Problem**: `fact_player_season_stats` in DuckDB only has 2005 and 2025. This blocks:
+- - Historical usage rate calculation
+- - Phase 4 `gap_usg_legacy` coverage (currently only 2 players)
+- - **Script**: `college_scripts/derive_minutes_from_historical_pbp.py` (new)
+- 1. Load cleaned historical PBP (`fact_play_historical_{YEAR}_clean.parquet`)
+- 3. Aggregate to player-season: `minutes_total = sum(seconds_on) / 60`
+- 5. Output: `data/warehouse_v2/fact_player_season_stats_backfill_{YEAR}.parquet`
+- - **Advantages**: Uses existing lineup reconstruction, no new scraping needed
+- - **Logic**: Parse HTML tables for per-player season totals
+- - **Advantages**: More accurate (official box scores)
+- **Recommendation**: **Start with Option A** (derive from PBP). If TOV extraction is too noisy, supplement with Option B for critical seasons.
+- - `fact_player_season_stats_backfill_{YEAR}.parquet` for 2006-2024
+- - Integration script to merge backfill into DuckDB `fact_player_season_stats`
+- - Validation report: coverage by season, comparison to known totals
+- - `minutes_total` coverage: ≥70% of player-seasons for 2010-2024
+- - `tov_total` coverage: ≥60% (text extraction is harder)
+- - Usage gap coverage: increase from 2 → 400-500 players
+- **Goal**: Automated checks to catch data quality issues before they propagate to modeling.
+- 1. **Uniqueness**: `(athlete_id, season, split_id)` is unique in `college_features_v1.parquet`
+- - All percentage columns ∈ [0, 1]
+- 3. **Coverage Checks**:
+- - Per season: fraction of athletes with non-null PBP features > threshold
+- - Spatial coverage: `xy_coverage` distribution by season (should increase 2019+)
+- - Tier 2 features are `NaN` when `xy_shots < 25` (not 0)
+- - <1% range violations (investigate outliers)
+- - Coverage trends match expectations (spatial increases 2019+)
+- **Problem**: Raw AST% has shifted across seasons (cohort-level inflation, not player skill). Example: NCAA freshmen with AST% > 25: 2022=16, 2023=16, 2024=21, 2025=13, 2026=33.
+- - **Operational Approximation** (Phase 1): Z-score within `(season, role_bucket)` using robust median/MAD
+- 1. **Role Buckets**: Define role buckets (Bigs, Wings, Guards) from shot profile + usage
+- - For each `(season, role_bucket)`, compute median/MAD of AST% (or AST proxy)
+- - Baseline lookup table: `data/college_feature_store/ast_baselines_{season}.parquet`
+- - Validation: ASTz distribution should be ~N(0,1) within each season/role
+- - ASTz removes season-level inflation (correlation with season < 0.1)
+- ### 2.2 Recency-Weighted Aggregates & "Best 15-Game Window"
+- **Goal**: Add temporal weighting to capture "recent form" and "peak performance" signals.
+- 1. **Recency-Weighted Season Aggregate**:
+- - Exponential weights: `w_i = exp(-λ * (games_ago))` with half-life tuned via CV
+- - Precompute EWMA aggregates per athlete-season
+- - For each athlete-season, find the 15-game rolling window with highest impact (e.g., `on_net_rating`)
+- - Recency-weighted features improve out-of-sample prediction vs full-season aggregates
+- - Best-15 window identifies "peak performance" players (validated on known breakout seasons)
+- **Goal**: Add more granular spatial traits for role fingerprinting.
+- - Add SQL aggregates to `build_college_feature_store_v1.py` (left/right corner counts)
+- - Validation: left/right should be roughly symmetric (no coordinate bias)
+- **Goal**: Update `nba_scripts/nba_data_loader.py` to consume college features correctly.
+- - Grain: `(athlete_id, season, split_id)`
+- - Default split: `split_id == 'ALL__ALL'` (full season)
+- - Tier 1 (Universal): Always include
+- - Tier 2 (Spatial): Include with explicit missingness handling
+- 3. **Leakage Prevention**:
+- - Add college feature columns to `FORBIDDEN_FEATURE_COLUMNS` if they encode post-draft info
+- - Verify: college features only use games through end of final college season
+- - Integration test: verify college features join correctly to NBA targets via crosswalk
+- - No leakage detected (college features don't correlate with post-draft NBA outcomes)
+- **Goal**: Ensure college features are properly normalized/transformed for model training.
+- - Z-score by season for rates with drift (AST%, pace, 3P rates)
+- - Tier 2 spatial features: explicit `NaN` (not 0)
+- - Model layer: masking or imputation strategy (TBD by model architecture)
+- **Goal**: Create unified training dataset joining college features → NBA targets.
+- 2. Load NBA targets (`fact_player_peak_rapm`, `fact_player_year1_epm`)
+- 3. Join via `dim_player_nba_college_crosswalk`
+- 4. Apply leakage filters (only use college games through draft date)
+- - Dataset documentation: column descriptions, missingness patterns, coverage stats
+- - Training dataset has ≥2000 players with both college features and NBA targets
+- - No leakage detected (manual spot-check of high-profile players)
+- **Goal**: Design the Generative Prospect Model architecture per proposal spec.
+- 4. **Auxiliary Heads**: `p(a_i,1 | z_i, context)` - predicts year-1 EPM, gap features
+- - **Transformer**: Attention over player-seasons, latent bottleneck
+- **Goal**: End-to-end training script with proper validation and monitoring.
+- - Out-of-sample RAPM prediction: RMSE < 2.0 (minutes-weighted)
+- - Calibration: PIT histogram is uniform (predicted intervals match actual coverage)
+- **Goal**: Validate model on historical drafts to ensure it would have worked in the past.
+- - Remove Tier 2 spatial features → measure performance drop
+- - Ablation: Tier 2 features improve prediction by ≥5% (RMSE reduction)
+- **Goal**: Deploy model for prospect-only inference (no NBA data).
+- **Goal**: Set up continuous monitoring and retraining pipeline.
+- - Drift detected within 1 week of distribution shift
+- 1. **Historical Box Score Backfill** (Phase 1.2): Blocks usage gap features and advanced rate stats
+- 2. **Historical Scraping Completion** (Phase 1.1): Need 2010-2019 coverage for full 15-year model
+- 2. Recency weighting (can use full-season aggregates initially)
+- - Historical coverage: 2010-2025 with ≥80% game coverage per season
+- - Feature store: ≥2000 players with complete college features + NBA targets
+- - No data quality violations (uniqueness, range checks, leakage)
+- - Out-of-sample RAPM prediction: RMSE < 2.0 (minutes-weighted)
+- - ✅ `nba_scripts/build_unified_training_table.py` - Merges college features + NBA targets
+- - ✅ `data/warehouse_v2/` - For NBA targets
+- - Gathering minutes/rotation data for usage and RAPM inputs
+- - Target seasons: 2010-2014, 2016, 2018-2019
+- - `prospect_career_v1.parquet`
+- - `dim_player_nba_college_crosswalk.parquet`
+- - `fact_player_year1_epm.parquet`
+- - Run `college_scripts/derive_minutes_from_historical_pbp.py`
+- - This unlocks usage gap for historical players
+
+## ongoing_model_updates.md
+
+### Headings
+- # Ongoing Model Updates Log
+- ## 2026-02-19
+- ### Completed
+- ### Newly Added (within-season development emphasis)
+- ### Current interpretation
+- ### Next candidates
+- ## 2026-02-19 (follow-up fixes after antigravity review)
+- ### Validated vs not validated
+- ### Fixes implemented
+- ### Verification snapshot
+- ### Remaining upstream constraint
+- ## 2026-02-19 (follow-up: trajectory + transfer pace backfill)
+- ### Additional fixes implemented
+- ### Validation snapshot
+- ## 2026-02-19 (iterative residual reweight loop)
+- ### Implemented
+- ### Dataset plumbing changes
+- ### New training flags
+- ### Verification
+- ## 2026-02-19 — Antigravity verification sign-off
+- ### Full pipeline re-validated
+- ### Coverage results (unified table, 1114 rows, 412 cols)
+- ### Reviewed and confirmed correct
+- ### Remaining upstream constraints (expected, not code bugs)
+- ### Tests
+
+### Key Lines
+- - Added NBA pre-train readiness gate:
+- - `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_nba_pretrain_gate.py`
+- - Outputs to `/Users/akashc/my-trankcopy/ml model/data/audit/nba_pretrain_gate*.json`
+- - Wired gate into pipeline runner:
+- - `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_training_pipeline.py` (`--gate`, and gate step in `--all`)
+- - `/Users/akashc/my-trankcopy/ml model/nba_scripts/train_latent_model.py`
+- - Added season-level recalibration artifact:
+- - `season_recalibration.json` saved per latent run.
+- - `/Users/akashc/my-trankcopy/ml model/nba_scripts/nba_prospect_inference.py`
+- - `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_rolling_retrain.py`
+- ### Newly Added (within-season development emphasis)
+- - Added freshman/early-career modulation of within-season gate in encoder:
+- - `/Users/akashc/my-trankcopy/ml model/models/player_encoder.py`
+- - Base within-season gate still depends on availability + last10 exposure.
+- - Additional modulation now uses `career_years` to learn stronger or weaker within-season influence for younger vs older players.
+- - Intended to better capture "freshman improves during season" effects.
+- - post-train season recalibration
+- - early-career-sensitive within-season gating
+- - Add explicit game-order recency weighting in within-season feature builder (`build_within_season_windows_v1.py`).
+- - Add freshman-specific calibration diagnostics (residual by `career_years==1`).
+- - TIER1 sparsity was real and severe.
+- - WITHIN columns were effectively dead (all null/unused).
+- - Added robust final-season possession proxy (`college_poss_proxy`).
+- - Added per-100-possession rates:
+- - `college_ast_total_per100poss`
+- - `college_tov_total_per100poss`
+- - `college_stl_total_per100poss`
+- - `college_blk_total_per100poss`
+- - Backfilled legacy per-40 columns from per-100 proxy when minutes missing.
+- - Added fallback derivation for `final_usage` from final-season count stats.
+- - Set explicit within-season defaults when upstream windows absent (0-filled + explicit gating behavior).
+- - Updated normalization/residual features to use per-100-possession columns.
+- - Switched TIER1 activity features from per-40 to per-100-possession.
+- - Moved sparse impact/wingspan features out of TIER1 into CAREER_BASE.
+- - Result: no low-coverage features remaining in active TIER1.
+- - Coverage improvements:
+- - TIER1 columns now all present and >5% non-null (no dead primary-branch features).
+- - `final_usage`, `final_usage_z`, `final_usage_team_resid` now 100% non-null.
+- - Assisted-share columns now present with strong coverage.
+- - WITHIN branch remains source-limited: defaults are explicit zeros until within-season windows are truly built/populated from player-game data.
+- - `build_prospect_career_store_v2.py`
+- - Added robust fallback for `usage` when minutes-based estimate is unavailable:
+- - primary: minutes + team pace estimate (existing behavior)
+- - fallback: team-season possession share (`poss_total / team_poss_total`)
+- - Result: historical `usage` trajectories are populated for pre-2025 rows.
+- - otherwise use scaled fallback from possession-based proxies
+- - `prospect_career_v1.parquet`
+- - `prospect_career_long_v1.parquet`
+- - Coverage checks after rebuild:
+- - `slope_usage`: 100%
+- - `career_wt_usage`: 100%
+- - `delta_usage`: 100%
+- - `final_usage`: 100%
+- - Added epoch-wise adaptive sample reweighting in `/Users/akashc/my-trankcopy/ml model/nba_scripts/train_latent_model.py`.
+- - `college_final_season`
+- - `within_mask` (within-season feature availability)
+- - Uses empirical-Bayes style shrinkage on group errors and bounded multipliers to prevent instability.
+- - `--reweight-shrinkage`
+- Rebuilt entire chain: `build_prospect_career_store_v2.py` → `build_transfer_context_v1.py` → `build_fact_player_college_development_rate.py` → `build_unified_training_table.py`. Verified final coverage after all Codex patches:
+- ### Coverage results (unified table, 1114 rows, 412 cols)
+- | `college_ast/tov/stl/blk_total_per100poss` | 0% (per40 dead) | **100%** |
+- | `final_usage` / `_z` / `_team_resid` | 0.3% | **100%** |
+- | `slope_usage` / `career_wt_usage` / `delta_usage` | 0.2% | **100%** |
+- | `final_has_ws_last10` + all WITHIN cols | 0% | **100%** (explicit zero defaults) |
+- - **Career store usage fallback**: team-season possession share (`poss_total / team_poss_total`) is the right signal when minutes are missing — captures load/role without requiring per-game minutes.
+- - **Transfer pace proxy**: 3-tier fallback (team_pace → poss/games → calibrated poss×scale) with `transfer_pace_proxy_flag` for downstream quality control. Sound.
+- - **Iterative reweight loop**: empirical-Bayes shrinkage `(n/(n+τ)) * group_err + (τ/(n+τ)) * global_err` with bounded multipliers [0.7, 1.4] and mean-normalization to prevent implicit LR shifts. Architecture is solid.
+- - **Encoder column moves**: sparse impact/wingspan correctly in gated CAREER_BASE, per100poss rates in TIER1. No dead features in primary branch.
+- - WITHIN branch: all zeros — within-season window builder not yet created/run
+- - 1-epoch smoke train → **passes** (Tier1=23, Tier2=9, Career=28, Within=6)
+
+## phase1_2_implementation_review.md
+
+### Headings
+- # Phase 1.2 Implementation Review: Historical Box Score Backfill
+- ## 1. Objective
+- ## 2. Implementation Summary
+- ### A. Logic
+- ### B. Output Artifact
+- ## 3. Validation Results (2015 Source)
+- ## 4. Next Steps
+
+### Key Lines
+- **Component**: `derive_minutes_from_historical_pbp.py`
+- Reconstruct "Volume Stats" (Minutes and Turnovers) for historical seasons (2010-2018) where traditional box scores are missing. Use the high-fidelity `fact_play_historical` (cleaned PBP) as the source of truth.
+- *   **Minutes**: Calculated via `Time On Floor` from the reconstructed `onFloor` JSON.
+- *   **Result**: 1.16M minutes derived for 2015 (~200 mins/game), matching theoretical max.
+- *   **Result**: ~10 turnovers per game derived. While lower than true ~26/game (due to text ambiguity), it provides a sufficient non-zero signal for Usage Rate calibration.
+- *   **File**: `data/warehouse_v2/fact_player_season_stats_backfill.parquet`
+- *   `season` (int)
+- *   `minutes_derived` (float)
+- | **Total Minutes** | 1,166,158 | ✅ **Perfect Alignment** (Max possible for ~6k games) |
+- *   *Command*: `python college_scripts/derive_minutes_from_historical_pbp.py --all`
+- 2.  **Merge**: Update `build_college_feature_store_v1.py` to join this backfill table when `fact_player_season_stats` is missing minutes.
+- 3.  **Usage Gap**: Re-run Phase 4 Gap Analysis once 2010-2018 minutes are populated.
+
+## phase1_execution_review.md
+
+### Headings
+- # Phase 1 Execution Review - Cursor Analysis
+- ## Executive Summary
+- ## Coverage Analysis
+- ### Current Metrics
+- ### Coverage Interpretation
+- ### Recommended Investigation
+- # Run this analysis to see era breakdown
+- # Check missingness by era
+- ## Data Quality Checks
+- ### ✅ Validation Needed
+- # Check year1_ast_rim_pct and year1_pullup_2p_freq are [0,1]
+- # Check count columns are non-negative
+- # Check ORTG values are in reasonable range (typically 90-120)
+- # Flag if mean is outside 90-120 range (might indicate data issue)
+- ### Distribution Checks
+- ## Code Quality Assessment
+- ### ✅ Fixes Applied (Good)
+- ### ⚠️ Potential Improvements
+- # ... existing validation ...
+- # NEW: Coverage checks
+- # Warn if coverage drops below threshold
+- # Check era breakdown
+- # In build_fact_year1_epm(), after creating be_extract:
+- # Validate percentage columns
+- ## Recommendations for Antigravity
+- ### Immediate Actions
+- ### Phase 4 Prerequisites Status
+- ## Final Verdict
+- ## Questions for Antigravity
+
+### Key Lines
+- **Status**: ✅ **SUCCESSFUL** with acceptable coverage
+- Phase 1 implementation executed successfully. **69.12% Basketball-Excel Year-1 coverage** is **acceptable** given data availability constraints. The implementation is production-ready, but we should investigate the missing 30% to understand if it's systematic (era-related) or random.
+- ## Coverage Analysis
+- | **Basketball-Excel Year-1** | 69.12% (1,701 / 2,461) | ✅ Acceptable |
+- | **EPM Year-1** | 56.56% (1,392 / 2,461) | ✅ Expected (EPM has less coverage) |
+- ### Coverage Interpretation
+- 1. **Basketball-Excel Data Availability**: Basketball-Excel covers **2005-2025** seasons. Players with rookie seasons **before 2005** will not have BE Year-1 data.
+- - **Expected Gap**: Players drafted before 2004 (rookie season < 2005)
+- - **Impact**: ~30% missing is consistent with ~15-20 years of pre-BE players
+- 2. **EPM Coverage Lower**: EPM (56.56%) is lower than BE (69.12%), which is expected because:
+- - Some players may not meet EPM's minimum minutes threshold
+- - EPM files may not cover all seasons that BE covers
+- 3. **Complementary Coverage**: BE fills gaps where EPM is missing, and vice versa.
+- fact_y1 = pd.read_parquet('data/warehouse_v2/fact_player_year1_epm.parquet')
+- df = fact_y1.merge(dim_player[['nba_id', 'rookie_season_year']], on='nba_id')
+- df['era'] = pd.cut(df['rookie_season_year'],
+- coverage_by_era = df.groupby('era')['has_year1_be'].agg(['mean', 'count'])
+- print(coverage_by_era)
+- - **Pre-2005 eras**: ~0% BE coverage (data doesn't exist)
+- - **2005-2010**: ~80-90% coverage (some tracking data gaps)
+- - **2010+**: ~95%+ coverage (full tracking data available)
+- 1. **Percentage Columns in Valid Range**:
+- # Check year1_ast_rim_pct and year1_pullup_2p_freq are [0,1]
+- pct_cols = ['year1_ast_rim_pct', 'year1_pullup_2p_freq']
+- count_cols = ['year1_corner_3_att', 'year1_dunk_att', 'year1_deflections']
+- ortg_cols = ['year1_on_ortg', 'year1_off_ortg']
+- - **`year1_corner_3_att`**: Right-skewed (most players take few corner 3s, specialists take many)
+- - **`year1_dunk_att`**: Right-skewed (bigs take many, guards take few)
+- - **`year1_ast_rim_pct`**: Bimodal (creators ~0.2-0.4, finishers ~0.7-0.9)
+- - **`year1_pullup_2p_freq`**: Right-skewed (most players low, creators high)
+- - **`year1_deflections`**: Right-skewed (defensive specialists high)
+- - **`year1_on_ortg` / `year1_off_ortg`**: Normal-ish (team-level metric)
+- 1. **Path Fix**: `WHITELIST_PATH` corrected to `config/nba_aux_whitelist_v2.yaml` ✓
+- **1. Add Coverage Validation to Build Script**
+- # NEW: Coverage checks
+- if 'has_year1_be' in fact_y1.columns:
+- be_coverage = fact_y1['has_year1_be'].mean()
+- print(f"Year 1 Basketball-Excel Coverage: {be_coverage:.2%}")
+- # Warn if coverage drops below threshold
+- if be_coverage < 0.65:
+- print(f"⚠️  WARNING: BE coverage below 65% threshold")
+- if 'rookie_season_year' in fact_y1.columns:
+- era_coverage = fact_y1.groupby(
+- pd.cut(fact_y1['rookie_season_year'],
+- )['has_year1_be'].mean()
+- print("Coverage by Era:")
+- print(era_coverage)
+- Add validation for percentage columns:
+- # In build_fact_year1_epm(), after creating be_extract:
+- # Validate percentage columns
+- pct_cols = ['year1_ast_rim_pct', 'year1_pullup_2p_freq']
+- 1. **✅ Proceed to Phase 4**: Coverage is acceptable. No blocking issues.
+- - If post-2005 players are missing BE data, investigate why
+- - Verify percentage columns are in [0,1]
+- - ⏳ College store enhancement (add TS%, usage)
+- - ⏳ NBA-College crosswalk (build matching table)
+- 1. Enhance `build_prospect_career_store.py` to add `final_ts_pct` and `final_usage`
+- 2. Build `build_nba_college_crosswalk.py` to link NBA players to college athletes
+- **Coverage Assessment**: **69.12% is acceptable** given:
+- - Pre-2005 players cannot have BE Year-1 data
+- **Recommendation**: **Proceed to Phase 4** after completing prerequisites (college store + crosswalk).
+- 2. **Distribution Check**: Have you validated that `year1_ast_rim_pct` and `year1_pullup_2p_freq` are all in [0,1] range? (Quick sanity check.)
+- 3. **On/Off ORTG**: Are `year1_on_ortg` and `year1_off_ortg` values in reasonable ranges (typically 90-120)? (Some data sources have scaling issues.)
+- - Mark as missing and exclude from aux loss?
+
+## phase2_feature_store_hardening.md
+
+### Headings
+- # Phase 2: Feature Store Hardening - Detailed Implementation Plan
+- ## Overview
+- ## 2.1 Finish Historical Backfill
+- ### Objective
+- ### Current Status
+- ### Implementation Steps
+- # Process all seasons that have cleaned PBP files
+- ## 2.2 Implement Windowed Activity Ghost Fill
+- ### Objective
+- ### Problem Statement
+- ### Solution: Windowed Activity
+- ### Integration Steps
+- # Compare outputs:
+- # - Original: clean_historical_pbp_v2.py
+- # - Improved: clean_historical_pbp_v2_windowed.py
+- #
+- # Validation: Check if windowed approach reduces lineup errors
+- # (e.g., starters appearing in 2nd half of blowouts)
+- ## 2.3 Build Unified Training Table
+- ### Objective
+- ### Current State
+- ### Target Schema
+- ### Implementation
+- ## 2.4 Feature Normalization & Era Adjustment
+- ### Objective
+- ### Normalization Strategies
+- ### Implementation
+- ## 2.5 Enhanced RAPM & Leverage Features (COMPLETED - Jan 2025)
+- ### Objective
+- ### Implemented Enhancements
+- ### Success Criteria
+- ## Dependencies & Blockers
+- ### Critical Blockers
+- ### Nice-to-Have (Not Blocking)
+- ## Success Criteria (Overall Phase 2)
+
+### Key Lines
+- Phase 2 focuses on **hardening the feature store** to ensure robust, normalized features that work across the 15-year span (2010-2025). This phase addresses data quality, normalization, and the creation of a unified training table.
+- Complete the historical box score backfill for all available scraped seasons (2010-2018).
+- - ✅ **2015**: Completed (1.16M minutes derived)
+- - ✅ **2017**: Completed (48k minutes derived)
+- **Step 2.1.1: Run Backfill for All Available Seasons**
+- # Process all seasons that have cleaned PBP files
+- python college_scripts/derive_minutes_from_historical_pbp.py --all
+- - Check minutes totals per season (should be ~200 min/game × games)
+- - Check turnover rates (should be ~10-15 per game, ~40-60% capture)
+- - Spot-check 10-20 high-profile players per season
+- 1. Load backfill parquet: `fact_player_season_stats_backfill.parquet`
+- 2. Crosswalk `player_name` + `team_name` → `athlete_id` (fuzzy matching)
+- 3. Merge with existing `fact_player_season_stats` in DuckDB
+- - `fact_player_season_stats` updated with minutes/turnovers for 2010-2018
+- - Coverage report: `data/validation_reports/backfill_coverage_{DATE}.csv`
+- - Minutes coverage: ≥70% of player-seasons for 2010-2018
+- - Turnover coverage: ≥40% (acceptable given text extraction limitations)
+- - **Error**: Starter hasn't played since minute 20, shouldn't be on floor at minute 35
+- **Concept**: Track activity in rolling time windows (e.g., last 10 minutes).
+- - `WindowedGameSolver`: Improved solver using windowed activity
+- - Compare lineup accuracy (manual spot-checks on known games)
+- - Measure improvement (e.g., % of games with correct lineups)
+- - Or create hybrid: use windowed for games with >20 point margin, global otherwise
+- - Windowed approach reduces lineup errors by ≥10% (measured on validated games)
+- - `college_features_v1.parquet` (athlete-season-split)
+- - `prospect_career_v1.parquet` (athlete-level)
+- - `fact_player_year1_epm.parquet` (NBA Year-1)
+- **Grain**: `(athlete_id, season)` (one row per player-season)
+- **College Features (Tier 1 - Universal)**:
+- - `garbage_att_rate`
+- - `seconds_on`, `games_played`
+- - `opp_rank` (opponent strength)
+- **College Features (Tier 2 - Spatial, 2019+)**:
+- - `xy_shots`, `xy_coverage` (coverage flags)
+- - `minutes_total` (from backfill or box scores)
+- - `usage_proxy` (derived: `(FGA + 0.44*FTA + TOV) / poss`)
+- **College Career Summary** (from `prospect_career_v1`):
+- - `final_trueShootingPct`, `final_usage`
+- - `career_years`
+- - `career_wt_*` (recency-weighted)
+- **NBA Targets** (for training only, NOT for inference):
+- - `year1_epm_tot`, `year1_epm_off`, `year1_epm_def`
+- - `season`, `athlete_id`, `teamId`
+- - `draft_year` (if known)
+- - `has_spatial_data`, `has_athletic_testing` (coverage flags)
+- 2. Join career summary (final season features)
+- 3. Join NBA targets via crosswalk (only for historical NBA players)
+- 6. Add coverage flags
+- - **One row per player-season**: Model sees each season as a separate observation
+- - **Leakage prevention**: Only join NBA targets for players with `draft_year < current_year`
+- - Schema documentation: Column descriptions, missingness patterns, coverage stats
+- - Table has ≥2000 player-seasons with both college features and NBA targets
+- - No leakage detected (manual spot-check of high-profile players)
+- **1. Z-Score by Era (Season-Level)**
+- - For rates with season drift (AST%, pace, 3P rates)
+- - Formula: `z = (value - season_mean) / season_std`
+- - Store: raw value, season baseline, z-score
+- **2. Logit Transform (Percentages)**
+- - For percentage features (FG%, assisted share, etc.)
+- - Use league-wide priors per season
+- **4. Coverage Masks**
+- 3. Add coverage mask generation
+- - Era normalization removes season-level drift (correlation with season < 0.1)
+- ## 2.5 Enhanced RAPM & Leverage Features (COMPLETED - Jan 2025)
+- Extend RAPM computation with leverage-aware variants and add athleticism/pressure features.
+- **1. Win Probability & Leverage Model** (`calculate_historical_rapm.py`)
+- - `compute_leverage_index()`: Expected WP swing from possession outcomes (pbpstats methodology)
+- - Leverage buckets: `garbage`, `low`, `medium`, `high`, `very_high`
+- **2. RAPM Variants** (all per-season):
+- | `rapm_standard` | Possession-weighted (original) | Baseline impact |
+- | `rapm_leverage_weighted` | Weights by leverage index | Clutch performance |
+- | `rapm_high_leverage` | High/very_high stints only | Crunch time specialists |
+- | `rapm_non_garbage` | Excludes garbage time | Cleaner signal |
+- - `rim_pressure_index`: (rim_fga + 0.44*FTA) / poss (rim gravity)
+- - `leverage_poss_share`: High-leverage poss / total poss (clutch usage)
+- - All RAPM variants computed for 2010-2025 seasons
+- 1. **Historical Backfill Completion** (2.1): Blocks usage features for 2010-2018
+- 2. Recency weighting (can use full-season aggregates initially)
+- - Historical backfill: ≥70% minutes coverage for 2010-2018
+- - Unified table: ≥2000 player-seasons with complete features
+- - Era normalization: Season-level drift removed (correlation < 0.1)
+- - Coverage flags: All Tier 2 features have explicit masks
+
+## phase3_model_training.md
+
+### Headings
+- # Phase 3: Model Training - Detailed Implementation Plan
+- ## Overview
+- ## 3.1 Build NBA Data Loader (PyTorch)
+- ### Objective
+- ### Current State
+- ### Target Schema
+- # Shot Profile (Low-Resolution Zones)
+- # Creation Context
+- # Impact Metrics
+- # Team Context
+- # Volume & Usage
+- # Career Summary (Final Season)
+- # Primary Target
+- # Auxiliary Targets
+- # Binary Target
+- ### Implementation
+- # Load unified table
+- # Filter by target_seasons
+- # Apply feature transforms (z-score, logit, etc.)
+- # Generate coverage masks
+- # Apply Tier 2 dropout (if training)
+- # Return:
+- # - X: Feature tensor [num_features]
+- # - y_primary: gap_rapm (or None if inference)
+- # - y_aux: gap_ts, gap_usg, nba_year1_minutes (or None)
+- # - y_binary: made_nba (or None)
+- # - masks: coverage masks, target masks
+- # - metadata: athlete_id, season, draft_year
+- ## 3.2 Implement Tier 2 Masking (Dropout)
+- ### Objective
+- ### Strategy
+- ### Implementation
+- # Identify Tier 2 feature indices
+- # Random dropout
+- # Mask features (set to NaN or learned "missing" value)
+- ## 3.3 Train Baseline Model (XGBoost)
+- ### Objective
+- ### Why XGBoost First?
+- ### Implementation
+- ## 3.4 Train Advanced Model (MLP/Transformer)
+
+### Key Lines
+- **Input Features (X)** - One row per `(athlete_id, season)`:
+- **Tier 1 (Universal - Always Available)**:
+- - garbage_att_rate
+- - seconds_on, games_played
+- - opp_rank (opponent strength proxy)
+- # Volume & Usage
+- - minutes_total, tov_total
+- - usage_proxy (derived: (FGA + 0.44*FTA + TOV) / poss)
+- # Career Summary (Final Season)
+- - final_trueShootingPct, final_usage
+- - career_years
+- - career_wt_* (recency-weighted)
+- **Tier 2 (Spatial - 2019+ Only, with Masking)**:
+- - xy_shots, xy_3_shots, xy_rim_shots (coverage counts)
+- **Coverage Masks**:
+- **Targets (Y)** - Only for training, NOT for inference:
+- # Auxiliary Targets
+- - gap_ts_legacy (NBA Year-1 TS% - College Final TS%)
+- - gap_usg_legacy (NBA Year-1 Usage - College Final Usage)
+- - nba_year1_minutes (Survival proxy)
+- - made_nba (0/1) - Did player play ≥100 NBA minutes?
+- target_seasons: List[int] = None,  # None = all seasons
+- include_targets: bool = True,  # False for inference
+- tier2_dropout_rate: float = 0.0,  # For training: randomly mask Tier 2
+- # Filter by target_seasons
+- # Generate coverage masks
+- # Apply Tier 2 dropout (if training)
+- # - y_aux: gap_ts, gap_usg, nba_year1_minutes (or None)
+- # - masks: coverage masks, target masks
+- # - metadata: athlete_id, season, draft_year
+- 1. **Era Normalization**: Z-score by season (for rates with drift)
+- 2. **Logit Transform**: For percentages (FG%, assisted share, etc.)
+- 4. **Missingness**: Explicit `NaN` → `0.0` with coverage mask
+- 5. **Tier 2 Dropout**: Randomly mask Tier 2 features (training only)
+- - Unit tests: Test data loading, transforms, masking
+- - Tier 2 dropout works (random masking during training)
+- ## 3.2 Implement Tier 2 Masking (Dropout)
+- Prevent model from over-relying on Tier 2 spatial features (which are missing for 2010-2018).
+- - During training, randomly mask Tier 2 features even for modern players (2019+)
+- - Forces model to learn from Tier 1 features
+- - Use actual coverage masks (`has_spatial_data`)
+- - If `has_spatial_data=0`, set all Tier 2 features to `NaN` (or learned "missing" embedding)
+- def apply_tier2_dropout(features, tier2_mask, dropout_rate=0.3):
+- Randomly mask Tier 2 features during training.
+- tier2_mask: Boolean mask indicating Tier 2 features
+- dropout_rate: Probability of masking each Tier 2 feature
+- features: Features with some Tier 2 masked
+- dropout_mask: Which Tier 2 features were masked (for logging)
+- # Identify Tier 2 feature indices
+- tier2_indices = torch.where(tier2_mask)[0]
+- dropout_mask = torch.rand(len(tier2_indices)) < dropout_rate
+- masked_indices = tier2_indices[dropout_mask]
+- # Mask features (set to NaN or learned "missing" value)
+- features[masked_indices] = float('nan')  # Or learned embedding
+- return features, dropout_mask
+- - Model should handle `NaN` gracefully (e.g., learned "missing" embeddings)
+- - Or: Use coverage mask to zero out masked features
+- - Validation: Model performance with/without Tier 2 dropout
+- - Model can train with Tier 2 dropout
+- - Model learns to rely on Tier 1 features (not just Tier 2)
+- - **Train**: 2010-2017 seasons
+- - **Val**: 2018-2019 seasons
+- - **Test**: 2020-2022 seasons
+- - **Target**: `gap_rapm` (primary), `gap_ts_legacy`, `gap_usg_legacy` (auxiliary)
+- - Coverage masks: Include as features
+- - Feature importance makes sense (e.g., usage, efficiency, impact metrics)
+- - MLP for Tier 1 features, Transformer for Tier 2
+- self.head_aux_ts = nn.Linear(prev_dim, 1)  # gap_ts
+- self.head_aux_usg = nn.Linear(prev_dim, 1)  # gap_usg
+- 'pred_aux_ts': self.head_aux_ts(z),
+- 'pred_aux_usg': self.head_aux_usg(z),
+- **Experiment 1: Tier 1 Only vs Tier 1 + Tier 2**
+- - Train model with Tier 1 only
+- - Train model with Tier 1 + Tier 2 (with dropout)
+- 1. **Unified Training Table** (Phase 2.3): Must be complete before training
+- 2. **Feature Transforms** (Phase 2.4): Must be implemented before training
+- - Tier 2 dropout works (model doesn't over-rely on Tier 2)
+
+## phase4_execution_analysis.md
+
+### Headings
+- # Phase 4 Execution Analysis - Cursor Review
+- ## Executive Summary
+- ## Coverage Analysis
+- ### Crosswalk Match Rate: 45.3% (1,114 / 2,461)
+- ### TS% Gap Coverage: 859 players (~77% of matched)
+- # Run this to understand the 255 missing
+- # Find matched players missing TS gap
+- # Check why they're missing
+- ### Usage Gap Coverage: Improved (2026-01-29)
+- ### Spatial Gap Coverage: New (2026-01-29)
+- ## Data Quality Validation
+- ### TS% Gap Distributions
+- # Check outliers
+- ### Usage Gap Distributions
+- ## Implementation Quality Assessment
+- ### ✅ Strengths
+- ### ⚠️ Areas for Improvement
+- ## Recommendations
+- ### Immediate Actions
+- ### Long-Term Actions
+- ## Integration Recommendations
+- ### For Model Training
+- ### Code Updates Needed
+- # In nba_data_loader.py
+- # ... existing ...
+- # 'gap_usg_legacy',  # TODO: Enable once historical box scores ingested
+- ## Final Verdict
+- ## Questions for Antigravity
+
+### Key Lines
+- Phase 4 execution completed successfully. The implementation is **correct and production-ready**. Coverage numbers reflect **data availability constraints**, not code issues. Key findings:
+- - **Crosswalk**: 45.3% match rate is **optimal** given PBP data starts in 2010
+- - **TS% Gap**: 859 players (~77% of matched) is **good coverage**
+- - **TS% Gap**: 859 players (~77% of matched) is **good coverage**
+- - **Usage Gap**: Partially solved via **PBP-derived Minutes/TOV** (2015, 2017) and **Positional Proxies**.
+- ## Coverage Analysis
+- ### Crosswalk Match Rate: 45.3% (1,114 / 2,461)
+- - Players drafted before 2010 (rookie season < 2011) won't have college PBP data
+- - This excludes ~15 years of NBA players (2000-2010 drafts)
+- ### TS% Gap Coverage: 859 players (~77% of matched)
+- **Assessment**: ✅ **GOOD** but investigate the 255 missing
+- - Crosswalk matched: 1,114 players
+- Possible reasons:
+- 1. **Missing NBA Year-1 TS%**: Player doesn't have `year1_tspct` in EPM data
+- - Low minutes players (< 200 MP threshold?)
+- - Players who didn't play Year-1 (injured, overseas, etc.)
+- - Player had no shots in final season (redshirt, injury, etc.)
+- crosswalk = pd.read_parquet('data/warehouse_v2/dim_player_nba_college_crosswalk.parquet')
+- nba_y1 = pd.read_parquet('data/warehouse_v2/fact_player_year1_epm.parquet')
+- college = pd.read_parquet('data/college_feature_store/prospect_career_v1.parquet')
+- matched_ids = crosswalk['nba_id'].unique()
+- missing_df = nba_y1[nba_y1['nba_id'].isin(missing_ids)][['nba_id', 'year1_tspct', 'year1_mp']]
+- crosswalk[crosswalk['nba_id'].isin(missing_ids)]['athlete_id']
+- print(f"Missing NBA TS%: {missing_df['year1_tspct'].isna().sum()}")
+- **Recommendation**: Investigate the 255 missing to understand if it's:
+- - Data quality issue (should be fixable)
+- - Expected missingness (low minutes, injuries, etc.)
+- ### Usage Gap Coverage: Improved (2026-01-29)
+- - Instead of relying on `fact_player_season_stats` (which is empty 2006-2024), we derived **Minutes Played** and **Turnovers** by traversing raw PBP text files.
+- - **Coverage**: Valid for 2015 (VanVleet era) and 2017 (UNC era).
+- - **Global Fallback**: Created `final_poss_total` (Possessions On-Floor) as the canonical volume divisor when minutes are missing.
+- - **Result**: `final_usage` now populated for meaningful historical cohorts.
+- ### Spatial Gap Coverage: New (2026-01-29)
+- - `gap_dist_leap`: NBA Year 1 Avg Dist - College Final Avg Dist.
+- - `gap_corner_rate`: NBA Year 1 Corner 3 Rate - College Final Corner 3 Rate.
+- - **Coverage**: ~15% of total matched players (primarily 2019-2025 drafts).
+- - **Usage Gap**: Broken because usage needs minutes/TOV (from box scores)
+- - **Current State**: Only players from 2005 or 2025 can have usage gaps
+- 2. Were matched in crosswalk
+- 3. Have both NBA Year-1 usage AND college final usage
+- ### Usage Gap Distributions
+- - Expected mean: ~ -0.05 (NBA usage typically lower than college)
+- - Some positive gaps are OK (players who increased usage)
+- 1. **Crosswalk Optimization**: First-letter blocking + temporal constraints reduced candidate space dramatically (145M → 7M)
+- 4. **Scaling Detection**: Auto-detects usage scale (0-100 vs 0-1)
+- 1. **Coverage Reporting**: Add breakdown of why TS% gaps are missing (NBA vs College side)
+- 2. **Usage Gap Fallback**: Consider alternative usage calculation that doesn't require box scores
+- - Ready to integrate as auxiliary target
+- 2. **⏳ Investigate Missing TS% Gaps**:
+- 3. **⏳ Historical Box Score Ingestion** (Priority for Usage Gap):
+- - Ingest `fact_player_season_stats` for 2006-2024
+- - This will unlock Usage Gap for historical players
+- - **Impact**: Would increase Usage Gap coverage from 2 → ~400-500 players
+- 1. **Alternative Usage Calculation**:
+- - Consider using PBP-derived usage proxy that doesn't require box scores
+- - Formula: `(FGA + 0.44*FTA + TOV_from_PBP) / (Player_Possessions_from_PBP)`
+- 2. **Crosswalk Expansion**:
+- - Update data dictionary with coverage expectations
+- - ✅ **Ready to use** as auxiliary target
+- - Coverage: 859 players (~35% of NBA cohort, ~77% of matched)
+- - Add to `nba_data_loader.get_feature_columns()['aux_targets']`
+- - Add to `FORBIDDEN_FEATURE_COLUMNS` to prevent leakage
+- **Usage Gap (`gap_usg_legacy`)**:
+- - Current coverage (2 players) is insufficient for modeling
+- - Once historical data ingested, should have ~400-500 players
+- 'aux_targets': [
+- 'year1_epm_tot', 'year1_epm_off', 'year1_epm_def', 'year1_epm_ewins',
+- **Coverage Assessment**:
+- - **Crosswalk**: 45.3% is optimal given PBP data constraints ✓
+- - **TS% Gap**: 859 players is good coverage, investigate 255 missing ✓
+- - **Usage Gap**: 2 players is expected given missing historical box scores ⚠️
+- - **Investigate missing TS% gaps** (255 players)
+- - **Prioritize historical box score ingestion** to unlock Usage Gap
+- **No code changes needed** - implementation is correct. The coverage numbers reflect data availability, not implementation issues.
+- 1. **Missing TS% Gaps**: Can you investigate why 255 matched players don't have TS% gaps? (NBA side missing? College side missing? Both?)
+- 3. **Usage Gap Alternative**: Should we explore PBP-derived usage calculation as a fallback until box scores are available?
+- 4. **Model Integration**: Should I update `nba_data_loader.py` to include `gap_ts_legacy` as an auxiliary target now, or wait?
+
+## phase4_implementation_review.md
+
+### Headings
+- # Phase 4 Implementation Review: Adaptation Gaps
+- ## 1. Execution Summary
+- ## 2. Key Findings
+- ### Coverage & Matching
+- ### Data Quality & Gaps
+- ## 3. Technical Implementation Details
+- ### College Store V2
+- ### Crosswalk (Fuzzy Matching)
+- ### Gap Analysis
+- ## 4. Recommendations
+
+### Key Lines
+- 1. `build_prospect_career_store_v2.py`: Derived college TS% and Usage.
+- 2. `build_nba_college_crosswalk.py`: Linked NBA IDs to College IDs.
+- ### Coverage & Matching
+- - **Crosswalk Match Rate**: **45.3%** (1,114 / 2,461 NBA players).
+- - **Usage Gap**: **Partially Resolved** (2015, 2017 Blocks).
+- - *Progress*: Minutes/TOV were derived by traversing raw PBP text for validation eras.
+- - *Fallback*: established `final_poss_total` as the universal volume proxy for historical usage where minutes remain missing.
+- - *Metrics*: `final_avg_shot_dist`, `final_corner_3_rate` added to Tier 2.
+- - *Precision*: Gated by `xy_3_shots >= 15`.
+- - **Usage Proxy**: Calculated as `PlayEnds / (Minutes / 40 * TeamPace)`.
+- - **Optimization**: Implemented vectorized calculations to handle 145k+ athlete-season rows in seconds.
+- ### Crosswalk (Fuzzy Matching)
+- - **Scaling Detection**: Implemented auto-scaling for NBA Usage (decimal vs percentage) to ensure `NBA - College` comparisons are apples-to-apples.
+- 1. **Warehouse Refinement**: Ingest historical college box scores (2010-2024) to the DuckDB `fact_player_season_stats` table to unlock historical Usage Gap analysis.
+- 2. **Model Training**: Use `gap_ts_legacy` as an auxiliary target immediately. For the 255 players missing TS gaps (but bridged), investigate if their college shots were missing from the PBP source.
+- 3. **Manual Spot Check**: Verify high-match-score outliers in `dim_player_nba_college_crosswalk_debug.parquet`.
+- **Verdict**: The pipeline is production-ready. The logic is sound, but the "Usage Gap" utility is currently gated by data availability.
+
+## phase4_validation.md
+
+### Headings
+- # Phase 4: Validation & Analysis - Detailed Implementation Plan
+- ## Overview
+- ## 4.1 Walk-Forward Validation
+- ### Objective
+- ### Why Walk-Forward?
+- ### Split Strategy
+- ### Implementation
+- ## 4.2 Analyze "Misses" (Error Analysis)
+- ### Objective
+- ### Analysis Framework
+- ### Implementation
+- # Calculate metrics for each era
+- ## 4.3 Feature Importance Analysis
+- ### Objective
+- ### Methods
+- ### Implementation
+- ## 4.4 Calibration Analysis
+- ### Objective
+- ### Methods
+- ### Implementation
+- # Bin predictions
+- # Compute actual frequency in each bin
+- # Plot
+- ## 4.5 Model Comparison & Selection
+- ### Objective
+- ### Comparison Metrics
+- ### Implementation
+- ## Dependencies & Blockers
+- ### Critical Blockers
+- ### Nice-to-Have (Not Blocking)
+- ## Success Criteria (Overall Phase 4)
+
+### Key Lines
+- Validate model using time-aware train/val/test splits (no future data leakage).
+- - Standard K-Fold CV would leak future data (train on 2020, test on 2015)
+- - We need to simulate real-world usage: train on past, predict future
+- **Train**: 2010-2017 seasons
+- - **Rationale**: Enough data (8 seasons), before modern era (2019+ spatial data)
+- - **Players**: ~15,000 player-seasons
+- **Validation**: 2018-2019 seasons
+- - **Players**: ~4,000 player-seasons
+- **Test**: 2020-2022 seasons
+- - **Rationale**: Modern era (full spatial data), but recent enough for 3yr NBA targets
+- - **Players**: ~5,000 player-seasons
+- 2. Split by `season` (not random)
+- - Examples: High-usage college players who didn't translate
+- - Question: Did model over-weight usage/efficiency?
+- - Examples: Jokic, Draymond Green (low-usage, high-impact)
+- - Compare model performance with/without Tier 2 features
+- def compare_by_era(predictions, actuals, seasons):
+- pre_2018 = seasons < 2018
+- post_2018 = seasons >= 2018
+- - Top 10 features are interpretable (usage, efficiency, impact metrics)
+- - Measure average deviation from perfect calibration
+- - Memory usage
+- - Performance with/without Tier 2 features
+- 1. **Trained Models** (Phase 3): Must complete before validation
+- 2. **Unified Training Table** (Phase 2.3): Must be complete
+
+## rapm_adjacent_feature_ideas.md
+
+### Headings
+- # RAPM-Adjacent Feature Ideas (Draft-Time Safe)
+- ## Why RAPM-Adjacent?
+- ## Candidate Feature Blocks
+- ### 1) On/Off Proxy Features (from player-game)
+- ### 2) Leverage/Clutch Involvement
+- ### 3) Stint-Based Plus/Minus (Non-Adjusted)
+- ### 4) RAPM Variant Decomposition (from historical solver)
+- ### 5) Role + Context Stability
+- ## Implementation Notes
+
+### Key Lines
+- **Goal**: Add “impact-like” signals that are less brittle than full RAPM and more available than full spatial data.
+- RAPM is powerful but expensive and sensitive to lineup completeness, minutes coverage, and era shifts. These features aim to:
+- - capture *impact* without requiring full multi-season NBA outcomes
+- - remain draft-time safe (college-only inputs)
+- - degrade gracefully when coverage is partial (use `NaN` + masks)
+- Source: DuckDB `fact_player_game` (modern years with player-game coverage).
+- - `on_net_rating` seconds-weighted season mean (already present in some pipelines)
+- - leverage splits if we can compute (high-leverage stints only)
+- - for years without player-game tables, keep `NaN` and `has_onoff = 0`
+- ### 2) Leverage/Clutch Involvement
+- - `fact_player_game` has `high_lev_att`, `garbage_att` (where available)
+- - within-season windows (last5/last10)
+- - `non_garbage_share = 1 - garbage_att / fga`
+- - “late-season form”: deltas from `within_season_windows_v1.parquet`
+- - raw +/- per 100 possessions (with shrinkage)
+- - non-garbage raw +/- per 100
+- - leverage-weighted raw +/-
+- - `calculate_historical_rapm.py` outputs multiple variants (standard, O/D split, leverage-weighted, non-garbage, rubber-band adjusted)
+- - include reliability/exposure (`poss`, minutes, stints)
+- - career progression table
+- - within-season windows
+- - role volatility: `std(usage)` across seasons
+- - late-role-shift: `delta_usage_last5_minus_prev5` (when computable)
+- - Always store missing as `NaN`, never 0, and add a boolean mask.
+- - Prefer exposure-aware shrinkage (minutes/games) before feeding into the model.
+- - Treat “impact proxies” as model inputs, not targets, unless explicitly supervised.
+
+## review_summary_2026_01_29.md
+
+### Headings
+- # Review Summary: Antigravity Changes & Improvements
+- ## Executive Summary
+- ## Zone A: Data Ingestion (1.1 & 1.2)
+- ### Status: ✅ **GOOD**
+- ## Zone B: Feature Store (Ghost Fill Improvement)
+- ### Current Implementation Review
+- ## Zone C: Model Architecture (Loss Function)
+- ### Clarification: What is "Gap = NBA_Metric - College_Metric"?
+- ## Zone D: Input Pipeline (Feature Lists & Implementation)
+- ### Problem: Too Vague
+- ### Solution: Detailed Phase Documents
+- ### Complete Feature List (From Phase 3)
+- ### Feature Selection Strategy
+- ### Baseline vs Advanced Model
+- ## Improvements Made
+- ### 1. Windowed Activity Ghost Fill ✅
+- ### 2. Gap Concept Clarification ✅
+- ### 3. Detailed Phase Documents ✅
+- ### 4. Master Plan Updates ✅
+- ## Recommendations
+- ### Immediate Next Steps
+- ### Long-Term
+- ## Files Created/Updated
+- ### New Files
+- ### Updated Files
+- ## Questions Answered
+- ### Q1: "Check if the current implementation is fine" (Zone B)
+- ### Q2: "Create a better implementation" (Zone B)
+- ### Q3: "What is NBA metric minus College metric?" (Zone C)
+- ### Q4: "I want more detail about the input pipeline" (Zone D)
+- ### Q5: "What exactly are we thinking for building the feature list?"
+- ### Q6: "What does baseline vs advanced model mean?"
+- ## Final Verdict
+
+### Key Lines
+- 1. **WindowedActivityTracker**: Tracks activity in rolling time windows (default 10 minutes)
+- 2. **WindowedGameSolver**: Improved solver using windowed activity
+- - Gap = 0.55 - 0.60 = -0.05 (player's TS% drops by 5 percentage points)
+- **Targets**:
+- - **Auxiliary**: `gap_ts_legacy`, `gap_usg_legacy`, `made_nba` (binary)
+- - Auxiliary targets provide additional signal
+- **Tier 1 (Universal - Always Available)**:
+- - Creation Context: `assisted_share_rim`, `assisted_share_three`, `high_lev_att_rate`, `garbage_att_rate`
+- - Impact Metrics: `on_net_rating`, `on_ortg`, `on_drtg`, `seconds_on`, `games_played`
+- - Team Context: `team_pace`, `conference`, `is_power_conf`, `opp_rank`
+- - Volume & Usage: `minutes_total`, `tov_total`, `usage_proxy`
+- - Career Summary: `final_trueShootingPct`, `final_usage`, `career_years`, `slope_*`, `career_wt_*`
+- **Tier 2 (Spatial - 2019+ Only, with Masking)**:
+- - Coverage flags: `xy_shots`, `xy_3_shots`, `xy_rim_shots`
+- **Coverage Masks**:
+- 1. **Tier 1 Only vs Tier 1 + Tier 2**: Compare performance
+- **Goal**: Identify top 20 most important features, remove redundant ones.
+- - **Goal**: RMSE < 2.0, Correlation > 0.4
+- - **Goal**: Outperform XGBoost (RMSE improvement ≥10%)
+- - Run `derive_minutes_from_historical_pbp.py --all`
+- **A**: ✅ Current implementation is fine, but windowed approach should be better. Created implementation for testing.
+
+## spatial_integration_review.md
+
+### Headings
+- # Spatial Data Integration Review - Cursor Analysis
+- ## Executive Summary
+- ## Implementation Review
+- ### ✅ Correctness Assessment
+- ## Sustainability & Scalability
+- ### ✅ Will Continue to Work as Data Grows
+- ## Minor Improvements (Optional, Not Required)
+- ### 1. Variance Calculation Note
+- ### 2. Left/Right Corner Split (Future Enhancement)
+- ### 3. Documentation Consistency
+- ## Final Verdict
+
+### Key Lines
+- Antigravity's extended spatial feature implementation is **production-ready and well-architected**. The precision gating logic, coverage-aware feature construction, and geometric calculations are all correct. The implementation is **sustainable** and will scale as new data is added.
+- - ✅ **Missingness Handling**: All Tier-2 features correctly set to `np.nan` (not 0) when gating fails
+- **3. Coverage Tracking**
+- - ✅ **xy_coverage**: `xy_shots / shots_total` correctly tracks coordinate availability
+- - ✅ **Export**: Coverage is exported for downstream analysis
+- - The 0-940/0-500 scale is consistent across all seasons (2019-2025)
+- - Normalization logic (`/10.0`) will work for future seasons
+- - Will work for future seasons as long as coordinate coverage remains similar
+- - If coverage improves, more players will meet thresholds (good)
+- - No data leakage risk
+- Currently, `corner_3_rate` aggregates left and right corners. For role fingerprinting, splitting into `left_corner_3_rate` and `right_corner_3_rate` could be valuable.
+
+## within_season_breakout_pipeline.md
+
+### Headings
+- # Within-Season Breakout Pipeline (Windows + Timing)
+- ## Goal
+- ## Data Inputs
+- ## Outputs
+- ## Features (v1)
+- ### A) Window aggregates (last N games)
+- ### B) Within-season breakout timing (continuous)
+- ## Missingness Rules (Critical)
+- ## How The Model Uses This (Archetype-Dependent)
+- ## DAG (End-to-End)
+- ## Validation / QA
+- ## Increasing Coverage (How To Get More Seasons/Games)
+
+### Key Lines
+- # Within-Season Breakout Pipeline (Windows + Timing)
+- ## Goal
+- Capture *within-season* improvement patterns (e.g., “only got good in March”) in a way that:
+- - Works across eras and missing coverage
+- - Avoids fake zeros: missing remains `NaN` with explicit masks
+- This complements *career-stage breakout* (year-to-year timing) already in the career store.
+- ## Data Inputs
+- Primary source (modern coverage):
+- - `dim_games` (season + startDate)
+- - Within-season windows are best-effort when player-game data exists; otherwise features are `NaN`.
+- 1. Per athlete-season within-season windows table:
+- - `data/college_feature_store/within_season_windows_v1.parquet`
+- - Grain: one row per `(athlete_id, season)`
+- 2. Career store augmented:
+- - `data/college_feature_store/prospect_career_long_v1.parquet` (adds per-season window features)
+- - `data/college_feature_store/prospect_career_v1.parquet` (final_* snapshots include final season’s within-season features)
+- ### A) Window aggregates (last N games)
+- Computed when `games_played >= N` (else `NaN`), for `N=5,10`:
+- - `ws_minutes_last5`, `ws_minutes_last10`
+- - `ws_delta_pps_last5_minus_prev5`, `ws_delta_pps_last10_minus_prev10`\n+- `ws_delta_minutes_last5_minus_prev5`, `ws_delta_minutes_last10_minus_prev10`
+- Masks:
+- ### B) Within-season breakout timing (continuous)
+- - `ws_breakout_timing_minutes`
+- - Sort games by `startDate`
+- - Compute rolling-3 metric (minutes, FGA, PPS)
+- - Normalize to `[0,1]` by `(idx / (games_played-1))`
+- Masks:
+- - `has_ws_breakout_timing_*` (1 if enough games)
+- - If a player-season is missing required underlying rows (no player-game data), output is **`NaN`** and mask=0.
+- We want “late within-season breakout” to matter differently by archetype.
+- - Each expert can learn different sensitivities to within-season breakout
+- A[DuckDB: fact_player_game] --> B[Join dim_games (season,startDate)]
+- B --> C[Sort by player-season-date]
+- C --> D[Window Aggregates: last10, prev10]
+- D --> F[within_season_windows_v1.parquet]
+- F --> G[Merge into prospect_career_long_v1 (per season)]
+- H --> I[prospect_career_v1.parquet]
+- J --> K[Latent encoder inputs]
+- - Row count sanity: `within_season_windows_v1` should have <= unique `(athlete_id, season)` present in `fact_player_game`.
+- - Masks sanity: `has_ws_last10` implies `ws_minutes_last10` not null.
+- - NaN safety: seasons without player-game coverage must have `has_ws_* = 0` and window fields `NaN`.
+- ## Increasing Coverage (How To Get More Seasons/Games)
+- Within-season features require player-game coverage (`fact_player_game`). If you only see 2025 or only a handful of games per player, that’s expected when only a partial season was ingested/built.
+- To expand coverage (examples):
+- 1. Ingest additional seasons into the warehouse (requires CBD API key):
+- - `python -m cbd_pbp.cli ingest-season --season 2024 --season-type regular --out data/warehouse.duckdb`
+- - Repeat for seasons you want (e.g., 2019–2025)
+- - `python -m cbd_pbp.cli build-derived --season 2024 --season-type regular --out data/warehouse.duckdb`
+- 3. Re-run within-season windows builder:
+- - `python college_scripts/build_within_season_windows_v1.py`
+- After that, rebuild the career store so the new windows features are joined:
+- - `python college_scripts/build_prospect_career_store_v2.py`
+
+## zone_c_gap_concept_clarification.md
+
+### Headings
+- # Zone C: Gap Concept Clarification
+- ## The Core Concept
+- ### Why Translation (Gap) Instead of Absolute?
+- ### Example: Two Players
+- ## The Targets (Y Variables)
+- ### Primary Target: `gap_rapm`
+- ### Auxiliary Targets
+- ## The Loss Function
+- ### Multi-Task Loss
+- ### Heteroscedastic Variance
+- ## Why This Works
+- ### 1. Era Normalization
+- ### 2. Context-Aware
+- ### 3. Multi-Task Learning
+- ## Common Misconceptions
+- ### ❌ "Gap = 0 means player is average"
+- ### ❌ "Positive gap = player is good"
+- ### ❌ "We're predicting NBA RAPM directly"
+- ## Summary
+
+### Key Lines
+- - Gap = 0.55 - 0.60 = -0.05 (player's TS% drops by 5 percentage points)
+- - Model predicts: "This player's TS% will drop by 0.05" (or "drop less than average")
+- - College TS%: 0.50 (below average)
+- - NBA TS%: 0.48 (still below average, dropped slightly)
+- - Player B: Model thinks below-average college efficiency translates better (less drop)
+- ## The Targets (Y Variables)
+- - Use 3-year peak (best 3 consecutive years) to avoid injury/decline noise
+- ### Auxiliary Targets
+- - Definition: `NBA_Year1_TS% - College_Final_TS%`
+- - Definition: `NBA_Year1_Usage - College_Final_Usage`
+- - Can be positive (player gets more usage) or negative (player gets less)
+- **3. `nba_year1_minutes`**
+- - Definition: Minutes played in NBA Year 1
+- - Binary target: `made_nba = (nba_year1_minutes >= 100)`
+- - Auxiliary targets provide additional signal
+- - `w2 = 0.3` (auxiliary, less important)
+- - `w3 = 0.3` (auxiliary, less important)
+- - Player with 1000 NBA minutes → reliable RAPM
+- - Player with 100 NBA minutes → noisy RAPM
+- - Variance ∝ 1 / (minutes + ε)
+- - Model sees: "Player A had high usage in college, but low efficiency"
+- - Model predicts: "Gap will be large (negative)" (high usage + low efficiency = bad translation)
+- - Model learns: "High usage + high efficiency = good translation"
+- - Auxiliary tasks help regularize the model
+- ### ❌ "Gap = 0 means player is average"
+- - **Wrong**: Positive gap just means player improved (could still be below average)
+- - Multi-task learning (primary + auxiliary targets)
+

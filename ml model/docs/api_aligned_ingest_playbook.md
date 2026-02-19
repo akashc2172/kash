@@ -217,6 +217,40 @@ ORDER BY 1;
 - Keep retries + exponential backoff for `429`, but persist failures to table (not only logs).
 - Avoid full reruns once quota pressure starts; do targeted `gameId` retries.
 - After every batch: run QA SQL above and checkpoint counts in a coverage report.
+- Treat provider-empty responses (`HTTP 200` with empty payload) as terminal by default to avoid quota burn.
+- Recheck provider-empty IDs only in explicit revalidation runs.
+
+## 8.1) Quota-Safe Retry Policy
+
+Use audit artifacts in `data/audit/`:
+- `source_void_games.csv`
+- `retry_policy_cache.json`
+- `ingest_attempts.csv`
+
+Rules:
+1. If `(game_id, endpoint)` is `provider_empty`, skip by default.
+2. If retryable failure has active cooldown, skip until `cooldown_until`.
+3. Use `--force-recheck` only for explicit source revalidation.
+4. Always pass targeted game lists to endpoint ingest to avoid season-wide re-queries.
+
+Example targeted resume:
+```bash
+python -m cbd_pbp.cli resume-ingest-endpoints \
+  --season 2018 \
+  --season-type regular \
+  --endpoints plays \
+  --only-game-ids-file data/audit/some_ids.txt \
+  --out data/warehouse.duckdb
+```
+
+## 8.2) Dual-Gate Readiness
+
+- `model_readiness_gate.json`: API execution gate (pipeline health).
+- `model_readiness_dual_source.json`: data availability gate (API or manual source).
+
+Interpretation:
+- API gate may fail while dual-source gate passes.
+- Production modeling should key off dual-source gate for required families.
 
 ---
 

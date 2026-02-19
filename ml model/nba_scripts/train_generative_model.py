@@ -53,7 +53,20 @@ def load_training_data():
 def prepare_features(df: pd.DataFrame):
     """Prepare feature matrix and targets."""
     # Feature columns (college stats)
-    feature_cols = [c for c in df.columns if c.startswith('college_') or c.startswith('final_') or c.startswith('career_')]
+    feature_cols = [
+        c for c in df.columns
+        if (
+            c.startswith('college_')
+            or c.startswith('final_')
+            or c.startswith('career_')
+            or c.startswith('impact_')
+            or c.startswith('rIPM_')
+            or c.startswith('transfer_')
+            or c.startswith('wingspan_')
+            or c.startswith('standing_reach_')
+            or c in {'has_wingspan', 'has_transfer_context', 'has_impact_raw', 'has_impact_stint', 'has_impact_ripm'}
+        )
+    ]
     # Exclude non-numeric and identifier columns
     exclude = ['college_final_season', 'athlete_id', 'nba_id', 'player_name']
     feature_cols = [c for c in feature_cols if c not in exclude and df[c].dtype in ['float64', 'float32', 'int64', 'int32']]
@@ -83,6 +96,8 @@ def prepare_features(df: pd.DataFrame):
         y_aux['epm_tot'] = df['year1_epm_tot'].values.astype(np.float32)
     if 'gap_ts_legacy' in df.columns:
         y_aux['gap_ts'] = df['gap_ts_legacy'].values.astype(np.float32)
+    if 'dev_rate_y1_y3_mean' in df.columns:
+        y_aux['dev_rate'] = df['dev_rate_y1_y3_mean'].values.astype(np.float32)
     
     return X, y_rapm, exposure, y_aux, feature_cols, (X_mean, X_std)
 

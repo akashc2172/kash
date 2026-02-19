@@ -115,6 +115,7 @@ class MultiTaskLoss(nn.Module):
     Per spec:
     - Primary target: Peak 3Y RAPM (y_peak_ovr/off/def)
     - Auxiliary supervision: Year-1 EPM (year1_epm_tot/off/def)
+    - Auxiliary supervision: Development rate Y1->Y3 (dev_rate_y1_y3_mean)
     - Aux observations: Year-1 stats for p(a|z) likelihood
     
     The auxiliary heads help stabilize latent trait learning.
@@ -123,16 +124,19 @@ class MultiTaskLoss(nn.Module):
         self,
         primary_weight: float = 1.0,
         aux_target_weight: float = 0.3,
-        aux_obs_weight: float = 0.1
+        aux_obs_weight: float = 0.1,
+        dev_weight: float = 0.2,
     ):
         super().__init__()
         self.primary_weight = primary_weight
         self.aux_target_weight = aux_target_weight
         self.aux_obs_weight = aux_obs_weight
+        self.dev_weight = dev_weight
         
         self.primary_loss = HeteroscedasticGaussianNLL()
         self.aux_target_loss = WeightedMSELoss()
         self.aux_obs_loss = WeightedMSELoss()
+        self.dev_loss = WeightedMSELoss()
     
     def forward(
         self,
@@ -148,6 +152,10 @@ class MultiTaskLoss(nn.Module):
         target_aux_obs: Optional[torch.Tensor] = None,
         aux_obs_weights: Optional[torch.Tensor] = None,
         aux_obs_mask: Optional[torch.Tensor] = None,
+        pred_dev_target: Optional[torch.Tensor] = None,
+        target_dev_target: Optional[torch.Tensor] = None,
+        dev_target_weights: Optional[torch.Tensor] = None,
+        dev_target_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, dict]:
         """
         Compute multi-task loss.
@@ -181,6 +189,14 @@ class MultiTaskLoss(nn.Module):
             )
             components['loss_aux_obs'] = loss_aux_obs.item()
             total = total + self.aux_obs_weight * loss_aux_obs
+
+        # Development-rate auxiliary (quality weighted)
+        if pred_dev_target is not None and target_dev_target is not None:
+            loss_dev = self.dev_loss(
+                pred_dev_target, target_dev_target, dev_target_weights, dev_target_mask
+            )
+            components['loss_dev'] = loss_dev.item()
+            total = total + self.dev_weight * loss_dev
         
         components['loss_total'] = total.item()
         return total, components

@@ -273,12 +273,22 @@ class HierarchicalPathwayModel:
         mu_peak_rapm = pathway_contrib.sum(axis=-1)
         numpyro.deterministic("mu_peak_rapm", mu_peak_rapm)
         numpyro.deterministic("pathway_contributions", pathway_contrib)
-        
+
+        # Heteroscedastic observation noise by possessions:
+        # variance ∝ 1 / clip(peak_poss, min_poss, max_poss)
+        sigma_base = numpyro.sample("sigma_peak_base", dist.HalfNormal(1.0))
+        if peak_poss is None:
+            poss_clip = jnp.ones((n,), dtype=jnp.float32) * self.max_poss
+        else:
+            poss_clip = jnp.clip(peak_poss, self.min_poss, self.max_poss)
+        sigma_scaled = sigma_base / jnp.sqrt(poss_clip / self.min_poss)
+
+        if y_peak_rapm is not None:
             y_clean = jnp.nan_to_num(y_peak_rapm, nan=0.0)
-            
+
             if mask_rapm is None:
                 mask_rapm = ~jnp.isnan(y_peak_rapm)
-            
+
             with numpyro.plate("impact_plate", n):
                 with numpyro.handlers.mask(mask=mask_rapm):
                     numpyro.sample(

@@ -19,6 +19,22 @@ This plan outlines the **next steps** for the NCAA prospect modeling pipeline wh
 
 ---
 
+## Strict Run Guardrails (2026-02-19 Addendum)
+
+This document now defers hard-run execution policy to:
+- `mistake_prevention_retrospective_2026-02-19.md`
+- `nba_pretrain_gate.md`
+- hardening runner stage audits under `data/audit/hardening_run_*`
+
+### Mandatory before any "big run"
+1. Complete stage-gated data-quality hardening (snapshot, integrity sweep, crosswalk QA, DAG reconciliation).
+2. Confirm no critical contract drift vs DAG docs.
+3. Confirm dead critical branches are either populated or explicitly masked and gated off.
+4. Confirm coverage floors are at/above locked baseline for peak RAPM, Year-1 EPM, and dev-rate.
+5. Publish final GO/NO-GO audit prior to full training.
+
+---
+
 ## Phase 1: Data Ingestion & Quality Assurance (Weeks 1-4)
 
 ### 1.1 Historical Scraping Continuation

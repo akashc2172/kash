@@ -446,6 +446,36 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
         FROM fact_team_season_stats
     """).df()
 
+    # Fallback conference mapping from game logs (broad historical coverage).
+    # fact_team_season_stats currently has deep coverage only in recent seasons.
+    conf_fallback = con.execute("""
+        WITH team_conf AS (
+            SELECT season, homeTeamId AS teamId, homeConference AS conference
+            FROM dim_games
+            WHERE homeConference IS NOT NULL AND TRIM(homeConference) <> ''
+            UNION ALL
+            SELECT season, awayTeamId AS teamId, awayConference AS conference
+            FROM dim_games
+            WHERE awayConference IS NOT NULL AND TRIM(awayConference) <> ''
+        ),
+        ranked AS (
+            SELECT
+                season,
+                teamId,
+                conference,
+                COUNT(*) AS n_games,
+                ROW_NUMBER() OVER (
+                    PARTITION BY season, teamId
+                    ORDER BY COUNT(*) DESC, conference
+                ) AS rn
+            FROM team_conf
+            GROUP BY 1, 2, 3
+        )
+        SELECT season, teamId, conference AS conference_fallback
+        FROM ranked
+        WHERE rn = 1
+    """).df()
+
     # Box Score Stats (Derived from PBP and Shots)
     # Replaces missing fact_player_season_stats for 2006-2024
     
@@ -488,26 +518,28 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
     # Merge Logic: Use fact table if available, else derived
     df = df_features.merge(athlete_team, on=['season', 'athlete_id'], how='left')
     df = df.merge(team_stats, on=['season', 'teamId'], how='left')
-    
+    df = df.merge(conf_fallback, on=['season', 'teamId'], how='left')
+    if 'conference_fallback' in df.columns:
+        df['conference'] = df['conference'].fillna(df['conference_fallback'])
+        df = df.drop(columns=['conference_fallback'])
+
     # Join both box sources
     df = df.merge(box_stats, on=['season', 'athlete_id'], how='left')
     df = df.merge(tov_df, on=['season', 'athlete_id'], how='left')
-    
-    # Coalesce TOV: Prefer fact (official), fallback to derived
-    df['tov_total'] = df['tov_total'].fillna(df['tov_total_derived']).fillna(0).astype(int)
-    # Drop temp column
-    df = df.drop(columns=['tov_total_derived'])
 
-    df = df_features.merge(athlete_team, on=['season', 'athlete_id'], how='left')
-    df = df.merge(team_stats, on=['season', 'teamId'], how='left')
-    df = df.merge(box_stats, on=['season', 'athlete_id'], how='left')
+    # Coalesce TOV: prefer fact (official), fallback to derived PBP turnovers
+    if 'tov_total_derived' in df.columns:
+        df['tov_total'] = df['tov_total'].fillna(df['tov_total_derived'])
+        df = df.drop(columns=['tov_total_derived'])
 
     # Fill box stats with 0 if missing (but only if player existed in shots)
     box_cols = ['ast_total', 'tov_total', 'stl_total', 'blk_total', 'orb_total', 'drb_total', 'trb_total', 'minutes_total']
     for c in box_cols:
         df[c] = df[c].fillna(0).astype(int)
 
-    df['is_power_conf'] = df['is_power_conf'].fillna(0).astype(int)
+    # Recompute power-conference flag after fallback conference merge.
+    conf_norm = df['conference'].fillna('').astype(str)
+    df['is_power_conf'] = conf_norm.isin(POWER_CONFS).astype(int)
     return df
 
 

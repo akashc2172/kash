@@ -6,6 +6,7 @@ Orchestrates the full training pipeline from raw data to trained model.
 
 Usage:
     python run_training_pipeline.py --check     # Check prerequisites
+    python run_training_pipeline.py --gate      # Run pre-train QA gate
     python run_training_pipeline.py --build     # Build training table only
     python run_training_pipeline.py --train     # Train models only
     python run_training_pipeline.py --all       # Full pipeline
@@ -177,6 +178,29 @@ def train_models() -> bool:
         return False
 
 
+def run_pretrain_gate(fail_on_gate: bool = True) -> bool:
+    """Run pre-train readiness QA gate."""
+    logger.info("=" * 60)
+    logger.info("RUNNING PRE-TRAIN READINESS GATE")
+    logger.info("=" * 60)
+
+    try:
+        from run_nba_pretrain_gate import build_gate_report, write_gate_report
+        report = build_gate_report()
+        write_gate_report(report)
+        passed = bool(report.get("quality_gate", {}).get("passed", False))
+        logger.info("Pre-train quality gate passed: %s", passed)
+        if fail_on_gate and not passed:
+            logger.error("Pre-train gate failed. See data/audit/nba_pretrain_gate.json")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"Error running pre-train gate: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def run_full_pipeline() -> bool:
     """Run the complete pipeline."""
     logger.info("=" * 60)
@@ -192,8 +216,13 @@ def run_full_pipeline() -> bool:
     if not build_training_table():
         logger.error("\n❌ Failed to build training table.")
         return False
+
+    # Step 3: Run pre-train gate
+    if not run_pretrain_gate(fail_on_gate=True):
+        logger.error("\n❌ Pre-train readiness gate failed.")
+        return False
     
-    # Step 3: Train models
+    # Step 4: Train models
     if not train_models():
         logger.error("\n❌ Failed to train models.")
         return False
@@ -207,6 +236,7 @@ def run_full_pipeline() -> bool:
 def main():
     parser = argparse.ArgumentParser(description="Training Pipeline Runner")
     parser.add_argument('--check', action='store_true', help='Check prerequisites only')
+    parser.add_argument('--gate', action='store_true', help='Run pre-train readiness gate only')
     parser.add_argument('--build', action='store_true', help='Build training table only')
     parser.add_argument('--train', action='store_true', help='Train models only')
     parser.add_argument('--all', action='store_true', help='Run full pipeline')
@@ -214,7 +244,7 @@ def main():
     args = parser.parse_args()
     
     # Default to --check if no args
-    if not any([args.check, args.build, args.train, args.all]):
+    if not any([args.check, args.gate, args.build, args.train, args.all]):
         args.check = True
     
     if args.check:
@@ -222,6 +252,9 @@ def main():
     
     if args.build:
         build_training_table()
+
+    if args.gate:
+        run_pretrain_gate(fail_on_gate=False)
     
     if args.train:
         train_models()

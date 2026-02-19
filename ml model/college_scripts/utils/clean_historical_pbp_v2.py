@@ -3,6 +3,7 @@ import duckdb
 import os
 import re
 import json
+from pathlib import Path
 from collections import Counter, defaultdict
 
 # --- Configuration ---
@@ -223,8 +224,9 @@ def main():
     con = duckdb.connect(DB_PATH)
     # team_df = con.execute("SELECT id, school, displayName FROM dim_teams").fetchdf() # Not used yet
     
-    all_clean_rows = []
-    
+    parts_root = Path("data/fact_play_historical_parts")
+    parts_root.mkdir(parents=True, exist_ok=True)
+
     # Dynamic Directory Scan
     base_scrape_dir = "data/manual_scrapes"
     SOURCE_DIRS = []
@@ -241,11 +243,15 @@ def main():
     SOURCE_DIRS.sort() # Process in order
     print(f"🌍 Found {len(SOURCE_DIRS)} historical seasons to process: {SOURCE_DIRS}")
     
+    season_part_paths = []
+    total_rows_written = 0
+
     for folder in SOURCE_DIRS:
         if not os.path.exists(folder): continue
         files = [f for f in os.listdir(folder) if f.endswith(".csv")]
         print(f"📂 Scanning {folder}: {len(files)} files found.")
-        
+        season_rows = []
+
         for f in files:
             path = os.path.join(folder, f)
             try:
@@ -268,29 +274,45 @@ def main():
                     solver.parse_rows()
                     solver.solve_timeline()
                     clean = solver.export_rows()
-                    all_clean_rows.extend(clean)
+                    season_rows.extend(clean)
 
             except Exception as e:
                 print(f"    ❌ Error on {f}: {e}")
-                
-    # Save as Parquet
-    OUT_PARQUET = "data/fact_play_historical_combined.parquet"
-    print(f"\n💾 Saving {len(all_clean_rows)} rows to {OUT_PARQUET}...")
-    
-    if not all_clean_rows:
+
+        if season_rows:
+            season_df = pd.DataFrame(season_rows)
+            season_df['season'] = season_df['season'].astype(int)
+            season_df['homeScore'] = pd.to_numeric(season_df['homeScore'], errors='coerce').fillna(0).astype(int)
+            season_df['awayScore'] = pd.to_numeric(season_df['awayScore'], errors='coerce').fillna(0).astype(int)
+            season_df['date'] = season_df['date'].astype(str)
+
+            season_year = int(season_df['season'].iloc[0])
+            out_part = parts_root / f"season={season_year}.parquet"
+            season_df.to_parquet(out_part, index=False)
+            season_part_paths.append(str(out_part))
+            total_rows_written += len(season_df)
+            print(f"   💾 wrote season part {out_part} ({len(season_df)} rows)")
+
+    # Save combined parquet from parts using DuckDB (avoids giant in-memory dataframe).
+    out_parquet = Path("data/fact_play_historical_combined.parquet")
+    print(f"\n💾 Materializing combined parquet from {len(season_part_paths)} parts -> {out_parquet}...")
+
+    if not season_part_paths:
         print("⚠️ No rows generated. Exiting.")
         return
 
-    out_df = pd.DataFrame(all_clean_rows)
-    # Ensure types
-    out_df['season'] = out_df['season'].astype(int)
-    out_df['homeScore'] = pd.to_numeric(out_df['homeScore'], errors='coerce').fillna(0).astype(int)
-    out_df['awayScore'] = pd.to_numeric(out_df['awayScore'], errors='coerce').fillna(0).astype(int)
-    # Ensure date is string/object
-    out_df['date'] = out_df['date'].astype(str)
-    
-    out_df.to_parquet(OUT_PARQUET, index=False)
-    print("✅ Full Batch Complete!")
+    con.execute(
+        f"""
+        COPY (
+          SELECT *
+          FROM read_parquet('{parts_root.as_posix()}/season=*.parquet')
+        )
+        TO '{out_parquet.as_posix()}'
+        (FORMAT PARQUET);
+        """
+    )
+    con.close()
+    print(f"✅ Full Batch Complete! total_rows={total_rows_written}")
 
 if __name__ == "__main__":
     main()

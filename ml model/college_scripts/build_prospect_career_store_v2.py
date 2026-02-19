@@ -209,9 +209,8 @@ def build_career_store():
     df_all['trueShootingPct'] = np.where(ts_denom > 0, df_all['points_derived'] / ts_denom, np.nan)
     
     # C. Derive Usage Rate Proxy
-    # Formula: (FGA + 0.44*FTA + TOV) / Possessions
-    # Possessions Proxy = (Minutes / 40.0) * TeamPace
-    # Note: team_pace is usually ~70. If missing, we assume 70.0
+    # Primary formula: (FGA + 0.44*FTA + TOV) / est_possessions_on_court
+    # Fallback when minutes are missing: team-season possession share.
     
     team_pace = df_all['team_pace'].fillna(68.0) # Conservative NCAA avg
     minutes = df_all['minutes_total'].astype(float)
@@ -228,16 +227,28 @@ def build_career_store():
     )
     
     est_possessions = (minutes / 40.0) * team_pace
-    
-    # Usage Rate (Intensity) - NaN if minutes=0
-    df_all['usage'] = np.where(
+
+    # Usage Rate (Intensity) from minutes + pace when available.
+    usage_from_minutes = np.where(
         (est_possessions > 5) & df_all['poss_total'].notna(),
         df_all['poss_total'] / est_possessions,
         np.nan
     )
-    
-    # Clip usage to reasonable bounds (0.0 to 0.5) to avoid noise from small minutes
-    df_all['usage'] = df_all['usage'].clip(0, 0.60)
+
+    # Fallback: possession share within team-season. Not identical to on-court USG,
+    # but preserves role/load signal when minutes are historically missing.
+    if 'teamId' in df_all.columns:
+        team_poss_total = df_all.groupby(['season', 'teamId'])['poss_total'].transform('sum')
+        usage_from_team_share = np.where(
+            team_poss_total > 0,
+            df_all['poss_total'] / team_poss_total,
+            np.nan
+        )
+    else:
+        usage_from_team_share = np.full(len(df_all), np.nan, dtype=float)
+
+    df_all['usage'] = np.where(np.isnan(usage_from_minutes), usage_from_team_share, usage_from_minutes)
+    df_all['usage'] = pd.to_numeric(df_all['usage'], errors='coerce').clip(0, 0.60)
 
     # D. Per-Game Rates (when games_played is available)
     gp = df_all['games_played']
