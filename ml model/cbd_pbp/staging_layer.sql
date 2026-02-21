@@ -53,16 +53,16 @@ SELECT
     p.homeWinProbability,
     COALESCE(p.scoreValue, 0) AS scoreValue,
     
-    CAST(json_extract_string(p.shotInfo, '$.shooter.id') AS INT) AS shooterAthleteId,
-    json_extract_string(p.shotInfo, '$.shooter.name') AS shooter_name,
-    CAST(json_extract(p.shotInfo, '$.made') AS BOOLEAN) AS made,
-    json_extract_string(p.shotInfo, '$.range') AS shot_range,
-    CAST(json_extract(p.shotInfo, '$.assisted') AS BOOLEAN) AS assisted,
-    CAST(json_extract_string(p.shotInfo, '$.assistedBy.id') AS INT) AS assistAthleteId,
+    p.shotInfo.shooter.id::INT AS shooterAthleteId,
+    p.shotInfo.shooter.name AS shooter_name,
+    p.shotInfo.made::BOOLEAN AS made,
+    p.shotInfo."range" AS shot_range,
+    p.shotInfo.assisted::BOOLEAN AS assisted,
+    p.shotInfo.assistedBy.id::INT AS assistAthleteId,
     -- NOTE: use TRY_CAST because older seasons may contain JSON null/non-numeric placeholders.
     -- TRY_CAST yields SQL NULL (clean missingness) rather than NaN / cast errors.
-    TRY_CAST(json_extract(p.shotInfo, '$.location.x') AS FLOAT) AS loc_x,
-    TRY_CAST(json_extract(p.shotInfo, '$.location.y') AS FLOAT) AS loc_y,
+    TRY_CAST(p.shotInfo.location.x AS FLOAT) AS loc_x,
+    TRY_CAST(p.shotInfo.location.y AS FLOAT) AS loc_y,
     
     CASE 
         WHEN p.period >= 2 AND p.secondsRemaining < 300 AND ABS(p.homeScore - p.awayScore) <= 5 
@@ -88,7 +88,7 @@ SELECT
     part.id AS athleteId,
     part.name AS athlete_name
 FROM stg_plays p,
-LATERAL UNNEST(p.participants) AS part
+UNNEST(p.participants) AS _(part)
 WHERE p.participants IS NOT NULL;
 
 -- -----------------------------------------------------------------------------
@@ -128,7 +128,7 @@ SELECT
     l.netRating,
     ath.id AS athleteId
 FROM stg_lineups l,
-LATERAL UNNEST(l.athletes) AS ath;
+UNNEST(l.athletes) AS _(ath);
 
 -- -----------------------------------------------------------------------------
 -- 1F. stg_subs: Substitution events flattened
@@ -140,14 +140,14 @@ SELECT
     s.teamId,
     s.athleteId,
     s.athlete AS athlete_name,
-    CAST(json_extract(s.subIn, '$.secondsRemaining') AS INT) AS subIn_secondsRemaining,
-    CAST(json_extract(s.subIn, '$.period') AS INT) AS subIn_period,
-    CAST(json_extract(s.subIn, '$.teamPoints') AS INT) AS subIn_teamPoints,
-    CAST(json_extract(s.subIn, '$.opponentPoints') AS INT) AS subIn_opponentPoints,
-    CAST(json_extract(s.subOut, '$.secondsRemaining') AS INT) AS subOut_secondsRemaining,
-    CAST(json_extract(s.subOut, '$.period') AS INT) AS subOut_period,
-    CAST(json_extract(s.subOut, '$.teamPoints') AS INT) AS subOut_teamPoints,
-    CAST(json_extract(s.subOut, '$.opponentPoints') AS INT) AS subOut_opponentPoints
+    s.subIn.secondsRemaining::INT AS subIn_secondsRemaining,
+    s.subIn.period::INT AS subIn_period,
+    s.subIn.teamPoints::INT AS subIn_teamPoints,
+    s.subIn.opponentPoints::INT AS subIn_opponentPoints,
+    s.subOut.secondsRemaining::INT AS subOut_secondsRemaining,
+    s.subOut.period::INT AS subOut_period,
+    s.subOut.teamPoints::INT AS subOut_teamPoints,
+    s.subOut.opponentPoints::INT AS subOut_opponentPoints
 FROM fact_substitution_raw s;
 
 -- #############################################################################

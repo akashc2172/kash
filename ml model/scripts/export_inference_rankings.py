@@ -89,6 +89,70 @@ def load_actual_rapm_targets() -> pd.DataFrame:
     return out
 
 
+def load_actual_peak_epm_targets() -> pd.DataFrame:
+    """
+    Load actual peak/rolling EPM targets at athlete/season grain for overlays.
+    """
+    if not UNIFIED_PATH.exists():
+        return pd.DataFrame(
+            columns=[
+                "athlete_id",
+                "college_final_season",
+                "actual_peak_epm_3y",
+                "actual_peak_epm_window",
+                "actual_epm_obs_seasons",
+                "actual_epm_obs_minutes",
+                "actual_epm_peak_window_end_year",
+                "actual_epm_years_to_peak",
+            ]
+        )
+    df = pd.read_parquet(UNIFIED_PATH)
+    keep = [
+        c
+        for c in [
+            "athlete_id",
+            "college_final_season",
+            "draft_year_proxy",
+            "y_peak_epm_3y",
+            "y_peak_epm_window",
+            "epm_obs_seasons",
+            "epm_obs_minutes",
+            "epm_peak_window_end_year",
+        ]
+        if c in df.columns
+    ]
+    if len(keep) < 3:
+        return pd.DataFrame(
+            columns=[
+                "athlete_id",
+                "college_final_season",
+                "actual_peak_epm_3y",
+                "actual_peak_epm_window",
+                "actual_epm_obs_seasons",
+                "actual_epm_obs_minutes",
+                "actual_epm_peak_window_end_year",
+                "actual_epm_years_to_peak",
+            ]
+        )
+    out = df[keep].copy()
+    out["athlete_id"] = out["athlete_id"].astype(str)
+    out["college_final_season"] = pd.to_numeric(out["college_final_season"], errors="coerce").astype("Int64")
+    out["actual_peak_epm_3y"] = pd.to_numeric(out.get("y_peak_epm_3y"), errors="coerce")
+    out["actual_peak_epm_window"] = pd.to_numeric(out.get("y_peak_epm_window"), errors="coerce")
+    out["actual_epm_obs_seasons"] = pd.to_numeric(out.get("epm_obs_seasons"), errors="coerce")
+    out["actual_epm_obs_minutes"] = pd.to_numeric(out.get("epm_obs_minutes"), errors="coerce")
+    out["actual_epm_peak_window_end_year"] = pd.to_numeric(out.get("epm_peak_window_end_year"), errors="coerce")
+    dy = pd.to_numeric(out.get("draft_year_proxy"), errors="coerce")
+    out["actual_epm_years_to_peak"] = out["actual_epm_peak_window_end_year"] - dy
+    out = out.drop(columns=[c for c in ["draft_year_proxy", "y_peak_epm_3y", "y_peak_epm_window", "epm_obs_seasons", "epm_obs_minutes", "epm_peak_window_end_year"] if c in out.columns])
+    out = out.dropna(subset=["athlete_id", "college_final_season"])
+    out = out.sort_values(
+        ["athlete_id", "college_final_season", "actual_epm_obs_minutes", "actual_peak_epm_window", "actual_peak_epm_3y"],
+        ascending=[True, True, False, False, False],
+    ).drop_duplicates(subset=["athlete_id", "college_final_season"], keep="first")
+    return out
+
+
 def main() -> None:
     pred_path = latest_predictions()
     pred = pd.read_parquet(pred_path)
@@ -107,6 +171,16 @@ def main() -> None:
     else:
         ranked["actual_peak_rapm"] = np.nan
         ranked["actual_peak_poss"] = np.nan
+    actual_epm = load_actual_peak_epm_targets()
+    if not actual_epm.empty:
+        ranked = ranked.merge(actual_epm, on=["athlete_id", "college_final_season"], how="left")
+    else:
+        ranked["actual_peak_epm_3y"] = np.nan
+        ranked["actual_peak_epm_window"] = np.nan
+        ranked["actual_epm_obs_seasons"] = np.nan
+        ranked["actual_epm_obs_minutes"] = np.nan
+        ranked["actual_epm_peak_window_end_year"] = np.nan
+        ranked["actual_epm_years_to_peak"] = np.nan
     if CROSSWALK_PATH.exists():
         cw = pd.read_parquet(CROSSWALK_PATH, columns=["athlete_id"]).dropna().copy()
         cw["athlete_id"] = cw["athlete_id"].astype(str)
@@ -178,6 +252,24 @@ def main() -> None:
         g_obs_q = g[(g["actual_peak_rapm"].notna()) & (g["is_qualified_pool_v2"] == 1)].sort_values("actual_peak_rapm", ascending=False)
         if len(g_obs_q):
             ranked.loc[g_obs_q.index, "actual_rapm_rank_class_qualified"] = range(1, len(g_obs_q) + 1)
+    # Actual peak EPM class ranks (3y and best-available window)
+    ranked["actual_epm3y_rank_class"] = pd.NA
+    ranked["actual_epm3y_rank_class_qualified"] = pd.NA
+    ranked["actual_epm_window_rank_class"] = pd.NA
+    ranked["actual_epm_window_rank_class_qualified"] = pd.NA
+    for season, g in ranked.groupby("college_final_season", sort=False):
+        g_e3 = g[g["actual_peak_epm_3y"].notna()].sort_values("actual_peak_epm_3y", ascending=False)
+        if len(g_e3):
+            ranked.loc[g_e3.index, "actual_epm3y_rank_class"] = range(1, len(g_e3) + 1)
+        g_e3q = g[(g["actual_peak_epm_3y"].notna()) & (g["is_qualified_pool_v2"] == 1)].sort_values("actual_peak_epm_3y", ascending=False)
+        if len(g_e3q):
+            ranked.loc[g_e3q.index, "actual_epm3y_rank_class_qualified"] = range(1, len(g_e3q) + 1)
+        g_ew = g[g["actual_peak_epm_window"].notna()].sort_values("actual_peak_epm_window", ascending=False)
+        if len(g_ew):
+            ranked.loc[g_ew.index, "actual_epm_window_rank_class"] = range(1, len(g_ew) + 1)
+        g_ewq = g[(g["actual_peak_epm_window"].notna()) & (g["is_qualified_pool_v2"] == 1)].sort_values("actual_peak_epm_window", ascending=False)
+        if len(g_ewq):
+            ranked.loc[g_ewq.index, "actual_epm_window_rank_class_qualified"] = range(1, len(g_ewq) + 1)
 
     keep = ["college_final_season", "season_rank", "athlete_id", "player_name", score_col, "pred_peak_rapm"]
     if "pred_rank_target" in ranked.columns:
@@ -215,6 +307,20 @@ def main() -> None:
         if c in ranked.columns:
             keep.append(c)
     for c in ["actual_peak_rapm", "actual_peak_poss", "actual_rapm_rank_class", "actual_rapm_rank_class_qualified"]:
+        if c in ranked.columns:
+            keep.append(c)
+    for c in [
+        "actual_peak_epm_3y",
+        "actual_peak_epm_window",
+        "actual_epm_obs_seasons",
+        "actual_epm_obs_minutes",
+        "actual_epm_peak_window_end_year",
+        "actual_epm_years_to_peak",
+        "actual_epm3y_rank_class",
+        "actual_epm3y_rank_class_qualified",
+        "actual_epm_window_rank_class",
+        "actual_epm_window_rank_class_qualified",
+    ]:
         if c in ranked.columns:
             keep.append(c)
     for c in ["pred_dev_rate", "pred_dev_rate_std", "pred_year1_epm", "pred_gap_ts", "pred_made_nba_logit"]:

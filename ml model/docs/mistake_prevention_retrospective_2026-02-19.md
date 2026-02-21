@@ -609,3 +609,23 @@ If any critical guard fails, stop the run and produce a NO-GO audit. Do not cont
   - retained estimated minutes as optional display-only diagnostic column.
 - Prevention guard:
   - no estimated or imputed display fields may be used by qualification gates.
+
+67. **Peak-EPM outputs lacked explicit window lineage and class-rank overlays**
+- What happened: exports showed predictions without enough target provenance (`epm_peak_window_end_year`, years-to-peak, class rank by actual peak EPM), making it hard to spot maturity bias and season-window misunderstandings.
+- Why this hurt: users could not verify whether a class target reflected comparable NBA horizons, and debugging model quality stalled.
+- Fix applied:
+  - extended `/Users/akashc/my-trankcopy/ml model/scripts/export_inference_rankings.py` to include:
+    - `actual_peak_epm_3y`, `actual_peak_epm_window`,
+    - `actual_epm_peak_window_end_year`, `actual_epm_years_to_peak`,
+    - `actual_epm3y_rank_class(_qualified)`, `actual_epm_window_rank_class(_qualified)`.
+  - added `/Users/akashc/my-trankcopy/ml model/nba_scripts/analyze_peak_epm_alignment.py` and workbook export for cohort diagnostics.
+- Prevention guard:
+  - any new target objective must ship with explicit target-lineage columns and class-rank overlays in user-facing exports.
+
+68. **Diagnostics workbook failed on `pd.NA` median casting**
+- What happened: diagnostic aggregation attempted `float(pd.Series(...).median())` on `NAType`.
+- Why this hurt: analysis export failed and blocked quality triage.
+- Fix applied:
+  - added `_safe_median()` helper in `/Users/akashc/my-trankcopy/ml model/nba_scripts/analyze_peak_epm_alignment.py` to coerce and guard empty/NA series.
+- Prevention guard:
+  - all diagnostics aggregations must use NA-safe reducers (`_safe_median`, `_safe_corr`) and py_compile + smoke-run before publish.
