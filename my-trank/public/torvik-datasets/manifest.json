@@ -1,0 +1,446 @@
+{
+  "version": "2026.02.21",
+  "sources": [
+    "public/data/international_stat_history/internationalplayerarchive.csv",
+    "public/data/international_stat_history/2026_records.csv"
+  ],
+  "datasets": [
+    {
+      "season": 2008,
+      "name": "CTS Intl Overlay 2008",
+      "url": "/torvik-datasets/2008.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 49
+    },
+    {
+      "season": 2009,
+      "name": "CTS Intl Overlay 2009",
+      "url": "/torvik-datasets/2009.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 39
+    },
+    {
+      "season": 2010,
+      "name": "CTS Intl Overlay 2010",
+      "url": "/torvik-datasets/2010.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 36
+    },
+    {
+      "season": 2011,
+      "name": "CTS Intl Overlay 2011",
+      "url": "/torvik-datasets/2011.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 28
+    },
+    {
+      "season": 2012,
+      "name": "CTS Intl Overlay 2012",
+      "url": "/torvik-datasets/2012.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 59
+    },
+    {
+      "season": 2013,
+      "name": "CTS Intl Overlay 2013",
+      "url": "/torvik-datasets/2013.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 39
+    },
+    {
+      "season": 2014,
+      "name": "CTS Intl Overlay 2014",
+      "url": "/torvik-datasets/2014.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 40
+    },
+    {
+      "season": 2015,
+      "name": "CTS Intl Overlay 2015",
+      "url": "/torvik-datasets/2015.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 50
+    },
+    {
+      "season": 2016,
+      "name": "CTS Intl Overlay 2016",
+      "url": "/torvik-datasets/2016.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 42
+    },
+    {
+      "season": 2017,
+      "name": "CTS Intl Overlay 2017",
+      "url": "/torvik-datasets/2017.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 46
+    },
+    {
+      "season": 2018,
+      "name": "CTS Intl Overlay 2018",
+      "url": "/torvik-datasets/2018.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 143
+    },
+    {
+      "season": 2019,
+      "name": "CTS Intl Overlay 2019",
+      "url": "/torvik-datasets/2019.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 142
+    },
+    {
+      "season": 2020,
+      "name": "CTS Intl Overlay 2020",
+      "url": "/torvik-datasets/2020.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 207
+    },
+    {
+      "season": 2021,
+      "name": "CTS Intl Overlay 2021",
+      "url": "/torvik-datasets/2021.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 276
+    },
+    {
+      "season": 2022,
+      "name": "CTS Intl Overlay 2022",
+      "url": "/torvik-datasets/2022.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 265
+    },
+    {
+      "season": 2023,
+      "name": "CTS Intl Overlay 2023",
+      "url": "/torvik-datasets/2023.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 254
+    },
+    {
+      "season": 2024,
+      "name": "CTS Intl Overlay 2024",
+      "url": "/torvik-datasets/2024.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 249
+    },
+    {
+      "season": 2025,
+      "name": "CTS Intl Overlay 2025",
+      "url": "/torvik-datasets/2025.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 251
+    },
+    {
+      "season": 2026,
+      "name": "CTS Intl Overlay 2026",
+      "url": "/torvik-datasets/2026.json",
+      "match": {
+        "primary": [
+          "player",
+          "team"
+        ],
+        "fallback": [
+          "player"
+        ]
+      },
+      "inject_columns": [
+        "conf",
+        "usg",
+        "ts",
+        "porpag",
+        "bpm",
+        "per"
+      ],
+      "rows": 198
+    }
+  ]
+}

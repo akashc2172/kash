@@ -1,0 +1,44 @@
+{
+  "source": "barttorvik playerstat html/js snapshot",
+  "snapshot_page": "playerstat.php?link=y&year=2026&start=20251101&end=20260501",
+  "identity": {
+    "player_index": 0,
+    "team_index": 1,
+    "conference_index": 2,
+    "year_index": 31,
+    "player_id_index": 32
+  },
+  "recommended_match_keys": [
+    "player",
+    "team"
+  ],
+  "core_stats": {
+    "5": "O-Rating",
+    "6": "Usage",
+    "7": "Eff. FG%",
+    "8": "TS %",
+    "11": "Assist %",
+    "12": "TOV Rate",
+    "22": "Block %",
+    "23": "Steal %",
+    "24": "FT Rate",
+    "26": "Height",
+    "28": "PORPAGATU",
+    "47": "Adj. D-Rtg",
+    "48": "D-PORPAG",
+    "53": "BPM",
+    "55": "Off. BPM",
+    "56": "Def. BPM",
+    "64": "Role",
+    "65": "3P/100 Poss."
+  },
+  "shot_zone_stats": {
+    "36": "Rim Makes",
+    "37": "Rim Attempts",
+    "3637": "Rim %",
+    "38": "Mid Made",
+    "39": "Mid Attempts",
+    "3839": "Mid %",
+    "42": "Dunks"
+  }
+}
