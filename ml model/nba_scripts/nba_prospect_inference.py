@@ -213,10 +213,15 @@ def build_prospect_inference_table(
         load_transfer_context_summary,
         load_college_impact_stack,
         load_recruiting_physicals,
+        load_college_physicals_by_season,
+        load_college_physical_trajectory,
         build_final_season_leverage_features,
         load_team_strength_features,
         load_historical_text_games_backfill,
         load_historical_exposure_backfill,
+        load_crosswalk,
+        load_dim_player_nba,
+        load_nba_wingspan_bridge,
     )
 
     if college_features.empty:
@@ -351,6 +356,8 @@ def build_prospect_inference_table(
         df = df.merge(transfer[ts_cols], on="athlete_id", how="left")
 
     impact = load_college_impact_stack()
+    physicals_by_season = load_college_physicals_by_season()
+    physical_traj = load_college_physical_trajectory()
     if not impact.empty and "college_final_season" in df.columns:
         impact = impact.rename(columns={"season": "college_final_season"})
         impact_cols = ["athlete_id", "college_final_season"] + [
@@ -393,6 +400,40 @@ def build_prospect_inference_table(
 
     # Draft-time physicals from recruiting table.
     recruiting_phys = load_recruiting_physicals()
+    if not physicals_by_season.empty and "college_final_season" in df.columns:
+        phys = physicals_by_season.copy().rename(columns={"season": "college_final_season", "team_id": "college_teamId"})
+        join_keys = ["athlete_id", "college_final_season"]
+        if "college_teamId" in df.columns and "college_teamId" in phys.columns:
+            join_keys.append("college_teamId")
+        keep_cols = join_keys + [
+            c for c in [
+                "height_in", "weight_lbs", "wingspan_in", "standing_reach_in",
+                "wingspan_minus_height_in", "has_height", "has_weight", "has_wingspan",
+            ] if c in phys.columns
+        ]
+        phys = phys[keep_cols].drop_duplicates(subset=join_keys)
+        df = df.merge(phys, on=join_keys, how="left")
+        existing_h = pd.to_numeric(df["college_height_in"], errors="coerce") if "college_height_in" in df.columns else pd.Series(np.nan, index=df.index)
+        existing_w = pd.to_numeric(df["college_weight_lbs"], errors="coerce") if "college_weight_lbs" in df.columns else pd.Series(np.nan, index=df.index)
+        existing_h_mask = pd.to_numeric(df["has_college_height"], errors="coerce") if "has_college_height" in df.columns else pd.Series(np.nan, index=df.index)
+        existing_w_mask = pd.to_numeric(df["has_college_weight"], errors="coerce") if "has_college_weight" in df.columns else pd.Series(np.nan, index=df.index)
+        if "height_in" in df.columns:
+            df["college_height_in"] = existing_h.combine_first(
+                pd.to_numeric(df["height_in"], errors="coerce")
+            )
+        if "weight_lbs" in df.columns:
+            df["college_weight_lbs"] = existing_w.combine_first(
+                pd.to_numeric(df["weight_lbs"], errors="coerce")
+            )
+        if "has_height" in df.columns:
+            df["has_college_height"] = existing_h_mask.combine_first(
+                pd.to_numeric(df["has_height"], errors="coerce")
+            )
+        if "has_weight" in df.columns:
+            df["has_college_weight"] = existing_w_mask.combine_first(
+                pd.to_numeric(df["has_weight"], errors="coerce")
+            )
+
     if not recruiting_phys.empty:
         df = df.merge(recruiting_phys, on="athlete_id", how="left")
         if "college_height_in" not in df.columns:
@@ -415,6 +456,56 @@ def build_prospect_inference_table(
         df["has_college_height"] = df["college_height_in"].notna().astype(int)
     if "has_college_weight" not in df.columns:
         df["has_college_weight"] = df["college_weight_lbs"].notna().astype(int)
+
+    if not physical_traj.empty and "college_final_season" in df.columns:
+        ptri = physical_traj.rename(columns={"season": "college_final_season"}).copy()
+        t_join = ["athlete_id", "college_final_season"]
+        t_cols = t_join + [
+            c for c in [
+                "height_delta_yoy", "weight_delta_yoy",
+                "height_slope_3yr", "weight_slope_3yr",
+            ] if c in ptri.columns
+        ]
+        ptri = ptri[t_cols].drop_duplicates(subset=t_join)
+        df = df.merge(ptri, on=t_join, how="left")
+        rename_map = {
+            "height_delta_yoy": "college_height_delta_yoy",
+            "weight_delta_yoy": "college_weight_delta_yoy",
+            "height_slope_3yr": "college_height_slope_3yr",
+            "weight_slope_3yr": "college_weight_slope_3yr",
+        }
+        for src, dst in rename_map.items():
+            if src in df.columns and dst not in df.columns:
+                df[dst] = pd.to_numeric(df[src], errors="coerce")
+    for col in ["college_height_delta_yoy", "college_weight_delta_yoy", "college_height_slope_3yr", "college_weight_slope_3yr"]:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    # NBA wingspan fallback for NBA-mapped players: use nba ws as constant college-side input.
+    crosswalk = load_crosswalk()
+    dim_nba = load_dim_player_nba()
+    ws_bridge = load_nba_wingspan_bridge()
+    if not crosswalk.empty and not dim_nba.empty and not ws_bridge.empty:
+        xw = crosswalk[["athlete_id", "nba_id"]].drop_duplicates(subset=["athlete_id"])
+        dkeep = [c for c in ["nba_id", "bbr_id"] if c in dim_nba.columns]
+        dnba = dim_nba[dkeep].drop_duplicates(subset=["nba_id"])
+        ws = ws_bridge.copy()
+        ws["bbr_id"] = ws["bbr_id"].astype(str).str.strip().str.lower()
+        if "bbr_id" in dnba.columns:
+            dnba["bbr_id"] = dnba["bbr_id"].astype(str).str.strip().str.lower()
+            wsm = xw.merge(dnba, on="nba_id", how="left").merge(ws, on="bbr_id", how="left")
+            wsm = wsm[["athlete_id", "nba_wingspan_in"]].drop_duplicates(subset=["athlete_id"])
+            df = df.merge(wsm, on="athlete_id", how="left")
+            df["wingspan_in"] = pd.to_numeric(df.get("wingspan_in"), errors="coerce").combine_first(
+                pd.to_numeric(df.get("nba_wingspan_in"), errors="coerce")
+            )
+            if "wingspan_minus_height_in" not in df.columns:
+                df["wingspan_minus_height_in"] = np.nan
+            df["wingspan_minus_height_in"] = pd.to_numeric(df["wingspan_minus_height_in"], errors="coerce").combine_first(
+                pd.to_numeric(df["wingspan_in"], errors="coerce") - pd.to_numeric(df["college_height_in"], errors="coerce")
+            )
+            df["has_wingspan"] = pd.to_numeric(df.get("has_wingspan"), errors="coerce").fillna(0)
+            df["has_wingspan"] = np.where(pd.to_numeric(df["wingspan_in"], errors="coerce").notna(), 1, df["has_wingspan"]).astype(int)
 
     # Derived masks/features that do not require NBA labels.
     df = compute_derived_features(df)
@@ -909,7 +1000,7 @@ def main() -> None:
             learned_score = preds["pred_year1_epm"].to_numpy(dtype=float)
             preds["pred_rank_model"] = "epm_head_direct_v1"
             preds["pred_rank_model_n"] = int(np.isfinite(learned_score).sum())
-            preds["pred_rank_target"] = "year1_epm_tot"
+            preds["pred_rank_target"] = str(model_cfg.get("epm_target_col", "year1_epm_tot"))
         else:
             preds["pred_rank_target"] = "peak_rapm"
 

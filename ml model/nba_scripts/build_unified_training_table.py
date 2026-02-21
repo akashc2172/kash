@@ -103,6 +103,7 @@ PRIMARY_TARGET = 'y_peak_ovr'
 AUX_TARGETS = [
     'gap_ts_legacy',
     'year1_epm_tot',
+    'y_peak_epm_3y',
     'year1_epm_off',
     'year1_epm_def',
     'dev_rate_y1_y3_mean',
@@ -611,6 +612,7 @@ def load_dim_player_nba() -> pd.DataFrame:
     keep = [
         c for c in [
             "nba_id", "draft_year", "rookie_season_year", "player_name",
+            "bbr_id",
             "ht_first", "ht_max", "wt_first", "wt_max",
             "ht_peak_delta", "wt_peak_delta",
         ] if c in df.columns
@@ -618,6 +620,50 @@ def load_dim_player_nba() -> pd.DataFrame:
     df = df[keep].drop_duplicates(subset=["nba_id"])
     logger.info(f"Loaded {len(df):,} NBA dimension rows")
     return df
+
+
+def load_nba_wingspan_bridge() -> pd.DataFrame:
+    """
+    Load NBA wingspan (ws) from basketball_excel and expose bbr_id keyed bridge.
+    ws is stored in centimeters in basketball_excel; convert to inches.
+    """
+    path = BASE_DIR / "data" / "basketball_excel" / "all_players.parquet"
+    if not path.exists():
+        logger.warning(f"NBA ws bridge source not found: {path}")
+        return pd.DataFrame()
+    try:
+        raw = pd.read_parquet(path, columns=["bbr_pid", "ws"])
+        if raw.empty:
+            return pd.DataFrame()
+        raw["bbr_id"] = raw["bbr_pid"].astype(str).str.strip().str.lower()
+        ws_cm = pd.to_numeric(raw["ws"], errors="coerce")
+        ws_cm = ws_cm.where((ws_cm >= 120.0) & (ws_cm <= 260.0), np.nan)
+        raw["nba_wingspan_cm"] = ws_cm
+        out = (
+            raw.dropna(subset=["bbr_id"])
+            .groupby("bbr_id", as_index=False)["nba_wingspan_cm"]
+            .median()
+        )
+        out["nba_wingspan_in"] = out["nba_wingspan_cm"] / 2.54
+        logger.info(f"Loaded NBA ws bridge rows: {len(out):,}")
+        return out
+    except Exception as exc:
+        logger.warning(f"Failed loading NBA ws bridge: {exc}")
+        return pd.DataFrame()
+
+
+def _to_lbs_from_mixed_weight(series: pd.Series) -> pd.Series:
+    """
+    Convert mixed-unit NBA weight surface to pounds.
+    If value looks like kg (50..180), convert to lbs. If already lbs (>=130), keep.
+    """
+    x = pd.to_numeric(series, errors="coerce")
+    kg_mask = (x >= 50.0) & (x <= 180.0)
+    lbs_mask = (x >= 130.0) & (x <= 380.0)
+    out = x.copy()
+    out.loc[kg_mask & ~lbs_mask] = out.loc[kg_mask & ~lbs_mask] * 2.2046226218
+    out = out.where((out >= 110.0) & (out <= 380.0), np.nan)
+    return out
 
 
 def load_recruiting_physicals() -> pd.DataFrame:
@@ -664,6 +710,51 @@ def load_recruiting_physicals() -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def load_college_physicals_by_season() -> pd.DataFrame:
+    """Load canonical college physicals by season from warehouse v2 (preferred) or duckdb table."""
+    pq_path = WAREHOUSE_V2 / "fact_college_player_physicals_by_season.parquet"
+    if pq_path.exists():
+        df = pd.read_parquet(pq_path)
+        logger.info(f"Loaded canonical college physicals rows: {len(df):,}")
+        return df
+
+    db_path = BASE_DIR / "data" / "warehouse.duckdb"
+    if not db_path.exists():
+        logger.warning("No physicals source found (warehouse_v2 parquet + duckdb missing)")
+        return pd.DataFrame()
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        df = con.execute("SELECT * FROM fact_college_player_physicals_by_season").df()
+        con.close()
+        logger.info(f"Loaded canonical college physicals rows from duckdb: {len(df):,}")
+        return df
+    except Exception as exc:
+        logger.warning(f"Failed loading canonical college physicals: {exc}")
+        return pd.DataFrame()
+
+
+def load_college_physical_trajectory() -> pd.DataFrame:
+    """Load college physical trajectory features."""
+    pq_path = WAREHOUSE_V2 / "fact_college_player_physical_trajectory.parquet"
+    if pq_path.exists():
+        df = pd.read_parquet(pq_path)
+        logger.info(f"Loaded college physical trajectory rows: {len(df):,}")
+        return df
+
+    db_path = BASE_DIR / "data" / "warehouse.duckdb"
+    if not db_path.exists():
+        return pd.DataFrame()
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        df = con.execute("SELECT * FROM fact_college_player_physical_trajectory").df()
+        con.close()
+        logger.info(f"Loaded college physical trajectory rows from duckdb: {len(df):,}")
+        return df
+    except Exception as exc:
+        logger.warning(f"Failed loading college physical trajectory: {exc}")
+        return pd.DataFrame()
+
+
 def load_nba_targets() -> pd.DataFrame:
     """Load and merge NBA target tables."""
     targets = pd.DataFrame()
@@ -697,6 +788,17 @@ def load_nba_targets() -> pd.DataFrame:
         else:
             targets = targets.merge(y1[y1_cols], on='nba_id', how='outer')
         logger.info(f"Loaded {len(y1):,} year-1 EPM targets")
+
+    # Peak/rolling EPM (auxiliary or optional primary for EPM-first runs)
+    peak_epm_path = WAREHOUSE_V2 / "fact_player_peak_epm.parquet"
+    if peak_epm_path.exists():
+        pepm = pd.read_parquet(peak_epm_path)
+        p_cols = [c for c in ['nba_id', 'y_peak_epm_1y', 'y_peak_epm_2y', 'y_peak_epm_3y', 'y_peak_epm_window', 'epm_obs_seasons', 'epm_obs_minutes', 'epm_peak_window_end_year'] if c in pepm.columns]
+        if targets.empty:
+            targets = pepm[p_cols].copy()
+        else:
+            targets = targets.merge(pepm[p_cols], on='nba_id', how='outer')
+        logger.info(f"Loaded {len(pepm):,} peak/rolling EPM targets")
     
     # Gaps (auxiliary targets)
     gaps_path = WAREHOUSE_V2 / "fact_player_nba_college_gaps.parquet"
@@ -1026,6 +1128,15 @@ def compute_derived_features(df: pd.DataFrame) -> pd.DataFrame:
         need_pace = pd.to_numeric(df['college_team_pace'], errors='coerce').isna()
         pace_proxy = pd.to_numeric(df.get('final_poss_total', np.nan), errors='coerce') / 30.0
         df.loc[need_pace, 'college_team_pace'] = pace_proxy[need_pace]
+
+    # Physical derived features (used by encoder for interaction learning).
+    h_in = pd.to_numeric(df.get('college_height_in'), errors='coerce')
+    w_lbs = pd.to_numeric(df.get('college_weight_lbs'), errors='coerce')
+    ws_in = pd.to_numeric(df.get('wingspan_in'), errors='coerce')
+    h_m = h_in * 0.0254
+    w_kg = w_lbs * 0.45359237
+    df['college_bmi'] = np.where((h_m > 0) & np.isfinite(h_m) & np.isfinite(w_kg), w_kg / (h_m * h_m), np.nan)
+    df['college_wingspan_to_height_ratio'] = np.where((h_in > 0) & np.isfinite(h_in) & np.isfinite(ws_in), ws_in / h_in, np.nan)
     
     # True Shooting % (if not already present)
     # Missingness-safe: do not fabricate 0s when components are missing.
@@ -1237,12 +1348,12 @@ def build_unified_training_table(
                 else:
                     college_features[target_col] = pd.to_numeric(college_features[derived_col], errors='coerce')
         
-        # Games played: same coalesce behavior (derived first, preserve source fallback).
+        # Games played: preserve primary games_played first, use derived fallback only when missing.
         if 'college_games_played' in college_features.columns:
             if 'games_played' in college_features.columns:
                 college_features['games_played'] = (
-                    pd.to_numeric(college_features['college_games_played'], errors='coerce')
-                    .combine_first(pd.to_numeric(college_features['games_played'], errors='coerce'))
+                    pd.to_numeric(college_features['games_played'], errors='coerce')
+                    .combine_first(pd.to_numeric(college_features['college_games_played'], errors='coerce'))
                 )
             else:
                 college_features['games_played'] = pd.to_numeric(college_features['college_games_played'], errors='coerce')
@@ -1366,8 +1477,11 @@ def build_unified_training_table(
     trajectory_features = load_trajectory_features()
     college_dev_rate = load_college_dev_rate()
     transfer_summary = load_transfer_context_summary()
+    physicals_by_season = load_college_physicals_by_season()
+    physical_traj = load_college_physical_trajectory()
     crosswalk = load_crosswalk()
     dim_nba = load_dim_player_nba()
+    nba_ws_bridge = load_nba_wingspan_bridge()
     recruiting_phys = load_recruiting_physicals()
     nba_targets = load_nba_targets()
     
@@ -1432,6 +1546,70 @@ def build_unified_training_table(
     if not final_college.empty:
         df = df.merge(final_college, on='athlete_id', how='left')
 
+    # Join canonical college physicals at final college season grain.
+    if not physicals_by_season.empty and "college_final_season" in df.columns:
+        phys = physicals_by_season.copy()
+        phys = phys.rename(columns={"season": "college_final_season", "team_id": "college_teamId"})
+        join_keys = ["athlete_id", "college_final_season"]
+        if "college_teamId" in df.columns and "college_teamId" in phys.columns:
+            join_keys.append("college_teamId")
+        keep_cols = join_keys + [
+            c for c in [
+                "height_in", "weight_lbs", "wingspan_in", "standing_reach_in",
+                "wingspan_minus_height_in", "has_height", "has_weight", "has_wingspan",
+                "source_type", "source_provider", "source_url", "confidence",
+            ] if c in phys.columns
+        ]
+        phys = phys[keep_cols].drop_duplicates(subset=join_keys)
+        df = df.merge(phys, on=join_keys, how="left")
+        # Canonical contract aliases.
+        existing_h = pd.to_numeric(df["college_height_in"], errors="coerce") if "college_height_in" in df.columns else pd.Series(np.nan, index=df.index)
+        existing_w = pd.to_numeric(df["college_weight_lbs"], errors="coerce") if "college_weight_lbs" in df.columns else pd.Series(np.nan, index=df.index)
+        existing_h_mask = pd.to_numeric(df["has_college_height"], errors="coerce") if "has_college_height" in df.columns else pd.Series(np.nan, index=df.index)
+        existing_w_mask = pd.to_numeric(df["has_college_weight"], errors="coerce") if "has_college_weight" in df.columns else pd.Series(np.nan, index=df.index)
+        if "height_in" in df.columns:
+            df["college_height_in"] = existing_h.combine_first(
+                pd.to_numeric(df["height_in"], errors="coerce")
+            )
+        if "weight_lbs" in df.columns:
+            df["college_weight_lbs"] = existing_w.combine_first(
+                pd.to_numeric(df["weight_lbs"], errors="coerce")
+            )
+        if "has_height" in df.columns:
+            df["has_college_height"] = existing_h_mask.combine_first(
+                pd.to_numeric(df["has_height"], errors="coerce")
+            )
+        if "has_weight" in df.columns:
+            df["has_college_weight"] = existing_w_mask.combine_first(
+                pd.to_numeric(df["has_weight"], errors="coerce")
+            )
+        logger.info("  Added canonical college physicals by season")
+
+    # Join physical trajectory values at final college season grain.
+    if not physical_traj.empty and "college_final_season" in df.columns:
+        ptri = physical_traj.rename(columns={"season": "college_final_season"}).copy()
+        t_join = ["athlete_id", "college_final_season"]
+        t_cols = t_join + [
+            c for c in [
+                "height_delta_yoy", "weight_delta_yoy",
+                "height_slope_3yr", "weight_slope_3yr",
+                "height_change_entry_to_final", "weight_change_entry_to_final",
+                "trajectory_obs_count",
+            ] if c in ptri.columns
+        ]
+        ptri = ptri[t_cols].drop_duplicates(subset=t_join)
+        df = df.merge(ptri, on=t_join, how="left")
+        rename_map = {
+            "height_delta_yoy": "college_height_delta_yoy",
+            "weight_delta_yoy": "college_weight_delta_yoy",
+            "height_slope_3yr": "college_height_slope_3yr",
+            "weight_slope_3yr": "college_weight_slope_3yr",
+        }
+        for src, dst in rename_map.items():
+            if src in df.columns and dst not in df.columns:
+                df[dst] = pd.to_numeric(df[src], errors="coerce")
+        logger.info("  Added college physical trajectory features")
+
     # Add team-strength/SRS via final season + team.
     if not team_strength.empty and {'college_teamId', 'college_final_season'}.issubset(df.columns):
         srs = team_strength.rename(columns={'teamId': 'college_teamId', 'season': 'college_final_season'})
@@ -1449,17 +1627,19 @@ def build_unified_training_table(
     # Add college-side physicals (works for prospects, draft-safe).
     if not recruiting_phys.empty:
         df = df.merge(recruiting_phys, on="athlete_id", how="left")
+    recruit_h = pd.to_numeric(df["recruit_height_in"], errors="coerce") if "recruit_height_in" in df.columns else pd.Series(np.nan, index=df.index)
+    recruit_w = pd.to_numeric(df["recruit_weight_lbs"], errors="coerce") if "recruit_weight_lbs" in df.columns else pd.Series(np.nan, index=df.index)
     if "college_height_in" not in df.columns:
-        df["college_height_in"] = pd.to_numeric(df.get("recruit_height_in"), errors="coerce")
+        df["college_height_in"] = recruit_h
     else:
         df["college_height_in"] = pd.to_numeric(df["college_height_in"], errors="coerce").combine_first(
-            pd.to_numeric(df.get("recruit_height_in"), errors="coerce")
+            recruit_h
         )
     if "college_weight_lbs" not in df.columns:
-        df["college_weight_lbs"] = pd.to_numeric(df.get("recruit_weight_lbs"), errors="coerce")
+        df["college_weight_lbs"] = recruit_w
     else:
         df["college_weight_lbs"] = pd.to_numeric(df["college_weight_lbs"], errors="coerce").combine_first(
-            pd.to_numeric(df.get("recruit_weight_lbs"), errors="coerce")
+            recruit_w
         )
 
     # Join college impact stack by final season when available.
@@ -1583,7 +1763,7 @@ def build_unified_training_table(
 
     # Join draft/rookie metadata for cohort filtering + downstream audits.
     if not dim_nba.empty:
-        dim_cols = [c for c in ["nba_id", "draft_year", "rookie_season_year", "player_name", "ht_first", "ht_max", "wt_first", "wt_max", "ht_peak_delta", "wt_peak_delta"] if c in dim_nba.columns]
+        dim_cols = [c for c in ["nba_id", "draft_year", "rookie_season_year", "player_name", "bbr_id", "ht_first", "ht_max", "wt_first", "wt_max", "ht_peak_delta", "wt_peak_delta"] if c in dim_nba.columns]
         df = df.merge(dim_nba[dim_cols], on="nba_id", how="left", suffixes=("", "_dim"))
         if "player_name_dim" in df.columns and "player_name" not in df.columns:
             df = df.rename(columns={"player_name_dim": "player_name"})
@@ -1591,8 +1771,10 @@ def build_unified_training_table(
         nba_h_cm = pd.to_numeric(df.get("ht_first"), errors="coerce").combine_first(
             pd.to_numeric(df.get("ht_max"), errors="coerce")
         )
-        nba_w_lbs = pd.to_numeric(df.get("wt_first"), errors="coerce").combine_first(
-            pd.to_numeric(df.get("wt_max"), errors="coerce")
+        nba_w_lbs = _to_lbs_from_mixed_weight(
+            pd.to_numeric(df.get("wt_first"), errors="coerce")
+        ).combine_first(
+            _to_lbs_from_mixed_weight(pd.to_numeric(df.get("wt_max"), errors="coerce"))
         )
         df["nba_height_cm"] = nba_h_cm
         df["nba_weight_lbs"] = nba_w_lbs
@@ -1612,6 +1794,21 @@ def build_unified_training_table(
         df["college_weight_lbs"] = pd.to_numeric(df.get("college_weight_lbs"), errors="coerce").combine_first(nba_w_lbs)
         df["has_college_height"] = df["college_height_in"].notna().astype(int)
         df["has_college_weight"] = df["college_weight_lbs"].notna().astype(int)
+    if not nba_ws_bridge.empty and "bbr_id" in df.columns:
+        ws = nba_ws_bridge.copy()
+        ws["bbr_id"] = ws["bbr_id"].astype(str).str.strip().str.lower()
+        df["bbr_id"] = df["bbr_id"].astype(str).str.strip().str.lower()
+        df = df.merge(ws, on="bbr_id", how="left")
+        existing_ws = pd.to_numeric(df.get("wingspan_in"), errors="coerce")
+        bridge_ws = pd.to_numeric(df.get("nba_wingspan_in"), errors="coerce")
+        df["wingspan_in"] = existing_ws.combine_first(bridge_ws)
+        if "wingspan_minus_height_in" not in df.columns:
+            df["wingspan_minus_height_in"] = np.nan
+        df["wingspan_minus_height_in"] = pd.to_numeric(df["wingspan_minus_height_in"], errors="coerce").combine_first(
+            pd.to_numeric(df["wingspan_in"], errors="coerce") - pd.to_numeric(df["college_height_in"], errors="coerce")
+        )
+        df["has_wingspan"] = pd.to_numeric(df.get("has_wingspan"), errors="coerce").fillna(0)
+        df["has_wingspan"] = np.where(pd.to_numeric(df["wingspan_in"], errors="coerce").notna(), 1, df["has_wingspan"]).astype(int)
 
     # Cohort filter: default to modern era where college-source coverage is aligned.
     # Fallback uses rookie season when draft year is missing.
@@ -1661,6 +1858,9 @@ def build_unified_training_table(
         df["has_college_height"] = df["college_height_in"].notna().astype(int)
     if "has_college_weight" not in df.columns:
         df["has_college_weight"] = df["college_weight_lbs"].notna().astype(int)
+    for col in ["college_height_delta_yoy", "college_weight_delta_yoy", "college_height_slope_3yr", "college_weight_slope_3yr"]:
+        if col not in df.columns:
+            df[col] = np.nan
     
     # 5. Era normalization was already applied on the full population in step 2b.
     #    Skipping here to avoid recomputing on the filtered cohort (which causes

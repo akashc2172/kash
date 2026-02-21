@@ -674,3 +674,45 @@ Rebuilt entire chain: `build_prospect_career_store_v2.py` → `build_transfer_co
 - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/crosswalk_quality_dashboard.html`
 - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/full_pipeline_active_learning_dashboard.html`
 - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/activity_feature_quality_dashboard.html`
+
+## 2026-02-21 — College Physicals Backfill (Season-by-Season) + Hard Gate
+
+### Implemented
+- Added new ingest pipeline:
+  - `/Users/akashc/my-trankcopy/ml model/college_scripts/ingest_college_physicals.py`
+- New raw/canonical/trajectory data contracts:
+  - `raw_team_roster_physical` (duckdb, append-only)
+  - `fact_college_player_physicals_by_season` (duckdb + parquet mirror)
+  - `fact_college_player_physical_trajectory` (duckdb + parquet mirror)
+- Provider adapter stack (priority order):
+  - `cbd`, `cbbpy`, `sportsipy`, `manual`, `recruiting_fallback`
+- Unified + inference parity wiring:
+  - joins canonical physicals by final season
+  - adds trajectory fields:
+    - `college_height_delta_yoy`
+    - `college_weight_delta_yoy`
+    - `college_height_slope_3yr`
+    - `college_weight_slope_3yr`
+- Encoder contract update:
+  - physical trajectory fields added to `CAREER_BASE_COLUMNS`
+- Added hard physical gate:
+  - `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_physical_feature_gate.py`
+- Added canonical HTML dashboard:
+  - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/physical_feature_quality_dashboard.html`
+
+### Gate/Audit artifacts
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physicals_unresolved_identity.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physicals_ambiguous_identity.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physicals_coverage_by_season.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physicals_provider_mix.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physicals_linkage_quality.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physical_feature_gate_report.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/physical_feature_gate_report.json`
+
+### Current limitation (expected with current provider mix)
+- This run used `manual,recruiting_fallback` providers only (no CBD/cbbpy/sportsipy roster source records in environment).
+- Result:
+  - static physicals (`college_height_in`, `college_weight_lbs`) are high coverage in unified.
+  - trajectory fields (`college_height_delta_yoy`, `college_weight_delta_yoy`, `college_height_slope_3yr`, `college_weight_slope_3yr`) are schema-complete but sparse/null in NBA-crosswalk cohort.
+- Action to increase trajectory coverage:
+  - run ingest with season roster providers (`cbd` and/or `cbbpy`/`sportsipy`) and/or populate `/Users/akashc/my-trankcopy/ml model/data/manual_physicals`.

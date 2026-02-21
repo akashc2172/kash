@@ -128,6 +128,7 @@ class ProspectDataset(Dataset):
         temporal_decay_min: float = 0.2,
         rapm_maturity_asof_year: Optional[int] = None,
         rapm_min_nba_seasons: int = 3,
+        epm_target_col: str = "year1_epm_tot",
     ):
         self.df = df.reset_index(drop=True)
         self.tier1_cols = [c for c in tier1_cols if c in df.columns]
@@ -141,6 +142,7 @@ class ProspectDataset(Dataset):
         self.temporal_decay_min = temporal_decay_min
         self.rapm_maturity_asof_year = rapm_maturity_asof_year
         self.rapm_min_nba_seasons = int(max(0, rapm_min_nba_seasons))
+        self.epm_target_col = epm_target_col
         
         # Pre-extract features
         self.tier1 = self._extract_features(tier1_cols)
@@ -263,9 +265,9 @@ class ProspectDataset(Dataset):
             base_w = np.ones(len(self.df), dtype=np.float32)
             targets['gap'] = (vals, mask, base_w)
         
-        # Year 1 EPM (auxiliary)
-        if 'year1_epm_tot' in self.df.columns:
-            vals = self.df['year1_epm_tot'].values.astype(np.float32)
+        # EPM auxiliary/primary target (configurable: year1 or peak rolling EPM)
+        if self.epm_target_col in self.df.columns:
+            vals = self.df[self.epm_target_col].values.astype(np.float32)
             mask = ~np.isnan(vals)
             vals = np.nan_to_num(vals, nan=0.0)
             base_w = np.ones(len(self.df), dtype=np.float32)
@@ -970,6 +972,7 @@ def main(args):
         temporal_decay_min=args.temporal_decay_min,
         rapm_maturity_asof_year=asof_year,
         rapm_min_nba_seasons=args.rapm_min_nba_seasons,
+        epm_target_col=args.epm_target_col,
     )
     val_dataset = ProspectDataset(
         val_df, tier1_cols, tier2_cols, career_cols, within_cols, YEAR1_INTERACTION_COLUMNS,
@@ -978,6 +981,7 @@ def main(args):
         temporal_decay_min=args.temporal_decay_min,
         rapm_maturity_asof_year=asof_year,
         rapm_min_nba_seasons=args.rapm_min_nba_seasons,
+        epm_target_col=args.epm_target_col,
     )
     test_dataset = ProspectDataset(
         test_df, tier1_cols, tier2_cols, career_cols, within_cols, YEAR1_INTERACTION_COLUMNS,
@@ -986,6 +990,7 @@ def main(args):
         temporal_decay_min=args.temporal_decay_min,
         rapm_maturity_asof_year=asof_year,
         rapm_min_nba_seasons=args.rapm_min_nba_seasons,
+        epm_target_col=args.epm_target_col,
     )
 
     within_cov = float(np.mean(train_dataset.within_mask)) if len(train_dataset.within_mask) else 0.0
@@ -1134,6 +1139,7 @@ def main(args):
         "career_columns": list(career_cols),
         "within_columns": list(within_cols),
         "year1_interaction_columns": list(YEAR1_INTERACTION_COLUMNS),
+        "epm_target_col": str(args.epm_target_col),
     }
     with open(output_dir / "model_config.json", "w") as f:
         json.dump(model_cfg, f, indent=2)
@@ -1287,6 +1293,7 @@ if __name__ == "__main__":
     parser.add_argument('--lambda-rapm-var', type=float, default=None, help='Override RAPM variance-matching regularization weight')
     parser.add_argument('--lambda-gap', type=float, default=None, help='Override gap auxiliary loss weight')
     parser.add_argument('--lambda-epm', type=float, default=None, help='Override Year-1 EPM auxiliary loss weight')
+    parser.add_argument('--epm-target-col', type=str, default='year1_epm_tot', help='EPM target column (e.g., year1_epm_tot, y_peak_epm_3y)')
     parser.add_argument('--lambda-dev', type=float, default=None, help='Override development-rate auxiliary loss weight')
     parser.add_argument('--lambda-surv', type=float, default=None, help='Override survival auxiliary loss weight')
     parser.add_argument('--lambda-arch', type=float, default=None, help='Override archetype regularization weight')

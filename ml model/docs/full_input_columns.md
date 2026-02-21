@@ -93,6 +93,10 @@
 - `college_weight_lbs`
 - `has_college_height`
 - `has_college_weight`
+- `college_height_delta_yoy`
+- `college_weight_delta_yoy`
+- `college_height_slope_3yr`
+- `college_weight_slope_3yr`
 - `nba_height_change_cm` (observed trajectory field)
 - `nba_weight_change_lbs` (observed trajectory field)
 - `final_trueShootingPct`

@@ -15,6 +15,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 INFERENCE_DIR = BASE_DIR / "data" / "inference"
 WAREHOUSE_DB = BASE_DIR / "data" / "warehouse.duckdb"
 CROSSWALK_PATH = BASE_DIR / "data" / "warehouse_v2" / "dim_player_nba_college_crosswalk.parquet"
+UNIFIED_PATH = BASE_DIR / "data" / "training" / "unified_training_table.parquet"
 
 
 def latest_predictions() -> Path:
@@ -63,6 +64,31 @@ def load_name_map() -> pd.DataFrame:
     return out
 
 
+def load_actual_rapm_targets() -> pd.DataFrame:
+    """
+    Load actual peak RAPM target at athlete/season grain for ranking overlays.
+    """
+    if not UNIFIED_PATH.exists():
+        return pd.DataFrame(columns=["athlete_id", "college_final_season", "actual_peak_rapm", "actual_peak_poss"])
+    df = pd.read_parquet(UNIFIED_PATH)
+    keep = [c for c in ["athlete_id", "college_final_season", "y_peak_ovr", "peak_poss"] if c in df.columns]
+    if len(keep) < 3:
+        return pd.DataFrame(columns=["athlete_id", "college_final_season", "actual_peak_rapm", "actual_peak_poss"])
+    out = df[keep].copy()
+    out["athlete_id"] = out["athlete_id"].astype(str)
+    out["college_final_season"] = pd.to_numeric(out["college_final_season"], errors="coerce").astype("Int64")
+    out["actual_peak_rapm"] = pd.to_numeric(out["y_peak_ovr"], errors="coerce")
+    out["actual_peak_poss"] = pd.to_numeric(out.get("peak_poss"), errors="coerce")
+    out = out.drop(columns=[c for c in ["y_peak_ovr", "peak_poss"] if c in out.columns])
+    out = out.dropna(subset=["athlete_id", "college_final_season"])
+    # Deterministic dedupe at athlete-season grain.
+    out = out.sort_values(
+        ["athlete_id", "college_final_season", "actual_peak_poss", "actual_peak_rapm"],
+        ascending=[True, True, False, False],
+    ).drop_duplicates(subset=["athlete_id", "college_final_season"], keep="first")
+    return out
+
+
 def main() -> None:
     pred_path = latest_predictions()
     pred = pd.read_parquet(pred_path)
@@ -75,6 +101,12 @@ def main() -> None:
     names = load_name_map()
     ranked = pred.merge(names, on="athlete_id", how="left")
     ranked["player_name"] = ranked["player_name"].fillna(ranked["athlete_id"])
+    actual = load_actual_rapm_targets()
+    if not actual.empty:
+        ranked = ranked.merge(actual, on=["athlete_id", "college_final_season"], how="left")
+    else:
+        ranked["actual_peak_rapm"] = np.nan
+        ranked["actual_peak_poss"] = np.nan
     if CROSSWALK_PATH.exists():
         cw = pd.read_parquet(CROSSWALK_PATH, columns=["athlete_id"]).dropna().copy()
         cw["athlete_id"] = cw["athlete_id"].astype(str)
@@ -119,6 +151,17 @@ def main() -> None:
         if len(q_idx):
             ranked.loc[q_idx, "season_rank_matched"] = range(1, len(q_idx) + 1)
 
+    # Actual RAPM class ranks (for players with observed peak RAPM target).
+    ranked["actual_rapm_rank_class"] = pd.NA
+    ranked["actual_rapm_rank_class_qualified"] = pd.NA
+    for season, g in ranked.groupby("college_final_season", sort=False):
+        g_obs = g[g["actual_peak_rapm"].notna()].sort_values("actual_peak_rapm", ascending=False)
+        if len(g_obs):
+            ranked.loc[g_obs.index, "actual_rapm_rank_class"] = range(1, len(g_obs) + 1)
+        g_obs_q = g[(g["actual_peak_rapm"].notna()) & (g["is_qualified_pool"] == 1)].sort_values("actual_peak_rapm", ascending=False)
+        if len(g_obs_q):
+            ranked.loc[g_obs_q.index, "actual_rapm_rank_class_qualified"] = range(1, len(g_obs_q) + 1)
+
     keep = ["college_final_season", "season_rank", "athlete_id", "player_name", score_col, "pred_peak_rapm"]
     if "pred_rank_target" in ranked.columns:
         keep.insert(5, "pred_rank_target")
@@ -129,6 +172,9 @@ def main() -> None:
     ranked["college_minutes_total"] = ranked["college_minutes_total_display"]
 
     for c in ["season_rank_all", "season_rank_qualified", "season_rank_matched", "is_qualified_pool", "is_nba_matched", "college_games_played", "college_poss_proxy", "college_minutes_total", "college_minutes_total_raw", "college_minutes_total_display", "minutes_is_estimated"]:
+        if c in ranked.columns:
+            keep.append(c)
+    for c in ["actual_peak_rapm", "actual_peak_poss", "actual_rapm_rank_class", "actual_rapm_rank_class_qualified"]:
         if c in ranked.columns:
             keep.append(c)
     for c in ["pred_dev_rate", "pred_dev_rate_std", "pred_year1_epm", "pred_gap_ts", "pred_made_nba_logit"]:

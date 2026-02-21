@@ -334,6 +334,10 @@ CAREER_BASE_COLUMNS = [
     'season_index', 'class_year', 'age_at_season', 'has_age_at_season',
     # Physical profile (draft-time safe where available).
     'college_height_in', 'college_weight_lbs', 'has_college_height', 'has_college_weight',
+    'wingspan_in', 'wingspan_minus_height_in', 'has_wingspan',
+    'college_bmi', 'college_wingspan_to_height_ratio',
+    'college_height_delta_yoy', 'college_weight_delta_yoy',
+    'college_height_slope_3yr', 'college_weight_slope_3yr',
     # Final season anchors
     'final_trueShootingPct', 'final_usage', 'final_poss_total',
     'final_rim_fg_pct', 'final_three_fg_pct', 'final_ft_pct',
@@ -361,7 +365,6 @@ CAREER_BASE_COLUMNS = [
     # Explicit within-availability context for gating/readiness.
     'has_within_window_data',
 
-    # Wingspan is currently schema-only (all-null upstream), so excluded from active encoder.
 ]
 
 WITHIN_COLUMNS = [

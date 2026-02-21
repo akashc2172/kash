@@ -5,6 +5,24 @@ This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml
 
 Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
 
+Last mirror refresh: 2026-02-20 20:55:19
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
+Last mirror refresh: 2026-02-20 20:52:26
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
 Last mirror refresh: 2026-02-20 19:18:17
 
 

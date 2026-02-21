@@ -64,3 +64,4 @@
 - `docs/diagrams/crosswalk_quality_dashboard.html`
 - `docs/diagrams/full_pipeline_active_learning_dashboard.html`
 - `docs/diagrams/activity_feature_quality_dashboard.html`
+- `docs/diagrams/physical_feature_quality_dashboard.html`

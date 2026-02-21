@@ -510,3 +510,76 @@ If any critical guard fails, stop the run and produce a NO-GO audit. Do not cont
   - Added recruiting physical ingest in unified/inference, active encoder wiring, and explicit trajectory fields (`nba_height_change_cm`, `nba_weight_change_lbs`) in unified.
 - Prevention guard:
   - Any user-priority signal (physicals, wingspan, exposure) must be tracked in input-contract docs and validated in rebuild audits before deployment.
+
+56. **No season-by-season canonical physicals table (height/weight trajectories absent)**
+- What happened: physicals existed only as partial/fallback fields, without a canonical player-season table and without deterministic provenance/ranking.
+- Why this hurt: trajectory features (`height_delta_yoy`, `weight_slope_3yr`) could not be reliably computed; train-serve physical contracts drifted.
+- Fix applied:
+  - Added dedicated pipeline `/Users/akashc/my-trankcopy/ml model/college_scripts/ingest_college_physicals.py`.
+  - Added canonical/trajectory contracts:
+    - `fact_college_player_physicals_by_season`
+    - `fact_college_player_physical_trajectory`
+  - Added hard gate `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_physical_feature_gate.py` and dashboard `/Users/akashc/my-trankcopy/ml model/docs/diagrams/physical_feature_quality_dashboard.html`.
+- Prevention guard:
+  - Any new input family must ship with: canonical table, trajectory/derived table (if applicable), hard gate script, and parity checks in both training and inference builders.
+
+57. **Canonical physical resolver sorted by a column before it existed**
+- What happened: `_canonicalize()` sorted on `source_provider` even though the column was still named `provider` at that stage.
+- Why this hurt: ingest pipeline crashed before publishing canonical/trajectory tables.
+- Fix applied:
+  - changed sort key to `provider`; keep rename to `source_provider` after ranking.
+- Prevention guard:
+  - for new pipelines, run a real ingest smoke (not just `py_compile`) before wiring downstream consumers.
+
+58. **`combine_first` called on scalar from `df.get` in physical join paths**
+- What happened: unified/inference physical joins used `pd.to_numeric(df.get(\"college_height_in\"), ...).combine_first(...)`; when missing, `df.get` returned scalar `NaN`.
+- Why this hurt: build crashed with `'numpy.float64' object has no attribute 'combine_first'`.
+- Fix applied:
+  - switched to explicit Series construction with index-aligned defaults before `combine_first`.
+- Prevention guard:
+  - avoid `df.get(...).combine_first(...)` patterns for optional columns; enforce `Series`-typed helper inputs for all coalesce operations.
+
+59. **NBA wingspan existed in basketball-excel but was not bridged into college-side model inputs**
+- What happened: `all_players.parquet` had `ws` values, but unified/inference pipelines only used sparse college physical sources for `wingspan_in`.
+- Why this hurt: high-signal physical length data was left unused for NBA-mapped players even though linkage keys (`bbr_id`) were available.
+- Fix applied:
+  - added deterministic ws bridge loader in `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py`:
+    - reads `data/basketball_excel/all_players.parquet` (`bbr_pid`, `ws`)
+    - converts cm -> inches
+    - fills `wingspan_in`, `wingspan_minus_height_in`, `has_wingspan` only when missing
+  - mirrored the same fallback logic in `/Users/akashc/my-trankcopy/ml model/nba_scripts/nba_prospect_inference.py`.
+- Prevention guard:
+  - every physical signal in basketball-excel (`ht`, `wt`, `ws`) must have explicit train+serve parity checks and coverage metrics in rebuild audits.
+
+60. **NBA weight fallback mixed kg/lbs and produced invalid college weight fills**
+- What happened: fallback used `wt_first/wt_max` as lbs directly; some rows are kg-like values (e.g., 96) and leaked unrealistic low `college_weight_lbs`.
+- Why this hurt: bad physical inputs distort downstream scoring and player comparisons.
+- Fix applied:
+  - added `_to_lbs_from_mixed_weight()` in `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py` to convert kg-range values to lbs before fallback.
+- Prevention guard:
+  - enforce unit-normalization helper for any mixed-source anthropometrics before coalescing into model-facing columns.
+
+61. **CBD physicals ingest ignored `.env`, silently skipping live API provider**
+- What happened: `ingest_college_physicals.py` read `CBD_API_KEY` only from process env and did not load `/Users/akashc/my-trankcopy/ml model/.env`.
+- Why this hurt: provider order included `cbd`, but runs silently degraded to fallback-only coverage.
+- Fix applied:
+  - added dotenv bootstrap in `run_pipeline()` to load project `.env` before provider collection.
+- Prevention guard:
+  - provider scripts must report explicit “env loaded + key present” checks in stage-0 logs before network ingestion loops.
+
+62. **Numeric height parsing treated plain cm-like values as inches**
+- What happened: parser matched plain numeric strings (e.g., `194.0`) through the inches regex path and interpreted them as 194 inches; range validation then nulled height.
+- Why this hurt: NBA fallback physical rows kept weight but lost height for valid players (e.g., Jalen Williams college seasons).
+- Fix applied:
+  - updated `parse_height_in()` to interpret plain numeric `120..260` as cm unless explicit inch tokens are present.
+- Prevention guard:
+  - unit parser tests must include `194`, `194 cm`, `6-5`, and `77 in` cases; no deploy without parser fixture pass.
+
+63. **Games-played source precedence and season alignment caused systematic undercounts**
+- What happened: training build prioritized `college_games_played` from `derived_box_stats_v1.parquet` (event-participation proxy) ahead of stronger `games_played` sources, while backfill joins only mapped strongly for 2019+ due season/key alignment behavior.
+- Why this hurt: seasons like 2018 and many current-season rows were undercounted (single-digit/teens games), creating unstable exposure features and poor ranking quality.
+- Fix applied:
+  - changed training coalesce order to prefer existing `games_played` and use derived `college_games_played` only as fallback (`build_unified_training_table.py`).
+  - documented season-level diagnostics and required follow-up: normalize start-year/end-year mapping for manual backfill and add per-season source coverage gates.
+- Prevention guard:
+  - enforce per-season games-source audit before publish: report coverage split by `api/box`, `manual_backfill`, `derived_proxy`; block if legacy cohorts rely primarily on `derived_proxy`.

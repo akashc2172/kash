@@ -5,6 +5,24 @@ This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml
 
 Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
 
+Last mirror refresh: 2026-02-20 20:55:19
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
+Last mirror refresh: 2026-02-20 20:52:26
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
 Last mirror refresh: 2026-02-20 19:18:17
 
 
