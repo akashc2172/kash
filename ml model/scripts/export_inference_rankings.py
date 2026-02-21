@@ -139,17 +139,18 @@ def main() -> None:
     # Strict exposure gate to avoid tiny-sample rows dominating seasonal leaderboards.
     # Allow either possessions or minutes-based evidence to qualify.
     ranked["is_qualified_pool"] = ((games >= 14) & ((poss >= 200) | (ranked["college_minutes_total_display"] >= 400))).astype(int)
-    # Strict v2: estimated minutes never qualify a player.
+    # Strict v2: estimated minutes never qualify a player AND raw minutes must exist.
+    raw_minutes_available = pd.to_numeric(ranked["college_minutes_total_raw"], errors="coerce").fillna(0) > 0
     minutes_ok_v2 = pd.to_numeric(ranked["college_minutes_total_raw"], errors="coerce") >= 400
     poss_ok_v2 = poss >= 200
     games_ok_v2 = games >= 14
     exposure_ok_v2 = poss_ok_v2 | minutes_ok_v2
-    ranked["is_qualified_pool_v2"] = (games_ok_v2 & exposure_ok_v2).astype(int)
+    ranked["is_qualified_pool_v2"] = (games_ok_v2 & exposure_ok_v2 & raw_minutes_available).astype(int)
     ranked["qualified_reason"] = np.select(
         [
             ranked["is_qualified_pool_v2"] == 1,
             ~games_ok_v2,
-            games_ok_v2 & ~exposure_ok_v2 & (pd.to_numeric(ranked["college_minutes_total_raw"], errors="coerce").fillna(0) <= 0),
+            games_ok_v2 & ~raw_minutes_available,
             games_ok_v2 & ~exposure_ok_v2,
         ],
         ["PASS", "LOW_GAMES", "MISSING_MINUTES", "LOW_EXPOSURE"],
