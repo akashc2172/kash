@@ -119,11 +119,21 @@ def ingest_player_season(
 def build_bridges(
     scrape_root: str = typer.Option("data/manual_scrapes", help="Root folder for manual NCAA scrape CSVs"),
     max_files: int = typer.Option(None, help="Optional limit for debug runs"),
+    include_player_bridge: bool = typer.Option(
+        False,
+        "--include-player-bridge/--no-include-player-bridge",
+        help="Build player-level bridge (expensive).",
+    ),
     out: str = typer.Option("data/warehouse.duckdb"),
 ):
     """Build persistent game/player bridge tables linking CBD ids to manual scrape ids/names."""
     wh = Warehouse(out)
-    build_scrape_bridges(wh, scrape_root=scrape_root, max_files=max_files)
+    build_scrape_bridges(
+        wh,
+        scrape_root=scrape_root,
+        max_files=max_files,
+        include_player_bridge=include_player_bridge,
+    )
     wh.close()
     typer.echo("OK: built scrape bridges")
 

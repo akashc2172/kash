@@ -886,9 +886,45 @@ def main():
     df_features = join_recruiting(con, df_features)
     df_features = join_team_context(con, df_features)
 
+    # 1b. Enhanced activity features (API-first pipeline currently unavailable in source
+    # for many eras, so we compute deterministic fallback features and merge them).
+    try:
+        from compute_enhanced_features import compute_all_enhanced_features  # local module
+        df_enh = compute_all_enhanced_features(df_features)
+        if not df_enh.empty:
+            enh_cols = [
+                "dunk_rate", "dunk_freq", "putback_rate", "transition_freq", "transition_eff",
+                "rim_pressure_index", "deflection_proxy", "contest_proxy", "pressure_handle_proxy",
+                "clutch_shooting_delta", "self_creation_rate", "self_creation_eff", "leverage_poss_share",
+                "dunk_rate_missing", "dunk_freq_missing", "putback_rate_missing", "transition_freq_missing",
+                "transition_eff_missing", "rim_pressure_index_missing", "deflection_proxy_missing",
+                "contest_proxy_missing", "pressure_handle_proxy_missing", "clutch_shooting_delta_missing",
+                "self_creation_rate_missing", "self_creation_eff_missing", "leverage_poss_share_missing",
+            ]
+            enh_cols = [c for c in enh_cols if c in df_enh.columns]
+            keys = [c for c in ["season", "athlete_id", "split_id"] if c in df_enh.columns and c in df_features.columns]
+            if not keys:
+                keys = [c for c in ["season", "athlete_id"] if c in df_enh.columns and c in df_features.columns]
+            if keys:
+                df_enh = df_enh[keys + enh_cols].drop_duplicates(subset=keys)
+                before = len(df_features)
+                df_features = df_features.merge(df_enh, on=keys, how="left")
+                logger.info("Merged enhanced activity features on keys=%s. Rows: %s -> %s", keys, before, len(df_features))
+    except Exception as exc:
+        logger.warning("Enhanced activity feature merge skipped: %s", exc)
+
     out_features = f"{OUTPUT_DIR}/college_features_v1.parquet"
     df_features.to_parquet(out_features, index=False)
     logger.info(f"Saved {out_features} ({len(df_features):,} rows)")
+
+    # Persist enhanced-only artifact for explicit downstream contract/debug.
+    try:
+        if "df_enh" in locals() and isinstance(df_enh, pd.DataFrame) and not df_enh.empty:
+            out_enhanced = f"{OUTPUT_DIR}/enhanced_features_v1.parquet"
+            df_enh.to_parquet(out_enhanced, index=False)
+            logger.info(f"Saved {out_enhanced} ({len(df_enh):,} rows)")
+    except Exception as exc:
+        logger.warning("Failed to save enhanced_features_v1.parquet: %s", exc)
 
     # 2. Impact
     df_impact = build_impact(con)

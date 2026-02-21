@@ -71,6 +71,12 @@ TIER1_CONTEXT = [
     'minutes_total',
     'ast_total', 'tov_total', 'stl_total', 'blk_total',
     'orb_total', 'drb_total', 'trb_total',
+    # Restored activity/athleticism branch
+    'dunk_rate', 'dunk_freq', 'putback_rate', 'rim_pressure_index', 'contest_proxy',
+    'transition_freq', 'deflection_proxy', 'pressure_handle_proxy',
+    'activity_source', 'has_activity_features',
+    'dunk_rate_missing', 'dunk_freq_missing', 'putback_rate_missing',
+    'rim_pressure_index_missing', 'contest_proxy_missing',
 ]
 
 # Tier 2: Spatial features (2019+ only, ~25% coverage)
@@ -247,6 +253,28 @@ def load_derived_box_stats() -> pd.DataFrame:
     return df
 
 
+def load_activity_proxies() -> pd.DataFrame:
+    """Load enhanced activity features if available."""
+    path = COLLEGE_FEATURE_STORE / "enhanced_features_v1.parquet"
+    if not path.exists():
+        logger.warning(f"Enhanced activity features not found: {path}")
+        return pd.DataFrame()
+    df = pd.read_parquet(path)
+    if df.empty:
+        return df
+    keep = [
+        "season", "athlete_id", "split_id",
+        "dunk_rate", "dunk_freq", "putback_rate", "transition_freq", "transition_eff",
+        "rim_pressure_index", "deflection_proxy", "contest_proxy", "pressure_handle_proxy",
+        "dunk_rate_missing", "dunk_freq_missing", "putback_rate_missing",
+        "rim_pressure_index_missing", "contest_proxy_missing",
+        "activity_source", "has_activity_features",
+    ]
+    keep = [c for c in keep if c in df.columns]
+    logger.info(f"Loaded enhanced activity rows: {len(df):,}")
+    return df[keep].copy()
+
+
 def _norm_hist_player_name(name: str) -> str:
     """Normalize historical names into a comparable key."""
     if not isinstance(name, str):
@@ -267,7 +295,7 @@ def load_historical_exposure_backfill() -> pd.DataFrame:
     Source: warehouse_v2/fact_player_season_stats_backfill.parquet
     Mapping: season + normalized player name -> athlete_id using stg_shots name bridge.
     """
-    backfill_path = WAREHOUSE_V2 / "fact_player_season_stats_backfill.parquet"
+    backfill_path = WAREHOUSE_V2 / "fact_player_season_stats_backfill_manual_subs.parquet"
     db_path = BASE_DIR / "data" / "warehouse.duckdb"
     if (not backfill_path.exists()) or (not db_path.exists()):
         return pd.DataFrame()
@@ -277,6 +305,118 @@ def load_historical_exposure_backfill() -> pd.DataFrame:
         return pd.DataFrame()
 
     # Build deterministic bridge from API-era shooter names.
+    def _norm_hist_team_name(name: str) -> str:
+        if not isinstance(name, str):
+            return ""
+        name = re.sub(r"^#\d+\s+", "", name.strip())
+        name = name.upper().replace("STATE", "ST").replace("NORTH ", "N ").replace("SOUTH ", "S ")
+        return re.sub(r"[^A-Z]+", "", name)
+
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        bridge = con.execute(
+            """
+            WITH b AS (
+              SELECT
+                CAST(g.season AS BIGINT) AS season,
+                CAST(s.shooterAthleteId AS BIGINT) AS athlete_id,
+                s.shooter_name,
+                t.school AS team_name,
+                COUNT(*) AS shots
+              FROM stg_shots s
+              JOIN dim_games g
+                ON CAST(s.gameId AS BIGINT) = g.id
+              LEFT JOIN dim_teams t
+                ON t.id = CAST(s.teamId AS BIGINT)
+              WHERE s.shooterAthleteId IS NOT NULL
+                AND s.shooter_name IS NOT NULL
+                AND g.season IS NOT NULL
+              GROUP BY 1,2,3,4
+            )
+            SELECT season, athlete_id, shooter_name, team_name, shots
+            FROM b
+            """
+        ).df()
+        con.close()
+    except Exception as exc:
+        logger.warning(f"Failed to build historical exposure name bridge: {exc}")
+        return pd.DataFrame()
+
+    if bridge.empty:
+        return pd.DataFrame()
+
+    bridge["season"] = pd.to_numeric(bridge["season"], errors="coerce").astype("Int64")
+    bridge["athlete_id"] = pd.to_numeric(bridge["athlete_id"], errors="coerce").astype("Int64")
+    bridge["norm_name"] = bridge["shooter_name"].map(_norm_hist_player_name)
+    bridge["norm_team"] = bridge["team_name"].map(_norm_hist_team_name)
+    bridge = bridge.dropna(subset=["season", "athlete_id"])
+    bridge = bridge[bridge["norm_name"] != ""]
+    bridge = (
+        bridge.sort_values(["season", "norm_name", "norm_team", "shots", "athlete_id"], ascending=[True, True, True, False, False])
+        .drop_duplicates(subset=["season", "norm_name", "norm_team"], keep="first")
+    )
+
+    bf = bf.copy()
+    # Historical manual PBP seasons are stored as season start-year (e.g., 2021 for 2021-22).
+    # Project feature surfaces use season end-year (2022), so shift by +1 here.
+    bf["season"] = pd.to_numeric(bf["season"], errors="coerce").astype("Int64") + 1
+    bf["norm_name"] = bf["player_name"].map(_norm_hist_player_name)
+    bf["norm_team"] = bf.get("team_name", pd.Series(dtype=str)).map(_norm_hist_team_name)
+    bf = bf.dropna(subset=["season"])
+    bf = bf[bf["norm_name"] != ""]
+
+    # Merge exact team matches first to prevent Jalen Johnson overlaps
+    mapped_exact = bf.merge(bridge[["season", "norm_name", "norm_team", "athlete_id"]], on=["season", "norm_name", "norm_team"], how="inner")
+    
+    # For remaining bf rows, merge on just name IF bridge only has 1 instance of that name
+    if not mapped_exact.empty:
+        matched_keys = mapped_exact[["season", "norm_name", "norm_team"]].drop_duplicates()
+        bf_unmatched = bf.merge(matched_keys, on=["season", "norm_name", "norm_team"], how="left", indicator=True)
+        bf_unmatched = bf_unmatched[bf_unmatched["_merge"] == "left_only"].drop(columns=["_merge"])
+    else:
+        bf_unmatched = bf.copy()
+
+    bridge_unique = bridge.groupby(["season", "norm_name"]).filter(lambda x: len(x) == 1)
+    mapped_fallback = bf_unmatched.merge(bridge_unique[["season", "norm_name", "athlete_id"]], on=["season", "norm_name"], how="inner")
+    mapped_fallback = mapped_fallback.drop(columns=["norm_team_y"], errors="ignore").rename(columns={"norm_team_x": "norm_team"})
+
+    mapped = pd.concat([mapped_exact, mapped_fallback], ignore_index=True)
+
+    if mapped.empty:
+        logger.warning("Historical exposure backfill mapping produced 0 rows")
+        return pd.DataFrame()
+
+    # Collapse possible team-level duplicates into athlete-season totals.
+    # We take the max here instead of sum to protect against any residual name collision artifacts.
+    grouped = mapped.groupby(["athlete_id", "season"], as_index=False).agg(
+        backfill_minutes_total=("minutes_derived", "max"),
+        backfill_tov_total=("turnovers_derived", "max"),
+    )
+    if "games_derived" in mapped.columns:
+        g2 = mapped.groupby(["athlete_id", "season"], as_index=False).agg(
+            backfill_games_played=("games_derived", "max")
+        )
+        grouped = grouped.merge(g2, on=["athlete_id", "season"], how="left")
+    else:
+        # Fallback approximation when games_derived is absent in backfill.
+        mins = pd.to_numeric(grouped["backfill_minutes_total"], errors="coerce")
+        grouped["backfill_games_played"] = np.clip(np.round(mins / 25.0), 1, 40)
+    logger.info(f"Loaded mapped historical exposure backfill rows: {len(grouped):,}")
+    return grouped
+
+
+def load_historical_text_games_backfill() -> pd.DataFrame:
+    """
+    Backfill games played from historical manual PBP text.
+
+    `fact_play_historical_combined.parquet` seasons are start-year (e.g., 2021-22 -> 2021),
+    while feature surfaces use end-year (2022), so we map `season = season_start + 1`.
+    """
+    hist_path = BASE_DIR / "data" / "fact_play_historical_combined.parquet"
+    db_path = BASE_DIR / "data" / "warehouse.duckdb"
+    if (not hist_path.exists()) or (not db_path.exists()):
+        return pd.DataFrame()
+
     try:
         con = duckdb.connect(str(db_path), read_only=True)
         bridge = con.execute(
@@ -301,7 +441,7 @@ def load_historical_exposure_backfill() -> pd.DataFrame:
         ).df()
         con.close()
     except Exception as exc:
-        logger.warning(f"Failed to build historical exposure name bridge: {exc}")
+        logger.warning(f"Failed building historical text-games season-aware bridge: {exc}")
         return pd.DataFrame()
 
     if bridge.empty:
@@ -313,37 +453,74 @@ def load_historical_exposure_backfill() -> pd.DataFrame:
     bridge = bridge.dropna(subset=["season", "athlete_id"])
     bridge = bridge[bridge["norm_name"] != ""]
     bridge = (
-        bridge.sort_values(["season", "norm_name", "shots", "athlete_id"], ascending=[True, True, False, False])
+        bridge.sort_values(
+            ["season", "norm_name", "shots", "athlete_id"],
+            ascending=[True, True, False, False],
+        )
         .drop_duplicates(subset=["season", "norm_name"], keep="first")
     )
 
-    bf = bf.copy()
-    bf["season"] = pd.to_numeric(bf["season"], errors="coerce").astype("Int64")
-    bf["norm_name"] = bf["player_name"].map(_norm_hist_player_name)
-    bf = bf.dropna(subset=["season"])
-    bf = bf[bf["norm_name"] != ""]
-
-    mapped = bf.merge(bridge[["season", "norm_name", "athlete_id"]], on=["season", "norm_name"], how="inner")
-    if mapped.empty:
-        logger.warning("Historical exposure backfill mapping produced 0 rows")
+    try:
+        con2 = duckdb.connect()
+        hist = con2.execute(
+            f"""
+            WITH base AS (
+              SELECT
+                CAST(season AS BIGINT) AS season_start,
+                CAST(gameSourceId AS VARCHAR) AS game_id,
+                TRIM(SPLIT_PART(playText, '|', 2)) AS home_evt,
+                TRIM(SPLIT_PART(playText, '|', 4)) AS away_evt
+              FROM read_parquet('{hist_path.as_posix()}')
+              WHERE season IS NOT NULL
+            ),
+            names AS (
+              SELECT season_start, game_id, REGEXP_EXTRACT(home_evt, '^([^,|]+),', 1) AS player_name
+              FROM base
+              UNION ALL
+              SELECT season_start, game_id, REGEXP_EXTRACT(away_evt, '^([^,|]+),', 1) AS player_name
+              FROM base
+            )
+            SELECT
+              CAST(season_start + 1 AS BIGINT) AS season,
+              player_name,
+              COUNT(DISTINCT game_id) AS hist_games_played_text
+            FROM names
+            WHERE player_name IS NOT NULL
+              AND TRIM(player_name) <> ''
+              AND UPPER(TRIM(player_name)) <> 'TEAM'
+              AND UPPER(TRIM(player_name)) <> 'TEAM.'
+            GROUP BY 1,2
+            """
+        ).df()
+        con2.close()
+    except Exception as exc:
+        logger.warning(f"Failed loading historical text-games counts: {exc}")
         return pd.DataFrame()
 
-    # Collapse possible team-level duplicates into athlete-season totals.
-    grouped = mapped.groupby(["athlete_id", "season"], as_index=False).agg(
-        backfill_minutes_total=("minutes_derived", "sum"),
-        backfill_tov_total=("turnovers_derived", "sum"),
+    if hist.empty:
+        return pd.DataFrame()
+
+    hist["norm_name"] = hist["player_name"].map(_norm_hist_player_name)
+    hist = hist[hist["norm_name"] != ""]
+    mapped = hist.merge(
+        bridge[["season", "norm_name", "athlete_id"]],
+        on=["season", "norm_name"],
+        how="inner",
     )
-    if "games_derived" in mapped.columns:
-        g2 = mapped.groupby(["athlete_id", "season"], as_index=False).agg(
-            backfill_games_played=("games_derived", "sum")
-        )
-        grouped = grouped.merge(g2, on=["athlete_id", "season"], how="left")
-    else:
-        # Fallback approximation when games_derived is absent in backfill.
-        mins = pd.to_numeric(grouped["backfill_minutes_total"], errors="coerce")
-        grouped["backfill_games_played"] = np.clip(np.round(mins / 25.0), 1, 40)
-    logger.info(f"Loaded mapped historical exposure backfill rows: {len(grouped):,}")
-    return grouped
+    if mapped.empty:
+        return pd.DataFrame()
+
+    out = (
+        mapped.groupby(["athlete_id", "season"], as_index=False)["hist_games_played_text"]
+        .max()
+    )
+    out["hist_games_played_text"] = pd.to_numeric(out["hist_games_played_text"], errors="coerce")
+    n_clip = int((out["hist_games_played_text"] > 45).sum())
+    if n_clip > 0:
+        logger.warning(f"Clipping {n_clip} historical text-games rows above 45 games")
+        out.loc[out["hist_games_played_text"] > 45, "hist_games_played_text"] = 45
+    logger.info(f"Loaded historical text games backfill rows: {len(out):,}")
+    return out
 
 
 def load_trajectory_features() -> pd.DataFrame:
@@ -431,10 +608,60 @@ def load_dim_player_nba() -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.read_parquet(path)
-    keep = [c for c in ["nba_id", "draft_year", "rookie_season_year", "player_name"] if c in df.columns]
+    keep = [
+        c for c in [
+            "nba_id", "draft_year", "rookie_season_year", "player_name",
+            "ht_first", "ht_max", "wt_first", "wt_max",
+            "ht_peak_delta", "wt_peak_delta",
+        ] if c in df.columns
+    ]
     df = df[keep].drop_duplicates(subset=["nba_id"])
     logger.info(f"Loaded {len(df):,} NBA dimension rows")
     return df
+
+
+def load_recruiting_physicals() -> pd.DataFrame:
+    """
+    Load prospect physicals from recruiting records at athlete grain.
+    Uses robust aggregation + sanity clipping to avoid malformed entries.
+    """
+    db_path = BASE_DIR / "data" / "warehouse.duckdb"
+    if not db_path.exists():
+        logger.warning(f"warehouse.duckdb not found: {db_path}")
+        return pd.DataFrame()
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        df = con.execute(
+            """
+            WITH base AS (
+              SELECT
+                CAST(athleteId AS BIGINT) AS athlete_id,
+                CAST(heightInches AS DOUBLE) AS height_in,
+                CAST(weightPounds AS DOUBLE) AS weight_lbs
+              FROM fact_recruiting_players
+              WHERE athleteId IS NOT NULL
+            ),
+            clean AS (
+              SELECT
+                athlete_id,
+                CASE WHEN height_in BETWEEN 58 AND 90 THEN height_in ELSE NULL END AS height_in,
+                CASE WHEN weight_lbs BETWEEN 130 AND 400 THEN weight_lbs ELSE NULL END AS weight_lbs
+              FROM base
+            )
+            SELECT
+              athlete_id,
+              median(height_in) AS recruit_height_in,
+              median(weight_lbs) AS recruit_weight_lbs
+            FROM clean
+            GROUP BY 1
+            """
+        ).df()
+        con.close()
+        logger.info(f"Loaded recruiting physicals rows: {len(df):,}")
+        return df
+    except Exception as exc:
+        logger.warning(f"Failed loading recruiting physicals: {exc}")
+        return pd.DataFrame()
 
 
 def load_nba_targets() -> pd.DataFrame:
@@ -445,6 +672,15 @@ def load_nba_targets() -> pd.DataFrame:
     peak_path = WAREHOUSE_V2 / "fact_player_peak_rapm.parquet"
     if peak_path.exists():
         peak = pd.read_parquet(peak_path)
+        
+        # Enforce user request: if a player has < 2000 peak possessions, their RAPM
+        # is discarded, functionally treating them as a non-NBA player target.
+        if 'peak_poss' in peak.columns:
+            mask = peak['peak_poss'] < 2000
+            for col in ['y_peak_ovr', 'y_peak_off', 'y_peak_def']:
+                if col in peak.columns:
+                    peak.loc[mask, col] = np.nan
+                    
         targets = peak[['nba_id', 'y_peak_ovr', 'y_peak_off', 'y_peak_def', 'peak_poss']].copy()
         logger.info(f"Loaded {len(peak):,} peak RAPM targets")
     
@@ -514,10 +750,21 @@ def get_final_college_season(college_features: pd.DataFrame) -> pd.DataFrame:
     if college_features.empty:
         return pd.DataFrame()
     
+    # Filter to only the primary ALL__ALL split before doing any aggregation.
+    # Otherwise, summing across split_ids will violently inflate games_played
+    # and all count-based stats by the number of split permutations.
+    if 'split_id' in college_features.columns:
+        df = college_features[college_features['split_id'] == 'ALL__ALL'].copy()
+    else:
+        df = college_features.copy()
+        
+    if df.empty:
+        return pd.DataFrame()
+
     # Sort and get last season.
     # Important: GroupBy.last() can skip NaNs per-column, which can accidentally pull
     # values from earlier seasons. We want the literal final season row.
-    df = college_features.sort_values(['athlete_id', 'season'])
+    df = df.sort_values(['athlete_id', 'season'])
     # Remove duplicate fragments while preserving legitimate transfer multi-team rows.
     dedupe_keys = [k for k in ['athlete_id', 'season', 'split_id', 'teamId'] if k in df.columns]
     if dedupe_keys:
@@ -573,7 +820,14 @@ def get_final_college_season(college_features: pd.DataFrame) -> pd.DataFrame:
         agg = agg.merge(pace_agg[['athlete_id', 'season', 'team_pace']], on=['athlete_id', 'season'], how='left')
 
     # Meta from max minutes row
-    meta_cols = ['teamId', 'is_power_conf', 'recruiting_rank', 'recruiting_stars', 'recruiting_rating']
+    meta_cols = [
+        'teamId', 'is_power_conf', 'recruiting_rank', 'recruiting_stars', 'recruiting_rating',
+        'dunk_rate', 'dunk_freq', 'putback_rate', 'transition_freq', 'rim_pressure_index',
+        'deflection_proxy', 'contest_proxy', 'pressure_handle_proxy',
+        'activity_source', 'has_activity_features',
+        'dunk_rate_missing', 'dunk_freq_missing', 'putback_rate_missing',
+        'rim_pressure_index_missing', 'contest_proxy_missing',
+    ]
     meta_cols = [c for c in meta_cols if c in df.columns]
     if 'minutes_total' in df.columns and meta_cols:
         # If minutes are 0, we risk unstable sort. 
@@ -958,7 +1212,10 @@ def build_unified_training_table(
     leverage_features = build_final_season_leverage_features(college_features_all)
     team_strength = load_team_strength_features()
     derived_stats = load_derived_box_stats()
+    activity_proxies = load_activity_proxies()
     exposure_backfill = load_historical_exposure_backfill()
+    hist_text_games = load_historical_text_games_backfill()
+    college_impact_stack = load_college_impact_stack()
     
     # Merge derived stats to fill missing signal (2010-2024 gaps)
     if not derived_stats.empty and not college_features.empty:
@@ -989,51 +1246,129 @@ def build_unified_training_table(
                 )
             else:
                 college_features['games_played'] = pd.to_numeric(college_features['college_games_played'], errors='coerce')
+            
+            # CRITICAL: Drop the pre-named column so it doesn't fatally collide when get_final_college_season()
+            # attempts to rename the freshly patched 'games_played' target back to 'college_games_played'!
+            college_features = college_features.drop(columns=['college_games_played'])
              
         logger.info(f"Merged derived box stats. Rows: {og_len} -> {len(college_features)}")
+
+    # Merge enhanced activity proxies (dunk/putback/rim-pressure/contest/etc.).
+    if not activity_proxies.empty and not college_features.empty:
+        og_len = len(college_features)
+        join_keys = [c for c in ["athlete_id", "season", "split_id"] if c in college_features.columns and c in activity_proxies.columns]
+        if not join_keys:
+            join_keys = [c for c in ["athlete_id", "season"] if c in college_features.columns and c in activity_proxies.columns]
+        non_keys = [c for c in activity_proxies.columns if c not in join_keys]
+        if join_keys:
+            college_features = college_features.merge(
+                activity_proxies[join_keys + non_keys].drop_duplicates(subset=join_keys),
+                on=join_keys,
+                how='left',
+            )
+            # If base frame already had activity columns, merge can create _x/_y
+            # suffixes. Coalesce deterministically back to canonical names.
+            activity_cols = [
+                "dunk_rate", "dunk_freq", "putback_rate", "transition_freq",
+                "rim_pressure_index", "deflection_proxy", "contest_proxy",
+                "pressure_handle_proxy", "activity_source", "has_activity_features",
+                "dunk_rate_missing", "dunk_freq_missing", "putback_rate_missing",
+                "rim_pressure_index_missing", "contest_proxy_missing",
+            ]
+            for c in activity_cols:
+                cx, cy = f"{c}_x", f"{c}_y"
+                if cx in college_features.columns or cy in college_features.columns:
+                    sx = college_features[cx] if cx in college_features.columns else pd.Series(np.nan, index=college_features.index)
+                    sy = college_features[cy] if cy in college_features.columns else pd.Series(np.nan, index=college_features.index)
+                    college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+                        pd.to_numeric(sx, errors="ignore")
+                    )
+                    if cx in college_features.columns:
+                        college_features = college_features.drop(columns=[cx])
+                    if cy in college_features.columns:
+                        college_features = college_features.drop(columns=[cy])
+            logger.info(f"Merged enhanced activity proxies on {join_keys}. Rows: {og_len} -> {len(college_features)}")
 
     # Merge mapped historical exposure backfill (minutes/games/tov) to patch
     # known API-era undercoverage in specific seasons/teams.
     if not exposure_backfill.empty and not college_features.empty:
         og_len = len(college_features)
         college_features = college_features.merge(exposure_backfill, on=['athlete_id', 'season'], how='left')
+        
+        # Inject precise API impact seconds to perfectly match the tracked event denominator!
+        if 'impact_seconds_total' in college_impact_stack.columns:
+            college_features = college_features.merge(college_impact_stack[['athlete_id', 'season', 'impact_seconds_total']], on=['athlete_id', 'season'], how='left')
 
         if 'minutes_total' in college_features.columns:
             minutes_existing = pd.to_numeric(college_features['minutes_total'], errors='coerce')
             minutes_backfill = pd.to_numeric(college_features.get('backfill_minutes_total'), errors='coerce')
-            college_features['minutes_total'] = np.where(
-                minutes_backfill.notna(),
-                np.maximum(minutes_existing.fillna(0), minutes_backfill),
-                minutes_existing,
-            )
+            
+            # Use impact_seconds_total / 60.0 as the most accurate API minute tracking for this dataset's sample!
+            if 'impact_seconds_total' in college_features.columns:
+                minutes_api = college_features['impact_seconds_total'] / 60.0
+                minutes_existing = np.where(minutes_api > 0, minutes_api, minutes_existing)
+                
+            college_features['minutes_total'] = pd.Series(np.where(np.nan_to_num(pd.to_numeric(minutes_existing, errors='coerce'), nan=0.0) > 0, minutes_existing, minutes_backfill), index=college_features.index)
 
         if 'games_played' in college_features.columns:
             games_existing = pd.to_numeric(college_features['games_played'], errors='coerce')
             games_backfill = pd.to_numeric(college_features.get('backfill_games_played'), errors='coerce')
-            college_features['games_played'] = np.where(
-                games_backfill.notna(),
-                np.maximum(games_existing.fillna(0), games_backfill),
-                games_existing,
+            
+            # Prefer existing API/participant data UNLESS the backfill indicates a massive gap
+            # in API coverage (e.g. 18 games vs 39 known games). Gap >= 5 indicates structural undercoverage.
+            college_features['games_played'] = pd.Series(
+                np.where(
+                    (games_backfill > 0) & ((games_existing.isna()) | (games_existing <= 0) | ((games_backfill - games_existing) >= 5)),
+                    games_backfill,
+                    games_existing
+                ), 
+                index=college_features.index
             )
+            
+            p_mask = college_features['athlete_id'] == 27623
+            if p_mask.any():
+                logger.info(f"PAOLO TRACE POST-EXPOSURE: games_played={college_features.loc[p_mask, 'games_played'].tolist()}")
 
         if 'tov_total' in college_features.columns:
             tov_existing = pd.to_numeric(college_features['tov_total'], errors='coerce')
             tov_backfill = pd.to_numeric(college_features.get('backfill_tov_total'), errors='coerce')
-            college_features['tov_total'] = np.where(
-                tov_backfill.notna(),
-                np.maximum(tov_existing.fillna(0), tov_backfill),
-                tov_existing,
-            )
+            college_features['tov_total'] = pd.Series(np.where(tov_existing.fillna(0) > 0, tov_existing, tov_backfill), index=college_features.index)
 
         logger.info(f"Merged historical exposure backfill. Rows: {og_len} -> {len(college_features)}")
 
+    # Historical manual text backfill for games played (season start-year -> end-year mapped).
+    if not hist_text_games.empty and not college_features.empty:
+        og_len = len(college_features)
+        college_features = college_features.merge(hist_text_games, on=['athlete_id', 'season'], how='left')
+        hist_games = pd.to_numeric(college_features.get('hist_games_played_text'), errors='coerce')
+        if 'games_played' in college_features.columns:
+            games_existing = pd.to_numeric(college_features['games_played'], errors='coerce')
+            # Source priority: API/derived/backfill first, historical text as
+            # fallback-only to avoid undercount overrides (e.g., parsed 1 game) UNLESS
+            # it exposes a massive >5 game gap in the primary sources.
+            college_features['games_played'] = pd.Series(
+                np.where(
+                    (hist_games > 0) & ((games_existing.isna()) | (games_existing <= 0) | ((hist_games - games_existing) >= 5)),
+                    hist_games,
+                    games_existing,
+                ),
+                index=college_features.index,
+            )
+            
+            p_mask = college_features['athlete_id'] == 27623
+            if p_mask.any():
+                logger.info(f"PAOLO TRACE POST-HIST: games_played={college_features.loc[p_mask, 'games_played'].tolist()}")
+        else:
+            college_features['games_played'] = hist_games
+        logger.info(f"Merged historical text games backfill. Rows: {og_len} -> {len(college_features)}")
+
     career_features = load_career_features()
     trajectory_features = load_trajectory_features()
-    college_impact_stack = load_college_impact_stack()
     college_dev_rate = load_college_dev_rate()
     transfer_summary = load_transfer_context_summary()
     crosswalk = load_crosswalk()
     dim_nba = load_dim_player_nba()
+    recruiting_phys = load_recruiting_physicals()
     nba_targets = load_nba_targets()
     
     # Check for required data
@@ -1048,6 +1383,12 @@ def build_unified_training_table(
     # 2. Extract final college season features
     if not college_features.empty:
         final_college = get_final_college_season(college_features)
+        
+        p_mask = final_college['athlete_id'] == 27623
+        if p_mask.any():
+            cg_val = final_college.loc[p_mask, 'college_games_played'].tolist() if 'college_games_played' in final_college.columns else "MISSING"
+            g_val = final_college.loc[p_mask, 'games_played'].tolist() if 'games_played' in final_college.columns else "MISSING"
+            logger.info(f"PAOLO TRACE POST-AGGREGATOR: college_games_played={cg_val} / games_played={g_val}")
     else:
         final_college = pd.DataFrame()
 
@@ -1105,6 +1446,22 @@ def build_unified_training_table(
     if use_career_features and not career_features.empty:
         df = df.merge(career_features, on='athlete_id', how='left', suffixes=('', '_career'))
 
+    # Add college-side physicals (works for prospects, draft-safe).
+    if not recruiting_phys.empty:
+        df = df.merge(recruiting_phys, on="athlete_id", how="left")
+    if "college_height_in" not in df.columns:
+        df["college_height_in"] = pd.to_numeric(df.get("recruit_height_in"), errors="coerce")
+    else:
+        df["college_height_in"] = pd.to_numeric(df["college_height_in"], errors="coerce").combine_first(
+            pd.to_numeric(df.get("recruit_height_in"), errors="coerce")
+        )
+    if "college_weight_lbs" not in df.columns:
+        df["college_weight_lbs"] = pd.to_numeric(df.get("recruit_weight_lbs"), errors="coerce")
+    else:
+        df["college_weight_lbs"] = pd.to_numeric(df["college_weight_lbs"], errors="coerce").combine_first(
+            pd.to_numeric(df.get("recruit_weight_lbs"), errors="coerce")
+        )
+
     # Join college impact stack by final season when available.
     if not college_impact_stack.empty and "college_final_season" in df.columns:
         impact = college_impact_stack.copy()
@@ -1115,6 +1472,68 @@ def build_unified_training_table(
         ]
         df = df.merge(impact[impact_cols], on=["athlete_id", "college_final_season"], how="left")
         logger.info(f"  Added college impact stack features: {len(impact_cols) - 2}")
+
+    # Impact aliases used by inference/ranking contract.
+    alias_map = {
+        "impact_off_net_raw": "college_off_net_rating",
+        "impact_on_off_net_diff_raw": "college_on_off_net_diff",
+        "impact_on_off_ortg_diff_raw": "college_on_off_ortg_diff",
+        "impact_on_off_drtg_diff_raw": "college_on_off_drtg_diff",
+    }
+    for src, dst in alias_map.items():
+        if src in df.columns and dst not in df.columns:
+            df[dst] = pd.to_numeric(df[src], errors="coerce")
+
+    # Activity provenance + masks (contract-enforced columns).
+    core_cols = [
+        "college_dunk_rate", "college_dunk_freq", "college_putback_rate",
+        "college_rim_pressure_index", "college_contest_proxy",
+    ]
+    for c in core_cols:
+        if c not in df.columns:
+            df[c] = np.nan
+    core_signal = df[core_cols].notna().any(axis=1)
+
+    # Enforce explicit mask-first policy, then safe numeric fill to satisfy
+    # hard coverage contracts without hiding missingness.
+    for c in core_cols:
+        mcol = f"{c}_missing"
+        if mcol not in df.columns:
+            df[mcol] = df[c].isna().astype(int)
+        else:
+            df[mcol] = pd.to_numeric(df[mcol], errors="coerce").fillna(df[c].isna().astype(int)).astype(int)
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+
+    if "college_activity_source" not in df.columns:
+        df["college_activity_source"] = np.where(core_signal, "derived_fallback", "missing")
+    else:
+        fallback_src = pd.Series(np.where(core_signal, "derived_fallback", "missing"), index=df.index)
+        src = df["college_activity_source"]
+        src = src.where(src.notna(), fallback_src)
+        src = src.where(src.astype(str).str.len() > 0, fallback_src)
+        df["college_activity_source"] = src
+    if "has_college_activity_features" not in df.columns:
+        df["has_college_activity_features"] = core_signal.astype(int)
+    else:
+        df["has_college_activity_features"] = (
+            pd.to_numeric(df["has_college_activity_features"], errors="coerce")
+            .fillna(core_signal.astype(int))
+            .astype(int)
+        )
+
+    mask_map = {
+        "college_dunk_rate": "college_dunk_rate_missing",
+        "college_dunk_freq": "college_dunk_freq_missing",
+        "college_putback_rate": "college_putback_rate_missing",
+        "college_rim_pressure_index": "college_rim_pressure_index_missing",
+        "college_contest_proxy": "college_contest_proxy_missing",
+    }
+    for feat, mask in mask_map.items():
+        if mask not in df.columns:
+            df[mask] = df[feat].isna().astype(int)
+        else:
+            m = pd.to_numeric(df[mask], errors="coerce")
+            df[mask] = np.where(m.notna(), m, df[feat].isna().astype(int)).astype(int)
 
     # Join athlete-level college development-rate features.
     if not college_dev_rate.empty:
@@ -1164,10 +1583,35 @@ def build_unified_training_table(
 
     # Join draft/rookie metadata for cohort filtering + downstream audits.
     if not dim_nba.empty:
-        dim_cols = [c for c in ["nba_id", "draft_year", "rookie_season_year", "player_name"] if c in dim_nba.columns]
+        dim_cols = [c for c in ["nba_id", "draft_year", "rookie_season_year", "player_name", "ht_first", "ht_max", "wt_first", "wt_max", "ht_peak_delta", "wt_peak_delta"] if c in dim_nba.columns]
         df = df.merge(dim_nba[dim_cols], on="nba_id", how="left", suffixes=("", "_dim"))
         if "player_name_dim" in df.columns and "player_name" not in df.columns:
             df = df.rename(columns={"player_name_dim": "player_name"})
+        # NBA-side physical fallback surface.
+        nba_h_cm = pd.to_numeric(df.get("ht_first"), errors="coerce").combine_first(
+            pd.to_numeric(df.get("ht_max"), errors="coerce")
+        )
+        nba_w_lbs = pd.to_numeric(df.get("wt_first"), errors="coerce").combine_first(
+            pd.to_numeric(df.get("wt_max"), errors="coerce")
+        )
+        df["nba_height_cm"] = nba_h_cm
+        df["nba_weight_lbs"] = nba_w_lbs
+        # Explicit physical development trajectory fields (NBA observed).
+        df["nba_height_change_cm"] = pd.to_numeric(df.get("ht_peak_delta"), errors="coerce")
+        df["nba_weight_change_lbs"] = pd.to_numeric(df.get("wt_peak_delta"), errors="coerce")
+        if "nba_height_change_cm" in df.columns:
+            df["nba_height_change_cm"] = df["nba_height_change_cm"].combine_first(
+                pd.to_numeric(df.get("ht_max"), errors="coerce") - pd.to_numeric(df.get("ht_first"), errors="coerce")
+            )
+        if "nba_weight_change_lbs" in df.columns:
+            df["nba_weight_change_lbs"] = df["nba_weight_change_lbs"].combine_first(
+                pd.to_numeric(df.get("wt_max"), errors="coerce") - pd.to_numeric(df.get("wt_first"), errors="coerce")
+            )
+        # Fill college physicals from NBA fallback where missing.
+        df["college_height_in"] = pd.to_numeric(df.get("college_height_in"), errors="coerce").combine_first(nba_h_cm / 2.54)
+        df["college_weight_lbs"] = pd.to_numeric(df.get("college_weight_lbs"), errors="coerce").combine_first(nba_w_lbs)
+        df["has_college_height"] = df["college_height_in"].notna().astype(int)
+        df["has_college_weight"] = df["college_weight_lbs"].notna().astype(int)
 
     # Cohort filter: default to modern era where college-source coverage is aligned.
     # Fallback uses rookie season when draft year is missing.
@@ -1207,6 +1651,16 @@ def build_unified_training_table(
                 df[col] = 0
             else:
                 df[col] = np.nan
+
+    # Physicals contract columns.
+    for col in ["college_height_in", "college_weight_lbs", "nba_height_cm", "nba_weight_lbs"]:
+        if col not in df.columns:
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    if "has_college_height" not in df.columns:
+        df["has_college_height"] = df["college_height_in"].notna().astype(int)
+    if "has_college_weight" not in df.columns:
+        df["has_college_weight"] = df["college_weight_lbs"].notna().astype(int)
     
     # 5. Era normalization was already applied on the full population in step 2b.
     #    Skipping here to avoid recomputing on the filtered cohort (which causes

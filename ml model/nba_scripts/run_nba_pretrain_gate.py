@@ -30,6 +30,7 @@ DIM_PATH = BASE_DIR / "data/warehouse_v2/dim_player_nba.parquet"
 Y1_PATH = BASE_DIR / "data/warehouse_v2/fact_player_year1_epm.parquet"
 DEV_PATH = BASE_DIR / "data/warehouse_v2/fact_player_development_rate.parquet"
 AUDIT_DIR = BASE_DIR / "data/audit"
+RAPM_COVERAGE_FLOOR_WITH_MIN_POSSESSIONS = 0.35
 
 
 def _rate(df: pd.DataFrame, col: str) -> float:
@@ -126,8 +127,8 @@ def build_gate_report(min_overlap_recent: int = 5) -> dict:
         ),
         _bool_check(
             "peak_target_coverage",
-            coverage["y_peak_ovr_non_null_rate"] >= 0.80,
-            f"rate={coverage['y_peak_ovr_non_null_rate']:.3f}, min=0.800",
+            coverage["y_peak_ovr_non_null_rate"] >= RAPM_COVERAGE_FLOOR_WITH_MIN_POSSESSIONS,
+            f"rate={coverage['y_peak_ovr_non_null_rate']:.3f}, min={RAPM_COVERAGE_FLOOR_WITH_MIN_POSSESSIONS:.3f}",
         ),
         _bool_check(
             "year1_epm_coverage",

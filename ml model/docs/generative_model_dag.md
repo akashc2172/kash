@@ -1,3 +1,49 @@
+<!-- CANONICAL_HTML_MIRROR -->
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
+Last mirror refresh: 2026-02-20 19:18:17
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
+Last mirror refresh: 2026-02-20 11:52:26
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
+Last mirror refresh: 2026-02-20 11:51:36
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
+Last mirror refresh: 2026-02-20 11:50:14
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: Generative model DAG mirrored to canonical HTML architecture dashboard.
+
+Last mirror refresh: 2026-02-20 11:18:49
+
+
 # Generative Prospect Model: Visual Guide
 
 **For explaining to anyone**

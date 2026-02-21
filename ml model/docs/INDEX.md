@@ -13,6 +13,7 @@
 - `full_input_columns.md` — verified explicit column list for every model input + targets/masks
 - `connectivity_proposal_v1.md` — proposal-style explanation of how *each* input feeds the encoder/latent DAG (full arrows + gating logic)
 - `data_assembly_and_model_connectivity_plan.md` — nuanced connectivity plan (typed branches, future upgrades)
+- `antigravity_full_pipeline_layered_dag_2026-02-19.md` — full layered DAG + runbook + contracts + gates (Antigravity-ready)
 
 ## Model Architecture
 
@@ -43,6 +44,7 @@
 
 - `historical_data_pipeline.md` — historical pipeline
 - `college_rapm_roadmap.md` — RApM roadmap
+- `historical_onfloor_reconstruction_v3.md` — pre-2025 true 10-player reconstruction + hard RAPM gates
 - `antigravity_review_2012_integration.md` — 2012 integration review
 
 ## Reviews
@@ -52,3 +54,13 @@
 - `ongoing_model_updates.md` — running log of implemented modeling changes and next candidates
 - `data_quality_master_log.md` — stage-by-stage hardening outcomes + open integrity items
 - `full_docs_reconciliation_2026-02-19.md` — docs-vs-code reconciliation and current structural gaps
+- [Pipeline Alignment Quality Fix Update (2026-02-19)](pipeline_alignment_quality_fix_update_2026-02-19.md)
+
+
+## Canonical HTML Dashboards
+- `docs/diagrams/model_architecture_dashboard.html`
+- `docs/diagrams/input_data_contract_dashboard.html`
+- `docs/diagrams/layered_execution_dashboard.html`
+- `docs/diagrams/crosswalk_quality_dashboard.html`
+- `docs/diagrams/full_pipeline_active_learning_dashboard.html`
+- `docs/diagrams/activity_feature_quality_dashboard.html`

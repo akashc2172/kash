@@ -1,10 +1,10 @@
 # Full Input Columns (Verified)
 
-**Generated**: 2026-02-18 22:18:29
+**Generated**: 2026-02-20 19:19:28
 
 **Source Table**: `data/training/unified_training_table.parquet`
 
-**Total Columns**: 432
+**Total Columns**: 458
 
 ## Model Inputs
 
@@ -35,6 +35,14 @@
 - `college_orb_total_per100poss`
 - `college_drb_total_per100poss`
 - `college_trb_total_per100poss`
+- `college_dunk_rate`
+- `college_dunk_freq`
+- `college_putback_rate`
+- `college_rim_pressure_index`
+- `college_contest_proxy`
+- `college_transition_freq`
+- `college_deflection_proxy`
+- `college_pressure_handle_proxy`
 - `college_assisted_share_rim`
 - `college_assisted_share_mid`
 - `college_assisted_share_three`
@@ -81,6 +89,12 @@
 - `class_year`
 - `age_at_season`
 - `has_age_at_season`
+- `college_height_in`
+- `college_weight_lbs`
+- `has_college_height`
+- `has_college_weight`
+- `nba_height_change_cm` (observed trajectory field)
+- `nba_weight_change_lbs` (observed trajectory field)
 - `final_trueShootingPct`
 - `final_usage`
 - `final_poss_total`
@@ -161,6 +175,7 @@
 
 ## Dead Inputs (non-zero < 0.1%)
 
+- `college_transition_freq` (non-zero rate=0.0000)
 - `final_has_ws_breakout_timing_eff` (non-zero rate=0.0000)
 - `final_has_ws_last10` (non-zero rate=0.0000)
 - `final_ws_breakout_timing_eff` (non-zero rate=0.0000)
@@ -168,3 +183,23 @@
 - `final_ws_minutes_last10` (non-zero rate=0.0000)
 - `final_ws_pps_last10` (non-zero rate=0.0000)
 - `has_within_window_data` (non-zero rate=0.0000)
+## 2026-02-20 Activity Contract Update
+
+Restored as live contract inputs (unified table):
+- `college_dunk_rate`
+- `college_dunk_freq`
+- `college_putback_rate`
+- `college_rim_pressure_index`
+- `college_contest_proxy`
+
+Contract masks/provenance confirmed:
+- `college_activity_source`
+- `has_college_activity_features`
+- `college_dunk_rate_missing`
+- `college_dunk_freq_missing`
+- `college_putback_rate_missing`
+- `college_rim_pressure_index_missing`
+- `college_contest_proxy_missing`
+
+Note:
+- `college_transition_freq` remains a dead near-zero column in current data and is tracked as non-critical until source population improves.

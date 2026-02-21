@@ -299,6 +299,9 @@ TIER1_COLUMNS = [
     'college_ast_total_per100poss', 'college_tov_total_per100poss',
     'college_stl_total_per100poss', 'college_blk_total_per100poss',
     'college_orb_total_per100poss', 'college_drb_total_per100poss', 'college_trb_total_per100poss',
+    'college_dunk_rate', 'college_dunk_freq', 'college_putback_rate',
+    'college_rim_pressure_index', 'college_contest_proxy',
+    'college_transition_freq', 'college_deflection_proxy', 'college_pressure_handle_proxy',
     'college_assisted_share_rim', 'college_assisted_share_mid', 'college_assisted_share_three',
     'college_rapm_standard', 'college_o_rapm', 'college_d_rapm',
     'college_on_net_rating', 'college_on_ortg', 'college_on_drtg',
@@ -329,6 +332,8 @@ CAREER_BASE_COLUMNS = [
     # Explicit year/era context (draft-time safe) so the model can learn inflation/deflation by season.
     'college_final_season', 'draft_year_proxy',
     'season_index', 'class_year', 'age_at_season', 'has_age_at_season',
+    # Physical profile (draft-time safe where available).
+    'college_height_in', 'college_weight_lbs', 'has_college_height', 'has_college_weight',
     # Final season anchors
     'final_trueShootingPct', 'final_usage', 'final_poss_total',
     'final_rim_fg_pct', 'final_three_fg_pct', 'final_ft_pct',

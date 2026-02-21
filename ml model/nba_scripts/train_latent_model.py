@@ -35,6 +35,7 @@ import json
 import argparse
 import logging
 import sys
+import math
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -62,6 +63,52 @@ TRAIN_SEASONS = list(range(2010, 2018))
 VAL_SEASONS = list(range(2018, 2020))
 TEST_SEASONS = list(range(2020, 2023))
 YEAR1_INTERACTION_COLUMNS = ['year1_epm_tot', 'year1_epm_off', 'year1_epm_def', 'year1_usg', 'year1_tspct']
+OBJECTIVE_PROFILES = {
+    "epm_first": {
+        "lambda_rapm": 0.25,
+        "lambda_rapm_var": 0.05,
+        "lambda_gap": 0.10,
+        "lambda_epm": 1.00,
+        "lambda_dev": 0.35,
+        "lambda_surv": 0.20,
+        "lambda_arch": 0.05,
+    },
+    "rapm_first": {
+        "lambda_rapm": 5.00,
+        "lambda_rapm_var": 0.50,
+        "lambda_gap": 0.00,
+        "lambda_epm": 0.00,
+        "lambda_dev": 0.10,
+        "lambda_surv": 0.05,
+        "lambda_arch": 0.00,
+    },
+    "balanced": {
+        "lambda_rapm": 0.80,
+        "lambda_rapm_var": 0.15,
+        "lambda_gap": 0.15,
+        "lambda_epm": 0.70,
+        "lambda_dev": 0.25,
+        "lambda_surv": 0.15,
+        "lambda_arch": 0.05,
+    },
+}
+
+
+def resolve_objective_weights(args: argparse.Namespace) -> Dict[str, float]:
+    profile = OBJECTIVE_PROFILES[args.objective_profile].copy()
+    for key in [
+        "lambda_rapm",
+        "lambda_rapm_var",
+        "lambda_gap",
+        "lambda_epm",
+        "lambda_dev",
+        "lambda_surv",
+        "lambda_arch",
+    ]:
+        v = getattr(args, key)
+        if v is not None:
+            profile[key] = float(v)
+    return profile
 
 
 class ProspectDataset(Dataset):
@@ -79,6 +126,8 @@ class ProspectDataset(Dataset):
         training: bool = True,
         temporal_decay_half_life: float = 4.0,
         temporal_decay_min: float = 0.2,
+        rapm_maturity_asof_year: Optional[int] = None,
+        rapm_min_nba_seasons: int = 3,
     ):
         self.df = df.reset_index(drop=True)
         self.tier1_cols = [c for c in tier1_cols if c in df.columns]
@@ -90,6 +139,8 @@ class ProspectDataset(Dataset):
         self.training = training
         self.temporal_decay_half_life = temporal_decay_half_life
         self.temporal_decay_min = temporal_decay_min
+        self.rapm_maturity_asof_year = rapm_maturity_asof_year
+        self.rapm_min_nba_seasons = int(max(0, rapm_min_nba_seasons))
         
         # Pre-extract features
         self.tier1 = self._extract_features(tier1_cols)
@@ -180,6 +231,17 @@ class ProspectDataset(Dataset):
                 ~np.isnan(off),
                 ~np.isnan(deff),
             ], axis=1)
+            # Maturity gate: require minimum completed NBA seasons before supervising RAPM.
+            # This avoids forcing the RAPM head to fit immature early-career peaks.
+            if (
+                self.rapm_maturity_asof_year is not None
+                and 'draft_year_proxy' in self.df.columns
+                and self.rapm_min_nba_seasons > 0
+            ):
+                dy = pd.to_numeric(self.df['draft_year_proxy'], errors='coerce').to_numpy(dtype=float)
+                completed = (float(self.rapm_maturity_asof_year) - dy).astype(float)
+                mature = np.isfinite(completed) & (completed >= float(self.rapm_min_nba_seasons))
+                mask = mask & mature.reshape(-1, 1)
             # Tail-aware supervised weighting: avoid underfitting high-impact outcomes.
             base_w = np.ones(len(self.df), dtype=np.float32)
             valid_ovr = np.isfinite(ovr)
@@ -428,8 +490,10 @@ def evaluate(
     """Evaluate model."""
     model.eval()
     total_losses = {}
-    all_preds = []
-    all_targets = []
+    all_rapm_preds = []
+    all_rapm_targets = []
+    all_epm_preds = []
+    all_epm_targets = []
     n_batches = 0
     
     for batch in dataloader:
@@ -474,25 +538,134 @@ def evaluate(
             if rapm_mask.dim() == 2:
                 mask_ovr = rapm_mask[:, 0]
                 if mask_ovr.any():
-                    all_preds.extend(outputs['rapm_pred'][:, 0][mask_ovr].cpu().numpy())
-                    all_targets.extend(rapm_target[:, 0][mask_ovr].cpu().numpy())
+                    all_rapm_preds.extend(outputs['rapm_pred'][:, 0][mask_ovr].cpu().numpy())
+                    all_rapm_targets.extend(rapm_target[:, 0][mask_ovr].cpu().numpy())
             else:
                 if rapm_mask.any():
-                    all_preds.extend(outputs['rapm_pred'][:, 0][rapm_mask].cpu().numpy())
-                    all_targets.extend(rapm_target[rapm_mask].cpu().numpy())
+                    all_rapm_preds.extend(outputs['rapm_pred'][:, 0][rapm_mask].cpu().numpy())
+                    all_rapm_targets.extend(rapm_target[rapm_mask].cpu().numpy())
+
+        if 'epm' in targets:
+            epm_target, epm_mask = targets['epm'][0], targets['epm'][1]
+            if epm_mask.any():
+                all_epm_preds.extend(outputs['epm_pred'][:, 0][epm_mask].cpu().numpy())
+                all_epm_targets.extend(epm_target[epm_mask].cpu().numpy())
     
     metrics = {k: v / n_batches for k, v in total_losses.items()}
     
     # Compute additional metrics
-    if all_preds:
-        preds = np.array(all_preds)
-        targets = np.array(all_targets)
+    if all_rapm_preds:
+        preds = np.array(all_rapm_preds)
+        targets = np.array(all_rapm_targets)
         metrics['rapm_rmse'] = np.sqrt(np.mean((preds - targets) ** 2))
         metrics['rapm_mae'] = np.mean(np.abs(preds - targets))
         if len(preds) > 1:
             metrics['rapm_corr'] = np.corrcoef(preds, targets)[0, 1]
+
+    if all_epm_preds:
+        preds = np.array(all_epm_preds)
+        targets = np.array(all_epm_targets)
+        metrics['epm_rmse'] = np.sqrt(np.mean((preds - targets) ** 2))
+        metrics['epm_mae'] = np.mean(np.abs(preds - targets))
+        if len(preds) > 1:
+            metrics['epm_corr'] = np.corrcoef(preds, targets)[0, 1]
     
     return metrics
+
+
+@torch.no_grad()
+def compute_epm_rank_metrics(
+    model: ProspectModel,
+    dataset: ProspectDataset,
+    device: torch.device,
+    k: int = 10,
+) -> Dict[str, float]:
+    """
+    Compute season-wise rank quality for EPM target on a practical qualified cohort.
+    This aligns model selection with leaderboard quality, not only pointwise RMSE.
+    """
+    if 'epm' not in dataset.targets:
+        return {"epm_ndcg10": 0.0, "epm_top10_recall": 0.0, "epm_spearman": 0.0, "epm_rank_seasons": 0.0}
+
+    model.eval()
+    tier1 = torch.from_numpy(dataset.tier1).to(device)
+    tier2 = torch.from_numpy(dataset.tier2).to(device)
+    career = torch.from_numpy(dataset.career).to(device)
+    within = torch.from_numpy(dataset.within).to(device)
+    tier2_mask = torch.from_numpy(dataset.tier2_mask).unsqueeze(1).to(device)
+    within_mask = torch.from_numpy(dataset.within_mask).unsqueeze(1).to(device)
+    year1 = torch.from_numpy(dataset.year1).to(device)
+    year1_mask = torch.from_numpy(dataset.year1_mask).to(device)
+
+    out = model(tier1, tier2, career, within, tier2_mask, within_mask, year1, year1_mask)
+    pred = out["epm_pred"][:, 0].detach().cpu().numpy()
+    target_vals, target_mask, _ = dataset.targets['epm']
+    target_vals = np.asarray(target_vals, dtype=float)
+    target_mask = np.asarray(target_mask, dtype=bool)
+    seasons = pd.to_numeric(pd.Series(dataset.seasons), errors='coerce').to_numpy(dtype=float)
+
+    df = dataset.df.copy()
+    games = pd.to_numeric(df.get("college_games_played", np.nan), errors="coerce").fillna(0.0).to_numpy()
+    poss = pd.to_numeric(df.get("college_poss_proxy", np.nan), errors="coerce").fillna(0.0).to_numpy()
+    mins = pd.to_numeric(df.get("college_minutes_total", np.nan), errors="coerce").fillna(0.0).to_numpy()
+
+    qualified = (games >= 14) & ((poss >= 200) | (mins >= 400))
+    valid = target_mask & np.isfinite(seasons) & qualified
+
+    if valid.sum() < max(30, k):
+        return {"epm_ndcg10": 0.0, "epm_top10_recall": 0.0, "epm_spearman": 0.0, "epm_rank_seasons": 0.0}
+
+    ndcgs = []
+    recalls = []
+    spearmans = []
+    season_count = 0
+
+    for s in np.unique(seasons[valid].astype(int)):
+        idx = valid & (seasons.astype(int) == s)
+        n = int(idx.sum())
+        if n < max(20, k):
+            continue
+        season_count += 1
+
+        y_true = target_vals[idx]
+        y_pred = pred[idx]
+
+        order_pred = np.argsort(-y_pred)
+        order_true = np.argsort(-y_true)
+
+        kk = min(k, n)
+        rel_pred = y_true[order_pred[:kk]]
+        rel_true = y_true[order_true[:kk]]
+
+        # Shift to non-negative gains.
+        shift = float(min(y_true.min(), 0.0))
+        gains_pred = rel_pred - shift + 1.0
+        gains_true = rel_true - shift + 1.0
+        discounts = 1.0 / np.log2(np.arange(2, kk + 2))
+        dcg = float(np.sum(gains_pred * discounts))
+        idcg = float(np.sum(gains_true * discounts))
+        ndcg = (dcg / idcg) if idcg > 1e-12 else 0.0
+        ndcgs.append(ndcg)
+
+        top_pred_idx = set(order_pred[:kk].tolist())
+        top_true_idx = set(order_true[:kk].tolist())
+        recalls.append(len(top_pred_idx & top_true_idx) / float(kk))
+
+        # Spearman via rank correlation.
+        rank_true = pd.Series(y_true).rank(method="average").to_numpy()
+        rank_pred = pd.Series(y_pred).rank(method="average").to_numpy()
+        if np.std(rank_true) > 1e-12 and np.std(rank_pred) > 1e-12:
+            spearmans.append(float(np.corrcoef(rank_true, rank_pred)[0, 1]))
+
+    if season_count == 0:
+        return {"epm_ndcg10": 0.0, "epm_top10_recall": 0.0, "epm_spearman": 0.0, "epm_rank_seasons": 0.0}
+
+    return {
+        "epm_ndcg10": float(np.mean(ndcgs)) if ndcgs else 0.0,
+        "epm_top10_recall": float(np.mean(recalls)) if recalls else 0.0,
+        "epm_spearman": float(np.mean(spearmans)) if spearmans else 0.0,
+        "epm_rank_seasons": float(season_count),
+    }
 
 
 @torch.no_grad()
@@ -659,6 +832,7 @@ def train_model(
     train_loader: DataLoader,
     train_dataset: ProspectDataset,
     val_loader: DataLoader,
+    val_dataset: ProspectDataset,
     criterion: ProspectLoss,
     optimizer: optim.Optimizer,
     scheduler: optim.lr_scheduler._LRScheduler,
@@ -671,10 +845,12 @@ def train_model(
     reweight_strength: float = 0.35,
     reweight_min_mult: float = 0.7,
     reweight_max_mult: float = 1.4,
+    monitor_metric: str = "rapm_rmse",
+    monitor_mode: str = "min",
     output_dir: Path = None,
 ) -> Dict:
     """Full training loop with early stopping."""
-    best_val_loss = float('inf')
+    best_monitor = -float('inf') if monitor_mode == "max" else float('inf')
     best_epoch = 0
     history = {'train': [], 'val': []}
     
@@ -684,6 +860,8 @@ def train_model(
         
         # Validate
         val_losses = evaluate(model, val_loader, criterion, device)
+        val_rank = compute_epm_rank_metrics(model, val_dataset, device, k=10) if monitor_metric.startswith("epm_") else {}
+        val_losses.update(val_rank)
         
         # LR schedule
         scheduler.step(val_losses['total'])
@@ -693,7 +871,7 @@ def train_model(
             f"Epoch {epoch+1}/{n_epochs} | "
             f"Train Loss: {train_losses['total']:.4f} | "
             f"Val Loss: {val_losses['total']:.4f} | "
-            f"Val RMSE: {val_losses.get('rapm_rmse', 0):.4f}"
+            f"Val {monitor_metric}: {val_losses.get(monitor_metric, 0):.4f}"
         )
         
         history['train'].append(train_losses)
@@ -720,9 +898,11 @@ def train_model(
                 float(rw_diag.get("max_mult", 1.0)),
             )
         
-        # Early stopping
-        if val_losses['total'] < best_val_loss:
-            best_val_loss = val_losses['total']
+        # Early stopping on configured monitor metric.
+        cur = float(val_losses.get(monitor_metric, 0.0))
+        is_better = (cur > best_monitor) if monitor_mode == "max" else (cur < best_monitor)
+        if is_better:
+            best_monitor = cur
             best_epoch = epoch
             if output_dir:
                 torch.save(model.state_dict(), output_dir / "model_best.pt")
@@ -736,7 +916,10 @@ def train_model(
     
     return {
         'best_epoch': best_epoch,
-        'best_val_loss': best_val_loss,
+        'best_val_loss': best_monitor if monitor_mode == "min" else history['val'][best_epoch]['total'],
+        'best_monitor': best_monitor,
+        'monitor_metric': monitor_metric,
+        'monitor_mode': monitor_mode,
         'history': history,
     }
 
@@ -774,24 +957,35 @@ def main(args):
         f"Career={len(career_cols)}, Within={len(within_cols)}, Year1Interaction={len(year1_cols)}"
     )
     
+    # As-of year for maturity gating defaults to first test year when available.
+    asof_year = args.asof_year
+    if asof_year is None and args.test_start is not None:
+        asof_year = int(args.test_start)
+
     # Datasets
     train_dataset = ProspectDataset(
         train_df, tier1_cols, tier2_cols, career_cols, within_cols, YEAR1_INTERACTION_COLUMNS,
         training=True,
         temporal_decay_half_life=args.temporal_decay_half_life,
         temporal_decay_min=args.temporal_decay_min,
+        rapm_maturity_asof_year=asof_year,
+        rapm_min_nba_seasons=args.rapm_min_nba_seasons,
     )
     val_dataset = ProspectDataset(
         val_df, tier1_cols, tier2_cols, career_cols, within_cols, YEAR1_INTERACTION_COLUMNS,
         training=False,
         temporal_decay_half_life=args.temporal_decay_half_life,
         temporal_decay_min=args.temporal_decay_min,
+        rapm_maturity_asof_year=asof_year,
+        rapm_min_nba_seasons=args.rapm_min_nba_seasons,
     )
     test_dataset = ProspectDataset(
         test_df, tier1_cols, tier2_cols, career_cols, within_cols, YEAR1_INTERACTION_COLUMNS,
         training=False,
         temporal_decay_half_life=args.temporal_decay_half_life,
         temporal_decay_min=args.temporal_decay_min,
+        rapm_maturity_asof_year=asof_year,
+        rapm_min_nba_seasons=args.rapm_min_nba_seasons,
     )
 
     within_cov = float(np.mean(train_dataset.within_mask)) if len(train_dataset.within_mask) else 0.0
@@ -830,21 +1024,56 @@ def main(args):
     
     model = model.to(device)
     logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+
+    # Optional warm-start from previous rolling checkpoint.
+    if getattr(args, "init_model_path", ""):
+        init_path = Path(args.init_model_path)
+        if init_path.exists():
+            try:
+                state = torch.load(init_path, map_location=device)
+                missing, unexpected = model.load_state_dict(state, strict=False)
+                logger.info(
+                    "Warm-start loaded from %s | missing=%d unexpected=%d",
+                    init_path,
+                    len(missing),
+                    len(unexpected),
+                )
+            except Exception as exc:
+                logger.warning("Warm-start failed for %s: %s", init_path, exc)
+        else:
+            logger.warning("init_model_path not found: %s", init_path)
     
+    objective_weights = resolve_objective_weights(args)
+    monitor_metric = "epm_ndcg10" if objective_weights["lambda_epm"] >= objective_weights["lambda_rapm"] else "rapm_rmse"
+    monitor_mode = "max" if monitor_metric == "epm_ndcg10" else "min"
+
     # Loss
     criterion = ProspectLoss(
-        lambda_rapm=args.lambda_rapm,
-        lambda_rapm_var=args.lambda_rapm_var,
-        lambda_gap=args.lambda_gap,
-        lambda_epm=args.lambda_epm,
-        lambda_dev=args.lambda_dev,
-        lambda_surv=args.lambda_surv,
-        lambda_arch=args.lambda_arch,
+        lambda_rapm=objective_weights["lambda_rapm"],
+        lambda_rapm_var=objective_weights["lambda_rapm_var"],
+        lambda_gap=objective_weights["lambda_gap"],
+        lambda_epm=objective_weights["lambda_epm"],
+        lambda_dev=objective_weights["lambda_dev"],
+        lambda_surv=objective_weights["lambda_surv"],
+        lambda_arch=objective_weights["lambda_arch"],
         lambda_kl=0.01 if args.use_vae else 0.0,
     )
     logger.info(
-        "Loss weights: rapm=%.3f rapm_var=%.3f gap=%.3f epm=%.3f dev=%.3f surv=%.3f arch=%.3f",
-        args.lambda_rapm, args.lambda_rapm_var, args.lambda_gap, args.lambda_epm, args.lambda_dev, args.lambda_surv, args.lambda_arch
+        "Objective profile=%s | Loss weights: rapm=%.3f rapm_var=%.3f gap=%.3f epm=%.3f dev=%.3f surv=%.3f arch=%.3f | monitor=%s",
+        args.objective_profile,
+        objective_weights["lambda_rapm"],
+        objective_weights["lambda_rapm_var"],
+        objective_weights["lambda_gap"],
+        objective_weights["lambda_epm"],
+        objective_weights["lambda_dev"],
+        objective_weights["lambda_surv"],
+        objective_weights["lambda_arch"],
+        monitor_metric,
+    )
+    logger.info(
+        "RAPM maturity gate: asof_year=%s min_nba_seasons=%d",
+        str(asof_year),
+        int(args.rapm_min_nba_seasons),
     )
     
     # Optimizer
@@ -859,7 +1088,7 @@ def main(args):
     
     # Train
     results = train_model(
-        model, train_loader, train_dataset, val_loader, criterion, optimizer, scheduler,
+        model, train_loader, train_dataset, val_loader, val_dataset, criterion, optimizer, scheduler,
         device, args.epochs, args.patience,
         iterative_reweight=args.iterative_reweight,
         reweight_min_group=args.reweight_min_group,
@@ -867,17 +1096,29 @@ def main(args):
         reweight_strength=args.reweight_strength,
         reweight_min_mult=args.reweight_min_mult,
         reweight_max_mult=args.reweight_max_mult,
+        monitor_metric=monitor_metric,
+        monitor_mode=monitor_mode,
         output_dir=output_dir
     )
     
     # Test evaluation
     test_metrics = evaluate(model, test_loader, criterion, device)
-    logger.info(f"Test RMSE: {test_metrics.get('rapm_rmse', 0):.4f}")
+    logger.info(
+        "Test metrics | rapm_rmse=%.4f epm_rmse=%.4f",
+        float(test_metrics.get('rapm_rmse', 0.0)),
+        float(test_metrics.get('epm_rmse', 0.0)),
+    )
     results['test'] = test_metrics
     
     # Save final model
     torch.save(model.state_dict(), output_dir / "model.pt")
     model_cfg = {
+        "objective_profile": str(args.objective_profile),
+        "objective_weights": objective_weights,
+        "monitor_metric": str(monitor_metric),
+        "monitor_mode": str(monitor_mode),
+        "rapm_maturity_asof_year": int(asof_year) if asof_year is not None else None,
+        "rapm_min_nba_seasons": int(args.rapm_min_nba_seasons),
         "latent_dim": int(args.latent_dim),
         "n_archetypes": int(args.n_archetypes),
         "use_vae": bool(args.use_vae),
@@ -974,8 +1215,10 @@ def generate_analysis_report(analyzer: ArchetypeAnalyzer, results: Dict, output_
 
 - **Best Epoch**: {results['best_epoch']}
 - **Best Val Loss**: {results['best_val_loss']:.4f}
-- **Test RMSE**: {results['test'].get('rapm_rmse', 'N/A')}
-- **Test Correlation**: {results['test'].get('rapm_corr', 'N/A')}
+- **Test RAPM RMSE**: {results['test'].get('rapm_rmse', 'N/A')}
+- **Test RAPM Correlation**: {results['test'].get('rapm_corr', 'N/A')}
+- **Test EPM RMSE**: {results['test'].get('epm_rmse', 'N/A')}
+- **Test EPM Correlation**: {results['test'].get('epm_corr', 'N/A')}
 
 ## Discovered Archetypes
 
@@ -1028,6 +1271,8 @@ if __name__ == "__main__":
     parser.add_argument('--val-end', type=int, default=None, help='Validation split season end (inclusive)')
     parser.add_argument('--test-start', type=int, default=None, help='Test split season start (inclusive)')
     parser.add_argument('--test-end', type=int, default=None, help='Test split season end (inclusive)')
+    parser.add_argument('--asof-year', type=int, default=None, help='As-of NBA year for RAPM maturity gating (defaults to test-start)')
+    parser.add_argument('--rapm-min-nba-seasons', type=int, default=3, help='Minimum completed NBA seasons required to supervise RAPM target')
     parser.add_argument('--recal-min-samples', type=int, default=15, help='Min samples per season for recalibration offsets')
     parser.add_argument('--recal-shrinkage', type=float, default=25.0, help='Shrinkage strength for season offsets')
     parser.add_argument('--iterative-reweight', action=argparse.BooleanOptionalAction, default=True, help='Enable epoch-wise residual reweighting by season/within groups')
@@ -1036,13 +1281,15 @@ if __name__ == "__main__":
     parser.add_argument('--reweight-strength', type=float, default=0.35, help='Exponent on relative error when mapping to adaptive multipliers')
     parser.add_argument('--reweight-min-mult', type=float, default=0.7, help='Lower bound for adaptive multipliers')
     parser.add_argument('--reweight-max-mult', type=float, default=1.4, help='Upper bound for adaptive multipliers')
-    parser.add_argument('--lambda-rapm', type=float, default=1.0, help='Primary RAPM loss weight')
-    parser.add_argument('--lambda-rapm-var', type=float, default=0.20, help='RAPM variance-matching regularization weight')
-    parser.add_argument('--lambda-gap', type=float, default=0.15, help='Gap auxiliary loss weight')
-    parser.add_argument('--lambda-epm', type=float, default=0.20, help='Year-1 EPM auxiliary loss weight')
-    parser.add_argument('--lambda-dev', type=float, default=0.20, help='Development-rate auxiliary loss weight')
-    parser.add_argument('--lambda-surv', type=float, default=0.10, help='Survival auxiliary loss weight')
-    parser.add_argument('--lambda-arch', type=float, default=0.05, help='Archetype regularization weight')
+    parser.add_argument('--objective-profile', choices=["epm_first", "rapm_first", "balanced"], default="epm_first", help='Multi-task objective preset')
+    parser.add_argument('--init-model-path', type=str, default="", help='Optional checkpoint path for warm-start')
+    parser.add_argument('--lambda-rapm', type=float, default=None, help='Override RAPM loss weight')
+    parser.add_argument('--lambda-rapm-var', type=float, default=None, help='Override RAPM variance-matching regularization weight')
+    parser.add_argument('--lambda-gap', type=float, default=None, help='Override gap auxiliary loss weight')
+    parser.add_argument('--lambda-epm', type=float, default=None, help='Override Year-1 EPM auxiliary loss weight')
+    parser.add_argument('--lambda-dev', type=float, default=None, help='Override development-rate auxiliary loss weight')
+    parser.add_argument('--lambda-surv', type=float, default=None, help='Override survival auxiliary loss weight')
+    parser.add_argument('--lambda-arch', type=float, default=None, help='Override archetype regularization weight')
     
     args = parser.parse_args()
     main(args)

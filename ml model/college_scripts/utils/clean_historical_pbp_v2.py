@@ -81,9 +81,10 @@ class GameSolver:
                 else:
                     # Stat? "JACKSON,WARREN made"
                     first = text.split(" ")[0]
-                    if "," in first:
+                    if "," in first and not first.upper().startswith("TEAM"):
                         p = normalize_name(first)
-                        roster_counter[p] += 1  # Activity!
+                        if p and not p.upper().startswith("TEAM"):
+                            roster_counter[p] += 1  # Activity!
             
             process_text(h_evt, 'HOME', self.roster_home)
             process_text(a_evt, 'AWAY', self.roster_away)

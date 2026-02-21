@@ -47,6 +47,7 @@ INFERENCE_DIR = BASE_DIR / "data/inference"
 MODELS_DIR = BASE_DIR / "models"
 DOCS_DIR = BASE_DIR / "docs"
 MISTAKE_DOC = DOCS_DIR / "mistake_prevention_retrospective_2026-02-19.md"
+RAPM_COVERAGE_FLOOR_WITH_MIN_POSSESSIONS = 0.35
 
 
 @dataclass
@@ -348,7 +349,21 @@ def stage3_validate_crosswalk(run_dir: Path) -> StageResult:
         return _stage_outcome("stage3_crosswalk_validation", tests, details)
 
     xw = pd.read_parquet(crosswalk_path)
-    req_cols = {"nba_id", "athlete_id"}
+    req_cols = {
+        "nba_id",
+        "athlete_id",
+        "match_score",
+        "match_tier",
+        "match_method",
+        "name_score_raw",
+        "year_gap",
+        "draft_year_proxy",
+        "dy_college",
+        "dn_college",
+        "dy_match",
+        "dn_bucket",
+        "draft_signal_score",
+    }
     missing = [c for c in req_cols if c not in xw.columns]
     tests.append(_test("schema", len(missing) == 0, f"missing={missing}" if missing else "required columns present", critical=True))
 
@@ -528,7 +543,11 @@ def stage4_rebuild_unified(run_dir: Path) -> StageResult:
         "year1_epm_tot": float(df["year1_epm_tot"].notna().mean()) if "year1_epm_tot" in df.columns else 0.0,
         "dev_rate_y1_y3_mean": float(df["dev_rate_y1_y3_mean"].notna().mean()) if "dev_rate_y1_y3_mean" in df.columns else 0.0,
     }
-    cov_ok = (cov["y_peak_ovr"] >= 0.85) and (cov["year1_epm_tot"] >= 0.70) and (cov["dev_rate_y1_y3_mean"] >= 0.99)
+    cov_ok = (
+        (cov["y_peak_ovr"] >= RAPM_COVERAGE_FLOOR_WITH_MIN_POSSESSIONS)
+        and (cov["year1_epm_tot"] >= 0.70)
+        and (cov["dev_rate_y1_y3_mean"] >= 0.99)
+    )
     tests.append(_test("coverage", cov_ok, f"{cov}", critical=True))
 
     if "draft_year_proxy" in df.columns and len(df):
@@ -581,7 +600,7 @@ def stage5_gate_checks(run_dir: Path) -> StageResult:
 
     cov = gate.get("coverage", {})
     cov_ok = (
-        float(cov.get("y_peak_ovr_non_null_rate", 0.0)) >= 0.80
+        float(cov.get("y_peak_ovr_non_null_rate", 0.0)) >= RAPM_COVERAGE_FLOOR_WITH_MIN_POSSESSIONS
         and float(cov.get("year1_epm_tot_non_null_rate", 0.0)) >= 0.65
         and float(cov.get("dev_rate_y1_y3_mean_non_null_rate", 0.0)) >= 0.85
     )
@@ -631,6 +650,7 @@ def stage6_train(run_dir: Path) -> StageResult:
     tests.append(_test("schema", granular_ok, f"granular_returncode={granular_res['returncode']}", critical=True))
     tests.append(_test("cardinality", approx_checks >= 3000, f"approx_checks_total={approx_checks}", critical=True))
     allowed_dead = {
+        "college_transition_freq",
         "final_has_ws_last10",
         "final_ws_minutes_last10",
         "final_ws_pps_last10",

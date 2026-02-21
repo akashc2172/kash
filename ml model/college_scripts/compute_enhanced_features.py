@@ -20,6 +20,8 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Tuple
 import logging
+from pathlib import Path
+import argparse
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,17 @@ def compute_athleticism_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns DataFrame with new columns added.
     """
     df = df.copy()
+    poss_col = 'poss_est' if 'poss_est' in df.columns else ('poss_total' if 'poss_total' in df.columns else None)
+    if poss_col is None and 'college_poss_proxy' in df.columns:
+        poss_col = 'college_poss_proxy'
+    if poss_col is None and {'fga_total', 'ft_att'}.issubset(df.columns):
+        tov = pd.to_numeric(df['tov_total'], errors='coerce').fillna(0.0) if 'tov_total' in df.columns else 0.0
+        df['_poss_proxy_enh'] = (
+            pd.to_numeric(df['fga_total'], errors='coerce').fillna(0.0)
+            + 0.44 * pd.to_numeric(df['ft_att'], errors='coerce').fillna(0.0)
+            + tov
+        )
+        poss_col = '_poss_proxy_enh'
     
     # Dunk Rate: dunks / rim attempts
     # If dunk_att not available, set to NaN (requires playType parsing)
@@ -77,8 +90,18 @@ def compute_athleticism_features(df: pd.DataFrame) -> pd.DataFrame:
             np.nan
         )
     else:
-        df['dunk_rate'] = np.nan
-        df['dunk_freq'] = np.nan
+        # Fallback proxy when explicit dunk tags are unavailable:
+        # use rim finishing profile as an athleticism signal.
+        df['dunk_rate'] = np.where(
+            df['rim_att'] >= MIN_ATTEMPTS_FOR_RATE,
+            beta_shrink(df['rim_made'].fillna(0), df['rim_att'].fillna(0)),
+            np.nan
+        )
+        df['dunk_freq'] = np.where(
+            df['fga_total'] >= MIN_ATTEMPTS_FOR_RATE,
+            df['rim_att'].fillna(0) / df['fga_total'].replace(0, np.nan),
+            np.nan
+        )
     df['dunk_rate_missing'] = df['dunk_rate'].isna().astype(int)
     df['dunk_freq_missing'] = df['dunk_freq'].isna().astype(int)
     
@@ -91,7 +114,15 @@ def compute_athleticism_features(df: pd.DataFrame) -> pd.DataFrame:
             np.nan
         )
     else:
-        df['putback_rate'] = np.nan
+        # Fallback proxy when explicit putback tags are missing.
+        if 'orb_total' in df.columns and 'fga_total' in df.columns:
+            df['putback_rate'] = np.where(
+                df['fga_total'] >= MIN_ATTEMPTS_FOR_RATE,
+                df['orb_total'].fillna(0) / (df['fga_total'].fillna(0) + 1),
+                np.nan
+            )
+        else:
+            df['putback_rate'] = np.nan
     df['putback_rate_missing'] = df['putback_rate'].isna().astype(int)
     
     # Transition Frequency & Efficiency
@@ -117,11 +148,11 @@ def compute_athleticism_features(df: pd.DataFrame) -> pd.DataFrame:
     
     # Rim Pressure Index: (rim_fga + 0.44*FTA) / poss_est
     # Measures ability to get to rim and draw fouls
-    if 'poss_est' in df.columns:
+    if poss_col is not None:
         rim_plus_ft = df['rim_att'] + 0.44 * df['ft_att']
         df['rim_pressure_index'] = np.where(
-            df['poss_est'] >= 50,
-            rim_plus_ft / df['poss_est'],
+            (pd.to_numeric(df[poss_col], errors='coerce') > 0) & (pd.to_numeric(df['fga_total'], errors='coerce') >= MIN_ATTEMPTS_FOR_RATE),
+            rim_plus_ft / pd.to_numeric(df[poss_col], errors='coerce').replace(0, np.nan),
             np.nan
         )
     else:
@@ -143,28 +174,39 @@ def compute_defense_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns DataFrame with new columns added.
     """
     df = df.copy()
+    poss_col = 'poss_est' if 'poss_est' in df.columns else ('poss_total' if 'poss_total' in df.columns else None)
+    if poss_col is None and 'college_poss_proxy' in df.columns:
+        poss_col = 'college_poss_proxy'
+    if poss_col is None and {'fga_total', 'ft_att'}.issubset(df.columns):
+        tov = pd.to_numeric(df['tov_total'], errors='coerce').fillna(0.0) if 'tov_total' in df.columns else 0.0
+        df['_poss_proxy_enh_def'] = (
+            pd.to_numeric(df['fga_total'], errors='coerce').fillna(0.0)
+            + 0.44 * pd.to_numeric(df['ft_att'], errors='coerce').fillna(0.0)
+            + tov
+        )
+        poss_col = '_poss_proxy_enh_def'
     
     # First compute base rates if not present
-    if 'stl_rate' not in df.columns and 'stl_total' in df.columns:
+    if 'stl_rate' not in df.columns and 'stl_total' in df.columns and poss_col is not None:
         df['stl_rate'] = np.where(
-            df['poss_est'] >= 50,
-            df['stl_total'] / df['poss_est'],
+            pd.to_numeric(df[poss_col], errors='coerce') >= 50,
+            df['stl_total'] / pd.to_numeric(df[poss_col], errors='coerce'),
             np.nan
         )
-    
-    if 'blk_rate' not in df.columns and 'blk_total' in df.columns:
+
+    if 'blk_rate' not in df.columns and 'blk_total' in df.columns and poss_col is not None:
         df['blk_rate'] = np.where(
-            df['poss_est'] >= 50,
-            df['blk_total'] / df['poss_est'],
+            pd.to_numeric(df[poss_col], errors='coerce') >= 50,
+            df['blk_total'] / pd.to_numeric(df[poss_col], errors='coerce'),
             np.nan
         )
     
     # Foul rate
     foul_col = 'pf_total' if 'pf_total' in df.columns else 'foul_total'
-    if foul_col in df.columns:
+    if foul_col in df.columns and poss_col is not None:
         df['foul_rate'] = np.where(
-            df['poss_est'] >= 50,
-            df[foul_col] / df['poss_est'],
+            pd.to_numeric(df[poss_col], errors='coerce') >= 50,
+            df[foul_col] / pd.to_numeric(df[poss_col], errors='coerce'),
             np.nan
         )
     else:
@@ -185,11 +227,27 @@ def compute_defense_features(df: pd.DataFrame) -> pd.DataFrame:
     
     # Contest Proxy: blk_rate / (blk_rate + foul_rate + 0.01)
     # Measures clean contests (blocks without fouling)
-    if 'blk_rate' in df.columns and 'foul_rate' in df.columns:
+    if 'blk_rate' in df.columns and df['blk_rate'].notna().any() and 'foul_rate' in df.columns and df['foul_rate'].notna().any():
         denom = df['blk_rate'].fillna(0) + df['foul_rate'].fillna(0) + 0.01
         df['contest_proxy'] = np.where(
             df['blk_rate'].notna() & df['foul_rate'].notna(),
             df['blk_rate'].fillna(0) / denom,
+            np.nan
+        )
+    elif 'blk_rate' in df.columns and df['blk_rate'].notna().any():
+        # Fallback when fouls are unavailable: apply a fixed foul prior.
+        denom = df['blk_rate'].fillna(0) + 0.03
+        df['contest_proxy'] = np.where(
+            df['blk_rate'].notna(),
+            df['blk_rate'].fillna(0) / denom,
+            np.nan
+        )
+    elif {'rim_att', 'rim_made'}.issubset(df.columns):
+        # Fallback when block/foul stats are unavailable in early seasons.
+        rim_fg = np.where(pd.to_numeric(df['rim_att'], errors='coerce') > 0, pd.to_numeric(df['rim_made'], errors='coerce') / pd.to_numeric(df['rim_att'], errors='coerce'), np.nan)
+        df['contest_proxy'] = np.where(
+            pd.to_numeric(df['rim_att'], errors='coerce') >= MIN_ATTEMPTS_FOR_RATE,
+            np.clip(1.0 - rim_fg, 0.0, 1.0),
             np.nan
         )
     else:
@@ -453,17 +511,76 @@ def compute_all_enhanced_features(df: pd.DataFrame) -> pd.DataFrame:
     
     available = [f for f in new_features if f in df_all.columns and df_all[f].notna().any()]
     logger.info(f"  Available enhanced features: {available}")
+
+    # Enforce one-row-per-key contract for downstream merges.
+    key_cols = [c for c in ['season', 'athlete_id', 'split_id'] if c in df_all.columns]
+    if key_cols:
+        dupe = int(df_all.duplicated(subset=key_cols).sum())
+        if dupe > 0:
+            logger.warning(f"  Collapsing {dupe:,} duplicate enhanced rows on key {key_cols}")
+            rank_cols = [c for c in new_features if c in df_all.columns]
+            df_all["_nn_rank"] = df_all[rank_cols].notna().sum(axis=1)
+            df_all = (
+                df_all.sort_values(key_cols + ["_nn_rank"], ascending=[True] * len(key_cols) + [False])
+                .drop_duplicates(subset=key_cols, keep="first")
+                .drop(columns=["_nn_rank"], errors="ignore")
+                .reset_index(drop=True)
+            )
     
     return df_all
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    print("Enhanced Feature Computation Module")
-    print("=" * 40)
-    print("\nFeature Blocks:")
-    print("  - Athleticism: dunk_rate, dunk_freq, putback_rate, transition_freq, transition_eff, rim_pressure_index")
-    print("  - Defense: deflection_proxy, contest_proxy")
-    print("  - Pressure: pressure_handle_proxy, clutch_shooting_delta")
-    print("  - Creation: self_creation_rate, self_creation_eff")
-    print("  - Context: leverage_poss_share")
+    parser = argparse.ArgumentParser(description="Build enhanced college activity features.")
+    parser.add_argument(
+        "--input",
+        default=str(Path(__file__).resolve().parents[1] / "data" / "college_feature_store" / "college_features_v1.parquet"),
+        help="Input college_features parquet path",
+    )
+    parser.add_argument(
+        "--output",
+        default=str(Path(__file__).resolve().parents[1] / "data" / "college_feature_store" / "enhanced_features_v1.parquet"),
+        help="Output enhanced parquet path",
+    )
+    args = parser.parse_args()
+
+    in_path = Path(args.input)
+    out_path = Path(args.output)
+    if not in_path.exists():
+        raise SystemExit(f"Input file not found: {in_path}")
+
+    df_in = pd.read_parquet(in_path)
+    if df_in.empty:
+        raise SystemExit("Input college features are empty; cannot compute enhanced features.")
+
+    df_enh = compute_all_enhanced_features(df_in)
+    if "split_id" not in df_enh.columns:
+        df_enh["split_id"] = "ALL__ALL"
+
+    # Keep only key + enhanced columns + masks.
+    keep_keys = [c for c in ["season", "athlete_id", "split_id"] if c in df_enh.columns]
+    keep_cols = [
+        "dunk_rate", "dunk_freq", "putback_rate", "transition_freq", "transition_eff",
+        "rim_pressure_index", "deflection_proxy", "contest_proxy", "pressure_handle_proxy",
+        "clutch_shooting_delta", "self_creation_rate", "self_creation_eff", "leverage_poss_share",
+        "dunk_rate_missing", "dunk_freq_missing", "putback_rate_missing", "transition_freq_missing",
+        "transition_eff_missing", "rim_pressure_index_missing", "deflection_proxy_missing",
+        "contest_proxy_missing", "pressure_handle_proxy_missing", "clutch_shooting_delta_missing",
+        "self_creation_rate_missing", "self_creation_eff_missing", "leverage_poss_share_missing",
+    ]
+    keep_cols = [c for c in keep_cols if c in df_enh.columns]
+    df_out = df_enh[keep_keys + keep_cols].copy()
+
+    # Explicit provenance for downstream hard gates and diagnostics.
+    core = ["dunk_rate", "dunk_freq", "putback_rate", "rim_pressure_index", "contest_proxy"]
+    present = np.zeros(len(df_out), dtype=bool)
+    for c in core:
+        if c in df_out.columns:
+            present |= pd.to_numeric(df_out[c], errors="coerce").notna().to_numpy()
+    df_out["activity_source"] = np.where(present, "derived_fallback", "missing")
+    df_out["has_activity_features"] = present.astype(int)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df_out.to_parquet(out_path, index=False)
+    logger.info("Saved enhanced features: %s (%s rows)", out_path, len(df_out))

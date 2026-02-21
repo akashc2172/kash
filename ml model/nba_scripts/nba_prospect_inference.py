@@ -29,6 +29,7 @@ from pathlib import Path
 import logging
 import sys
 import json
+import subprocess
 import numpy as np
 import pandas as pd
 
@@ -126,6 +127,11 @@ def _build_meta_features(
         _num_array(src_df, "college_orb_total_per100poss"),
         _num_array(src_df, "college_drb_total_per100poss"),
         _num_array(src_df, "college_trb_total_per100poss"),
+        _num_array(src_df, "college_dunk_rate"),
+        _num_array(src_df, "college_dunk_freq"),
+        _num_array(src_df, "college_putback_rate"),
+        _num_array(src_df, "college_rim_pressure_index"),
+        _num_array(src_df, "college_contest_proxy"),
         _num_array(src_df, "college_team_srs"),
         _num_array(src_df, "college_team_rank"),
         _num_array(src_df, "college_recruiting_rating"),
@@ -137,12 +143,16 @@ def _build_meta_features(
         _num_array(src_df, "college_o_rapm"),
         _num_array(src_df, "college_d_rapm"),
         _num_array(src_df, "college_on_net_rating"),
+        _num_array(src_df, "college_off_net_rating"),
+        _num_array(src_df, "college_on_off_net_diff"),
         _num_array(src_df, "high_lev_att_rate"),
         _num_array(src_df, "garbage_att_rate"),
         _num_array(src_df, "leverage_poss_share"),
         _num_array(src_df, "career_years"),
         _num_array(src_df, "class_year"),
         _num_array(src_df, "age_at_season"),
+        _num_array(src_df, "college_height_in"),
+        _num_array(src_df, "college_weight_lbs"),
         _num_array(src_df, "slope_usage"),
         _num_array(src_df, "slope_trueShootingPct"),
     ]
@@ -202,8 +212,11 @@ def build_prospect_inference_table(
         load_college_dev_rate,
         load_transfer_context_summary,
         load_college_impact_stack,
+        load_recruiting_physicals,
         build_final_season_leverage_features,
         load_team_strength_features,
+        load_historical_text_games_backfill,
+        load_historical_exposure_backfill,
     )
 
     if college_features.empty:
@@ -228,9 +241,87 @@ def build_prospect_inference_table(
             derived_col = f"college_{stat}_total"
             target_col = f"{stat}_total"
             if derived_col in cf.columns:
-                cf[target_col] = cf[derived_col].fillna(0)
+                if target_col in cf.columns:
+                    cf[target_col] = pd.to_numeric(cf[target_col], errors="coerce").combine_first(
+                        pd.to_numeric(cf[derived_col], errors="coerce")
+                    )
+                else:
+                    cf[target_col] = pd.to_numeric(cf[derived_col], errors="coerce")
         if "college_games_played" in cf.columns:
-            cf["games_played"] = cf["college_games_played"].fillna(0)
+            if "games_played" in cf.columns:
+                cf["games_played"] = pd.to_numeric(cf["games_played"], errors="coerce").combine_first(
+                    pd.to_numeric(cf["college_games_played"], errors="coerce")
+                )
+            else:
+                cf["games_played"] = pd.to_numeric(cf["college_games_played"], errors="coerce")
+
+    # Historical manual text backfill for games-played (same logic as training build).
+    hist_text_games = load_historical_text_games_backfill()
+    if not hist_text_games.empty:
+        cf = cf.merge(hist_text_games, on=["athlete_id", "season"], how="left")
+        hist_games = pd.to_numeric(cf.get("hist_games_played_text"), errors="coerce")
+        if "games_played" in cf.columns:
+            existing_games = pd.to_numeric(cf["games_played"], errors="coerce")
+            # Historical text parse is fallback-only UNLESS it exposes a massive gap
+            # in primary source API coverage (>= 5 games).
+            cf["games_played"] = np.where(
+                (hist_games > 0) & ((existing_games.isna()) | (existing_games <= 0) | ((hist_games - existing_games) >= 5)),
+                hist_games,
+                existing_games,
+            )
+        else:
+            cf["games_played"] = hist_games
+
+    # Historical exposure backfill parity (minutes/games/tov) from manual reconstruction.
+    exposure_backfill = load_historical_exposure_backfill()
+    if not exposure_backfill.empty:
+        cf = cf.merge(exposure_backfill, on=["athlete_id", "season"], how="left")
+
+        if "minutes_total" in cf.columns:
+            m_exist = pd.to_numeric(cf["minutes_total"], errors="coerce")
+            m_back = pd.to_numeric(cf.get("backfill_minutes_total"), errors="coerce")
+            cf["minutes_total"] = m_exist.combine_first(m_back)
+
+        if "games_played" in cf.columns:
+            g_exist = pd.to_numeric(cf["games_played"], errors="coerce")
+            g_back = pd.to_numeric(cf.get("backfill_games_played"), errors="coerce")
+            # Prefer existing API/participant data UNLESS the backfill indicates a massive gap
+            # in API coverage (Gap >= 5 indicates structural undercoverage, restoring missing games).
+            cf["games_played"] = np.where(
+                (g_back > 0) & ((g_exist.isna()) | (g_exist <= 0) | ((g_back - g_exist) >= 5)),
+                g_back,
+                g_exist,
+            )
+
+        if "tov_total" in cf.columns:
+            t_exist = pd.to_numeric(cf["tov_total"], errors="coerce")
+            t_back = pd.to_numeric(cf.get("backfill_tov_total"), errors="coerce")
+            cf["tov_total"] = t_exist.combine_first(t_back)
+
+        # Sync the core reporting columns used by export scripts to the freshly patched true stats
+        if "games_played" in cf.columns:
+            cf["college_games_played"] = cf["games_played"]
+        if "minutes_total" in cf.columns:
+            cf["college_minutes_total"] = cf["minutes_total"]
+            cf["college_minutes_total_display"] = cf["minutes_total"]
+
+    # Exposure plausibility guardrails.
+    if "games_played" in cf.columns:
+        gp = pd.to_numeric(cf["games_played"], errors="coerce")
+        gp_bad = (gp < 0) | (gp > 45)
+        n_gp_bad = int(gp_bad.fillna(False).sum())
+        if n_gp_bad > 0:
+            logger.warning("Nulling %d out-of-range games_played values in inference (expected 0..45)", n_gp_bad)
+            gp = gp.where(~gp_bad, np.nan)
+        cf["games_played"] = gp
+    if "minutes_total" in cf.columns:
+        mins = pd.to_numeric(cf["minutes_total"], errors="coerce")
+        mins_bad = (mins < 0) | (mins > 2000)
+        n_mins_bad = int(mins_bad.fillna(False).sum())
+        if n_mins_bad > 0:
+            logger.warning("Nulling %d out-of-range minutes_total values in inference (expected 0..2000)", n_mins_bad)
+            mins = mins.where(~mins_bad, np.nan)
+        cf["minutes_total"] = mins
 
     final_college = get_final_college_season(cf)
     # Train-serve parity: leverage rates are derived from all splits, not only ALL__ALL.
@@ -267,6 +358,30 @@ def build_prospect_inference_table(
         ]
         df = df.merge(impact[impact_cols], on=["athlete_id", "college_final_season"], how="left")
 
+    # Inference-side aliases aligned with unified training contract.
+    alias_map = {
+        "impact_off_net_raw": "college_off_net_rating",
+        "impact_on_off_net_diff_raw": "college_on_off_net_diff",
+        "impact_on_off_ortg_diff_raw": "college_on_off_ortg_diff",
+        "impact_on_off_drtg_diff_raw": "college_on_off_drtg_diff",
+    }
+    for src, dst in alias_map.items():
+        if src in df.columns and dst not in df.columns:
+            df[dst] = pd.to_numeric(df[src], errors="coerce")
+
+    # Activity contract columns for robust downstream ranking features.
+    core_cols = [
+        "college_dunk_rate", "college_dunk_freq", "college_putback_rate",
+        "college_rim_pressure_index", "college_contest_proxy",
+    ]
+    for c in core_cols:
+        if c not in df.columns:
+            df[c] = np.nan
+    if "college_activity_source" not in df.columns:
+        df["college_activity_source"] = np.where(df[core_cols].notna().any(axis=1), "derived_fallback", "missing")
+    if "has_college_activity_features" not in df.columns:
+        df["has_college_activity_features"] = df[core_cols].notna().any(axis=1).astype(int)
+
     # Train-serve parity: team-strength/SRS enrich.
     srs = load_team_strength_features()
     if not srs.empty and {"college_teamId", "college_final_season"}.issubset(df.columns):
@@ -275,6 +390,31 @@ def build_prospect_inference_table(
         use_cols = [c for c in use_cols if c in srs.columns]
         if use_cols:
             df = df.merge(srs[use_cols], on=["college_teamId", "college_final_season"], how="left")
+
+    # Draft-time physicals from recruiting table.
+    recruiting_phys = load_recruiting_physicals()
+    if not recruiting_phys.empty:
+        df = df.merge(recruiting_phys, on="athlete_id", how="left")
+        if "college_height_in" not in df.columns:
+            df["college_height_in"] = pd.to_numeric(df.get("recruit_height_in"), errors="coerce")
+        else:
+            df["college_height_in"] = pd.to_numeric(df["college_height_in"], errors="coerce").combine_first(
+                pd.to_numeric(df.get("recruit_height_in"), errors="coerce")
+            )
+        if "college_weight_lbs" not in df.columns:
+            df["college_weight_lbs"] = pd.to_numeric(df.get("recruit_weight_lbs"), errors="coerce")
+        else:
+            df["college_weight_lbs"] = pd.to_numeric(df["college_weight_lbs"], errors="coerce").combine_first(
+                pd.to_numeric(df.get("recruit_weight_lbs"), errors="coerce")
+            )
+    for col in ["college_height_in", "college_weight_lbs"]:
+        if col not in df.columns:
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    if "has_college_height" not in df.columns:
+        df["has_college_height"] = df["college_height_in"].notna().astype(int)
+    if "has_college_weight" not in df.columns:
+        df["has_college_weight"] = df["college_weight_lbs"].notna().astype(int)
 
     # Derived masks/features that do not require NBA labels.
     df = compute_derived_features(df)
@@ -307,6 +447,7 @@ def main() -> None:
     parser.add_argument("--build-only", action="store_true", help="Only build the inference table, do not run a model.")
     parser.add_argument("--model-path", default="", help="Path to a trained model.pt (optional).")
     parser.add_argument("--recalibration-path", default="", help="Optional season_recalibration.json path.")
+    parser.add_argument("--skip-rank-export", action="store_true", help="Skip CSV/XLSX rankings export after predictions.")
     args = parser.parse_args()
 
     college_path = FEATURE_STORE / "college_features_v1.parquet"
@@ -334,12 +475,27 @@ def main() -> None:
     if not model_path.exists():
         raise FileNotFoundError(f"model not found: {model_path}")
 
+    model_cfg_path = model_path.parent / "model_config.json"
+    model_cfg = {}
+    if model_cfg_path.exists():
+        try:
+            model_cfg = json.loads(model_cfg_path.read_text(encoding="utf-8"))
+            logger.info("Loaded model config from %s", model_cfg_path)
+        except Exception as exc:
+            logger.warning("Failed reading model config (%s): %s", model_cfg_path, exc)
+
     # Keep fixed branch widths to match model dimensions.
     tier1_cols = list(TIER1_COLUMNS)
     tier2_cols = list(TIER2_COLUMNS)
     career_cols = list(CAREER_BASE_COLUMNS)
     within_cols = list(WITHIN_COLUMNS)
     interaction_cols = list(YEAR1_INTERACTION_COLUMNS)
+    # Prefer checkpoint-persisted feature contracts when present.
+    tier1_cols = list(model_cfg.get("tier1_columns", tier1_cols))
+    tier2_cols = list(model_cfg.get("tier2_columns", tier2_cols))
+    career_cols = list(model_cfg.get("career_columns", career_cols))
+    within_cols = list(model_cfg.get("within_columns", within_cols))
+    interaction_cols = list(model_cfg.get("year1_interaction_columns", interaction_cols))
 
     # Align feature sets with the training table surface so checkpoint input dims match.
     try:
@@ -421,16 +577,9 @@ def main() -> None:
 
     # Checkpoints may be trained with different decoder conditioning settings.
     # Prefer explicit manifest if available; otherwise fall back to probing.
-    model_cfg_path = model_path.parent / "model_config.json"
     condition_candidates = []
-    model_cfg = {}
-    if model_cfg_path.exists():
-        try:
-            model_cfg = json.loads(model_cfg_path.read_text(encoding="utf-8"))
-            condition_candidates = [bool(model_cfg.get("condition_on_archetypes", False))]
-            logger.info("Loaded model config from %s", model_cfg_path)
-        except Exception as exc:
-            logger.warning("Failed reading model config (%s): %s", model_cfg_path, exc)
+    if model_cfg:
+        condition_candidates = [bool(model_cfg.get("condition_on_archetypes", False))]
     if not condition_candidates:
         condition_candidates = [False, True]
 
@@ -753,6 +902,18 @@ def main() -> None:
             preds["pred_rank_model"] = "raw_peak_fallback"
             preds["pred_rank_model_n"] = 0
 
+        # Objective-aware ranking target:
+        # when training was EPM-first, rank on Year-1 EPM head by default.
+        objective_profile = str(model_cfg.get("objective_profile", "rapm_first")).lower()
+        if objective_profile == "epm_first":
+            learned_score = preds["pred_year1_epm"].to_numpy(dtype=float)
+            preds["pred_rank_model"] = "epm_head_direct_v1"
+            preds["pred_rank_model_n"] = int(np.isfinite(learned_score).sum())
+            preds["pred_rank_target"] = "year1_epm_tot"
+        else:
+            preds["pred_rank_target"] = "peak_rapm"
+
+        preds["pred_rank_score"] = learned_score
         preds["pred_peak_rapm_rank_score"] = learned_score
     except Exception as exc:
         logger.warning("Failed to compute rank diagnostics: %s", exc)
@@ -765,6 +926,8 @@ def main() -> None:
         preds["pred_rank_blk_z"] = np.nan
         preds["pred_rank_volume_z"] = np.nan
         preds["pred_rank_recruit_z"] = np.nan
+        preds["pred_rank_score"] = preds["pred_peak_rapm"]
+        preds["pred_rank_target"] = "peak_rapm"
         preds["pred_peak_rapm_rank_score"] = preds["pred_peak_rapm"]
         preds["pred_rank_model"] = "raw_peak_error_fallback"
         preds["pred_rank_model_n"] = 0
@@ -774,6 +937,16 @@ def main() -> None:
     out_path = INFERENCE_DIR / f"prospect_predictions_{stamp}.parquet"
     preds.to_parquet(out_path, index=False)
     logger.info(f"Saved predictions: {out_path}")
+
+    # Always export user-facing season ranking artifacts (CSV + XLSX) unless explicitly skipped.
+    if not args.skip_rank_export:
+        export_script = BASE_DIR / "scripts" / "export_inference_rankings.py"
+        if export_script.exists():
+            try:
+                subprocess.run([sys.executable, str(export_script)], check=True)
+                logger.info("Exported ranking artifacts via %s", export_script)
+            except Exception as exc:
+                logger.warning("Failed ranking export step: %s", exc)
 
 
 if __name__ == "__main__":

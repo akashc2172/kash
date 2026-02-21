@@ -5,7 +5,7 @@ import difflib
 import os
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -51,47 +51,54 @@ class ScrapeGame:
     csv_path: str
 
 
-def _parse_scrape_game(csv_path: str) -> Optional[ScrapeGame]:
+def _parse_scrape_games_from_file(csv_path: str) -> List[ScrapeGame]:
     """
-    Parse one manual scrape csv to extract contest/date/home/away from header line:
-    Time | Home Team | Score | Away Team
+    Parse one manual scrape CSV and extract ALL contest IDs in the file.
+    Each date file contains many games; we need one bridge candidate per contest_id.
     """
+    out: List[ScrapeGame] = []
     try:
+        by_contest: Dict[int, Dict[str, object]] = {}
         with open(csv_path, "r", newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            first = next(reader, None)
-            if not first:
-                return None
-            contest_id = int(first.get("contest_id") or 0)
-            dt = first.get("date")
-            if not contest_id or not dt:
-                return None
-            scrape_dt = date.fromisoformat(dt)
-
-            # Header is usually first row raw_text, but scan a few lines defensively.
-            raw_lines = [first.get("raw_text", "")]
-            for _ in range(20):
-                row = next(reader, None)
-                if row is None:
-                    break
-                raw_lines.append(row.get("raw_text", ""))
-            header = next((x for x in raw_lines if "| Score |" in (x or "")), None)
-            if not header:
-                return None
-            parts = [p.strip() for p in header.split("|")]
-            if len(parts) < 4:
-                return None
-            home = parts[1]
-            away = parts[3]
-            return ScrapeGame(
-                contest_id=contest_id,
-                scrape_date=scrape_dt,
-                scrape_home_team=home,
-                scrape_away_team=away,
-                csv_path=csv_path,
+            for row in reader:
+                cid_raw = row.get("contest_id")
+                dt_raw = row.get("date")
+                raw = (row.get("raw_text") or "").strip()
+                if not cid_raw or not dt_raw:
+                    continue
+                try:
+                    cid = int(cid_raw)
+                    d = date.fromisoformat(str(dt_raw))
+                except Exception:
+                    continue
+                entry = by_contest.setdefault(
+                    cid,
+                    {"date": d, "home": None, "away": None},
+                )
+                if entry["home"] is None and "| Score |" in raw:
+                    parts = [p.strip() for p in raw.split("|")]
+                    if len(parts) >= 4:
+                        entry["home"] = parts[1]
+                        entry["away"] = parts[3]
+        for cid, v in by_contest.items():
+            home = v.get("home")
+            away = v.get("away")
+            d = v.get("date")
+            if not home or not away or not isinstance(d, date):
+                continue
+            out.append(
+                ScrapeGame(
+                    contest_id=cid,
+                    scrape_date=d,
+                    scrape_home_team=str(home),
+                    scrape_away_team=str(away),
+                    csv_path=csv_path,
+                )
             )
     except Exception:
-        return None
+        return []
+    return out
 
 
 def _load_manual_scrape_games(scrape_root: str, max_files: Optional[int] = None) -> List[ScrapeGame]:
@@ -106,9 +113,7 @@ def _load_manual_scrape_games(scrape_root: str, max_files: Optional[int] = None)
 
     out: List[ScrapeGame] = []
     for p in files:
-        g = _parse_scrape_game(p)
-        if g:
-            out.append(g)
+        out.extend(_parse_scrape_games_from_file(p))
     return out
 
 
@@ -123,7 +128,14 @@ def _match_scrape_to_cbd(scrape_games: List[ScrapeGame], cbd_games: pd.DataFrame
         home_n = _norm_team(sg.scrape_home_team)
         away_n = _norm_team(sg.scrape_away_team)
 
+        # Primary: same date; fallback: +/- 1 day to absorb timezone shifts.
         cands = cbd_games[cbd_games["cbd_date"] == sg.scrape_date]
+        date_penalty = 0.0
+        if cands.empty:
+            plus = sg.scrape_date + timedelta(days=1)
+            minus = sg.scrape_date - timedelta(days=1)
+            cands = cbd_games[cbd_games["cbd_date"].isin([plus, minus])]
+            date_penalty = 0.03
         best = None
         best_score = -1.0
         best_method = "unmatched"
@@ -137,14 +149,15 @@ def _match_scrape_to_cbd(scrape_games: List[ScrapeGame], cbd_games: pd.DataFrame
             else:
                 s = score_swap
                 method = "swapped"
-            if s > best_score:
-                best_score = s
+            s_adj = s - date_penalty
+            if s_adj > best_score:
+                best_score = s_adj
                 best = c
                 best_method = method
 
         if best is None:
             continue
-        if best_score < 0.75:
+        if best_score < 0.70:
             continue
 
         rows.append(
@@ -162,7 +175,14 @@ def _match_scrape_to_cbd(scrape_games: List[ScrapeGame], cbd_games: pd.DataFrame
             }
         )
 
-    return pd.DataFrame(rows)
+    if not rows:
+        return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    # Deterministic one-to-one tie-breaks.
+    out = out.sort_values(["match_confidence", "contest_id", "cbd_game_id"], ascending=[False, True, True])
+    out = out.drop_duplicates(subset=["contest_id"], keep="first")
+    out = out.drop_duplicates(subset=["cbd_game_id"], keep="first")
+    return out
 
 
 def _extract_scrape_players(csv_path: str) -> List[str]:
@@ -211,6 +231,7 @@ def build_scrape_bridges(
     wh: Warehouse,
     scrape_root: str = "data/manual_scrapes",
     max_files: Optional[int] = None,
+    include_player_bridge: bool = True,
 ):
     """
     Build persistent game/player bridge tables:
@@ -269,6 +290,14 @@ def build_scrape_bridges(
 
     wh.exec("DELETE FROM bridge_game_cbd_scrape")
     wh.ensure_table("bridge_game_cbd_scrape", game_bridge, pk=None)
+
+    # Build player bridge using participants in matched CBD games (optional).
+    if not include_player_bridge:
+        print(
+            f"Built bridges: games={len(game_bridge)}, "
+            f"players=0 (skipped), scrape_root={scrape_root}"
+        )
+        return
 
     # Build player bridge using participants in matched CBD games.
     matched_ids = game_bridge["cbd_game_id"].astype(int).tolist()

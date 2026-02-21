@@ -1,3 +1,49 @@
+<!-- CANONICAL_HTML_MIRROR -->
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
+Last mirror refresh: 2026-02-20 19:18:17
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
+Last mirror refresh: 2026-02-20 11:52:26
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
+Last mirror refresh: 2026-02-20 11:51:36
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
+Last mirror refresh: 2026-02-20 11:50:14
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+
+Summary: Input contract DAG mirrored; canonical contract in HTML dashboard.
+
+Last mirror refresh: 2026-02-20 11:18:49
+
+
 # Current Input DAG (As-Wired)
 
 This is the **current implementation DAG**, aligned to active code and table surfaces.

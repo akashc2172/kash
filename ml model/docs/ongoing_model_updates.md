@@ -267,3 +267,410 @@ Rebuilt entire chain: `build_prospect_career_store_v2.py` → `build_transfer_co
 ### Current status
 - Data wiring materially improved, but rankings are still not at desired quality thresholds for key anchors.
 - Remaining blocker is not basic feature presence; it is coverage and model-behavior calibration under incomplete game coverage.
+
+## 2026-02-19 — RAPM parser hardening + impact/athleticism wiring patch
+
+### Implemented
+- `college_scripts/calculate_historical_rapm.py`
+  - Replaced brittle exact-match home-team split with normalized + fuzzy resolver:
+    - header-derived home candidate (`| Score |` rows),
+    - `onFloor` team-label candidates,
+    - normalized/fuzzy matching fallback.
+  - Added unresolved-home warning counter for runtime diagnostics.
+
+- `college_scripts/build_college_impact_stack_v1.py`
+  - Added ON/OFF-derived impact fields from `fact_player_game` + `fact_team_game` identity:
+    - `impact_off_ortg_raw`, `impact_off_drtg_raw`, `impact_off_net_raw`
+    - `impact_on_off_ortg_diff_raw`, `impact_on_off_drtg_diff_raw`, `impact_on_off_net_diff_raw`
+  - Preserved historical RAPM augmentation path unchanged.
+
+- `nba_scripts/build_unified_training_table.py`
+  - Added dunk-rate source loader from `stg_shots` + `fact_play_raw` text (`%dunk%` on made rim shots).
+  - Preserved dunk-rate through final-season aggregation and exposed `college_dunk_rate`.
+  - Added canonical aliases for ON/OFF impact fields (`college_off_*`, `college_on_off_*`).
+
+- `models/player_encoder.py`
+  - Added `college_dunk_rate` to active Tier1 inputs.
+  - Kept sparse OFF/ONOFF-diff columns out of active Tier1 until coverage improves.
+
+- `nba_scripts/nba_prospect_inference.py`
+  - Added dunk/impact signals to ranking meta-feature builder (`college_dunk_rate`, `college_off_net_rating`, `college_on_off_net_diff`).
+
+### Validation
+- Rebuilt impact stack:
+  - `/Users/akashc/my-trankcopy/ml model/data/college_feature_store/college_impact_stack_v1.parquet`
+  - rows: `34,914`, cols: `45`
+- Rebuilt unified training table:
+  - `/Users/akashc/my-trankcopy/ml model/data/training/unified_training_table.parquet`
+  - rows: `1,065`, cols: `445`
+  - `college_dunk_rate` coverage: `98.5%` non-null, `86.29%` non-zero
+- DAG input contract check:
+  - `python3 nba_scripts/emit_full_input_dag.py` passes.
+- Tests:
+  - `pytest tests/test_wiring_edge_cases.py tests/test_dev_rate_label_math.py` -> `5 passed`.
+
+### Current constraint (known)
+- ON/OFF-derived OFF columns are populated in impact stack for season `2025` only (source-limited by `fact_player_game` coverage), so they remain passive for core encoder until broader season coverage exists.
+
+## 2026-02-19 — Additional pipeline-alignment coverage pass (activity + threshold proxies)
+
+### Implemented
+- Expanded unified activity proxy loader (`stg_shots` + `fact_play_raw`) to materialize:
+  - `dunk_rate`, `dunk_freq`, `putback_att_proxy`, `transition_freq`
+- Carried activity fields through final-season aggregation into unified columns:
+  - `college_dunk_rate`, `college_dunk_freq`, `college_putback_att_proxy`, `college_transition_freq`
+- Added derived threshold proxies in unified table:
+  - `college_putback_rate`
+  - `college_rim_pressure_index`
+  - `college_contest_proxy` (provisional form pending foul-attribution closure)
+- Promoted to active Tier1 inputs:
+  - `college_dunk_rate`, `college_dunk_freq`, `college_putback_rate`, `college_rim_pressure_index`, `college_contest_proxy`
+
+### Coverage snapshot (post rebuild)
+- `college_dunk_rate`: 98.5% non-null
+- `college_dunk_freq`: 100% non-null
+- `college_rim_pressure_index`: 100% non-null
+- `college_stl_total_per100poss`: 100% non-null
+- `college_blk_total_per100poss`: 100% non-null
+- `college_contest_proxy`: 100% non-null
+- `college_putback_rate`: 8.3% non-null
+- `college_transition_freq`: 100% non-null, 0% non-zero (source-limited)
+
+### Notes
+- OFF-side On/Off fields remain source-limited in the current post-2011 cohort and are kept as passive columns until coverage expands.
+- Full matrix exported to:
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/pipeline_alignment_feature_coverage_2026-02-19.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/pipeline_alignment_feature_coverage_by_season_2026-02-19.csv`
+
+## 2026-02-19 — RAPM split-quality hard gates (season include/exclude)
+
+### Implemented
+- `college_scripts/calculate_historical_rapm.py`
+  - Added season-level diagnostics for RAPM split integrity:
+    - `n_stints`
+    - `valid_5v5_rate`
+    - `nonempty_split_rate`
+    - `unresolved_home_rate`
+    - `parse_fail_rate`
+    - `unique_players_5v5`
+  - Added hard gate logic per season with strict mode default:
+    - fails closed when thresholds are violated
+    - supports explicit `--include-seasons` and `--exclude-seasons` overrides
+  - Added diagnostics artifact output:
+    - `--diagnostics-csv` (default `data/audit/historical_rapm_split_quality.csv`)
+  - Enforced valid 5v5 split rows for RAPM solve matrix.
+  - Moved season include/exclude filtering to run immediately after load for faster diagnostics loops.
+
+### Why this was added
+- Prevent silent RAPM degradation in late seasons (2019–2023) from propagating into downstream training targets.
+- Make season inclusion explicit and auditable rather than implicit.
+
+### Diagnostic findings (2019–2023)
+- Diagnostics artifact:
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/historical_rapm_split_quality_latest.csv`
+- Current gate results:
+  - all seasons 2019–2023 fail strict split-quality gates.
+- Key failure pattern:
+  - `valid_5v5_rate` decays sharply from `0.431` (2019) to `0.027` (2023),
+  - side sizes average ~1–3 players instead of 5.
+- Interpretation:
+  - this is source lineup-fidelity collapse (non-10-player `onFloor` semantics), not unresolved home/away parsing (`unresolved_home_rate=0`).
+
+## 2026-02-19 — Pre-2025 true 10-player reconstruction (v3) + pre-RAPM lineup gate
+
+### Implemented
+- Added new reconstructor:
+  - `/Users/akashc/my-trankcopy/ml model/college_scripts/reconstruct_historical_onfloor_v3.py`
+- Deterministic game-level state machine:
+  - explicit lineup checkpoints (`TEAM For ...`),
+  - substitution propagation (`Enters/Leaves`, `SUB IN/OUT`),
+  - starter inference from pre-sub activity,
+  - strict ghost fill from observed game roster only.
+- Added explicit quality/provenance columns to reconstructed output:
+  - `lineup_source`, `lineup_confidence`, `lineup_quality_flag`.
+- Added audit outputs:
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/historical_lineup_quality_by_game.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/historical_lineup_quality_by_season.csv`
+- Updated RAPM script defaults and pre-gate wiring:
+  - `/Users/akashc/my-trankcopy/ml model/college_scripts/calculate_historical_rapm.py`
+  - default input now `fact_play_historical_combined_v2.parquet`
+  - added `--lineup-season-audit-csv` + required pre-lineup gate (fail-closed).
+- Updated historical orchestrator order:
+  - `/Users/akashc/my-trankcopy/ml model/run_historical_pipeline.py`
+  - v3 reconstruct -> diagnostics-only RAPM -> gated RAPM solve -> export.
+
+### Validation (bounded sample run)
+- Sample run command:
+  - `python3 college_scripts/reconstruct_historical_onfloor_v3.py --start-season 2019 --end-season 2023 --max-games-per-season 200 --no-api-append ...`
+- Sample season audit result:
+  - `pct_rows_len10` >= 0.985 across 2019–2023
+  - `pct_rows_placeholder` = 0.0 across sample seasons
+  - all sample seasons `gate_pass=True` in lineup quality audit.
+- RAPM diagnostics on sample reconstructed artifact:
+  - `valid_5v5_rate` ~0.99 across 2019–2023
+  - split gate failures on sample were only `n_stints<2000` (expected from bounded sample size), not lineup fidelity.
+
+## 2026-02-20 — Full 2011–2023 reconstruction + gated RAPM + full hardening pipeline run
+
+### Implemented
+- Executed full historical reconstruction for manual-scrape seasons `2011..2023` using season-chunked runs of:
+  - `/Users/akashc/my-trankcopy/ml model/college_scripts/reconstruct_historical_onfloor_v3.py`
+  - mode: `--no-api-append` and one season per invocation.
+- Merged per-season outputs into canonical artifacts (DuckDB out-of-core merge):
+  - `/Users/akashc/my-trankcopy/ml model/data/fact_play_historical_combined_v2.parquet`
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/historical_lineup_quality_by_game.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/historical_lineup_quality_by_season.csv`
+- Recomputed RAPM with hard lineup + split gates:
+  - `/Users/akashc/my-trankcopy/ml model/college_scripts/calculate_historical_rapm.py`
+  - outputs:
+    - `/Users/akashc/my-trankcopy/ml model/data/historical_rapm_results_enhanced.csv`
+    - `/Users/akashc/my-trankcopy/ml model/data/audit/historical_rapm_split_quality.csv`
+- Rebuilt downstream artifacts:
+  - `/Users/akashc/my-trankcopy/ml model/college_scripts/build_college_impact_stack_v1.py`
+  - `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py`
+- Ran strict hardening runner end-to-end:
+  - `/Users/akashc/my-trankcopy/ml model/nba_scripts/harden_and_run_full_pipeline.py`
+  - stages 0–8 all passed; final audit written.
+
+### Key results
+- Reconstructed historical combined rows: `19,365,111` (seasons 2011–2023).
+- Lineup season audit rows: `13`; all `gate_pass=True`.
+- RAPM split diagnostics rows: `13`; all `gate_pass=True`.
+- Enhanced RAPM output rows: `319,683` player-season rows.
+- Impact stack rebuild:
+  - `/Users/akashc/my-trankcopy/ml model/data/college_feature_store/college_impact_stack_v1.parquet`
+  - `44,934` rows; `has_impact_ripm` coverage `99.8%`.
+- Unified training table:
+  - `/Users/akashc/my-trankcopy/ml model/data/training/unified_training_table.parquet`
+  - `1,065` rows, `451` columns
+  - target coverage:
+    - `y_peak_ovr` `87.4%`
+    - `year1_epm_tot` `76.8%`
+    - `dev_rate_y1_y3_mean` `100%`.
+
+### Validation/tests
+- `pytest tests/test_wiring_edge_cases.py -q` -> `4 passed`.
+- `pytest tests/test_dev_rate_label_math.py -q` -> `1 passed`.
+- `python3 tests/quick_validate.py` -> `12/12 checks passed`.
+
+### Ranking exports
+- Inference ranking exports refreshed:
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current_qualified.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_top25_best_current_tabs.xlsx`
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_top25_best_current_by_season_csv/`
+- Historical RAPM Excel tabs refreshed:
+  - `/Users/akashc/my-trankcopy/ml model/data/historical_rapm_rankings.xlsx`
+  - sheets for each season `2011..2023`.
+
+## 2026-02-20 — NBA→NCAA crosswalk hardening with `d_y`/`d_n` + HTML DAG canonical dashboards
+
+### Implemented
+- Rebuilt crosswalk builder:
+  - `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_nba_college_crosswalk.py`
+- Matching remains NBA-anchored and now includes basketball-excel draft signal enrichment:
+  - source: `data/basketball_excel/all_players.parquet`
+  - fields used: `pid`, `bbr_pid`, `nm`, `d_y`, `d_n`
+- Added deterministic match methods and tiers:
+  - `match_method`: `bbr_id_link`, `pid_link`, `name_draft_fuzzy`
+  - `match_tier`: `id_exact`, `draft_constrained_high`, `draft_constrained_medium`, `manual_review`
+- Added hard publish gates:
+  - required schema columns
+  - duplicate `nba_id` fail
+  - duplicate `athlete_id` fail
+  - high-confidence regression tolerance check versus prior snapshot
+- Added new audit artifacts:
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/crosswalk_nba_to_college_coverage.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/crosswalk_ambiguity_catalog.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/crosswalk_unmatched_nba.csv`
+
+### Output metrics
+- Final crosswalk:
+  - `/Users/akashc/my-trankcopy/ml model/data/warehouse_v2/dim_player_nba_college_crosswalk.parquet`
+  - rows: `1231` (from `1124`)
+  - duplicates: `0` on `nba_id`, `0` on `athlete_id`
+- Coverage:
+  - all NBA: `1231/2461` (`50.0%`)
+  - 2011–2024 cohort: `1082/1304` (`83.0%`)
+- Tier distribution:
+  - `id_exact`: `1119`
+  - `draft_constrained_high`: `80`
+  - `draft_constrained_medium`: `10`
+  - `manual_review`: `21`
+
+### Pipeline integration
+- Rebuilt unified table after new crosswalk:
+  - `/Users/akashc/my-trankcopy/ml model/data/training/unified_training_table.parquet`
+  - rows: `1082`
+  - target coverage after rebuild:
+    - `y_peak_ovr`: `87.2%`
+    - `year1_epm_tot`: `76.4%`
+    - `dev_rate_y1_y3_mean`: `100.0%`
+- Updated stage-3 hardening validation required crosswalk schema in:
+  - `/Users/akashc/my-trankcopy/ml model/nba_scripts/harden_and_run_full_pipeline.py`
+
+### Canonical HTML dashboards
+- Added generator:
+  - `/Users/akashc/my-trankcopy/ml model/nba_scripts/generate_html_dag_dashboards.py`
+- Generated canonical HTML artifacts:
+  - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+  - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+  - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/layered_execution_dashboard.html`
+  - `/Users/akashc/my-trankcopy/ml model/docs/diagrams/crosswalk_quality_dashboard.html`
+- Updated markdown mirror headers in:
+  - `/Users/akashc/my-trankcopy/ml model/docs/model_architecture_dag.md`
+  - `/Users/akashc/my-trankcopy/ml model/docs/current_inputs_dag_2026-02-18.md`
+  - `/Users/akashc/my-trankcopy/ml model/docs/antigravity_full_pipeline_layered_dag_2026-02-19.md`
+  - `/Users/akashc/my-trankcopy/ml model/docs/generative_model_dag.md`
+  - plus dashboard index entries in `/Users/akashc/my-trankcopy/ml model/docs/INDEX.md`
+
+## 2026-02-20 — Objective pivot to EPM-first (training + inference ranking)
+
+### Implemented
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/train_latent_model.py`:
+  - Added objective profiles:
+    - `epm_first` (default)
+    - `rapm_first`
+    - `balanced`
+  - Added resolver that applies profile defaults with optional per-lambda overrides.
+  - Added EPM evaluation metrics (`epm_rmse`, `epm_mae`, `epm_corr`) alongside RAPM metrics.
+  - Added objective-aware monitor metric in epoch logs (`epm_rmse` when EPM-first).
+  - Persists `objective_profile` and resolved `objective_weights` in model config.
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/nba_prospect_inference.py`:
+  - Reads model objective metadata.
+  - If objective is `epm_first`, ranking score defaults to `pred_year1_epm`.
+  - Emits:
+    - `pred_rank_target`
+    - `pred_rank_score`
+    - keeps `pred_peak_rapm_rank_score` for backward compatibility.
+- Updated `/Users/akashc/my-trankcopy/ml model/scripts/export_inference_rankings.py`:
+  - Ranking export now prefers `pred_rank_score` when available.
+  - Exports `pred_rank_target` to make ranking objective explicit in CSV/XLSX.
+
+### Validation
+- Python compile checks passed for:
+  - `train_latent_model.py`
+  - `nba_prospect_inference.py`
+  - `export_inference_rankings.py`
+- CLI help checks confirmed new args:
+  - `--objective-profile {epm_first,rapm_first,balanced}`
+  - lambda override flags now optional overrides.
+
+### Ranking export extension
+- Updated ranking exporter to emit crosswalk-matched cohort views:
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current_matched.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current_matched_qualified.csv`
+- Added fields:
+  - `is_nba_matched`
+  - `season_rank_matched`
+- XLSX tabs now include matched-qualified sheets (`{season}_mq`).
+
+## 2026-02-20 — EPM ranking-quality optimization loop (matched-qualified cohort)
+
+### Implemented
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/train_latent_model.py`:
+  - Added validation ranking metrics for EPM on qualified cohort:
+    - `epm_ndcg10`
+    - `epm_top10_recall`
+    - `epm_spearman`
+    - `epm_rank_seasons`
+  - EPM-first runs now monitor `epm_ndcg10` for early stopping (`monitor_mode=max`) instead of raw loss-only selection.
+  - Persisted monitor metadata (`monitor_metric`, `monitor_mode`) in model config.
+
+### Latest run artifacts
+- Model:
+  - `/Users/akashc/my-trankcopy/ml model/models/latent_model_20260220_114321`
+- Predictions:
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/prospect_predictions_20260220_114345.parquet`
+- Ranking exports:
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current_matched_qualified.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_top25_best_current_tabs.xlsx`
+
+## 2026-02-20 — Active learning loop (expanding yearly retrain, warm-started)
+
+### Implemented
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/train_latent_model.py`:
+  - Added `--init-model-path` warm-start support for checkpoint chaining.
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_rolling_retrain.py`:
+  - Added `--expanding-window` (default on): training window grows each anchor year.
+  - Added `--base-train-start` for fixed historical start.
+  - Added `--warm-start` (default on): anchor `t` initializes from anchor `t-1` best checkpoint.
+  - Added objective forwarding (`--objective-profile`).
+  - Writes per-anchor report artifacts:
+    - `data/audit/rolling_retrain_report_<timestamp>.csv`
+    - `data/audit/rolling_retrain_report_<timestamp>.json`
+
+### Behavior
+- This now matches the intended loop:
+  - train through year `t-1`,
+  - validate recent season,
+  - test on year `t`,
+  - carry posterior weights forward to year `t+1`,
+  - repeat with more observed future EPM each year.
+
+## 2026-02-20 — Active loop refinements (cold-start expanding windows + RAPM maturity gate)
+
+### Implemented
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/run_rolling_retrain.py`:
+  - expanding-window runs now disable warm-start by default (can override with `--allow-warm-start-expanding`).
+  - passes `--asof-year` and `--rapm-min-nba-seasons` through to training.
+  - report includes `warm_start_effective`.
+- Updated `/Users/akashc/my-trankcopy/ml model/nba_scripts/train_latent_model.py`:
+  - RAPM target mask now supports maturity gating:
+    - `--asof-year`
+    - `--rapm-min-nba-seasons` (default `3`)
+  - immature RAPM rows are excluded from RAPM supervision while EPM/dev/survival still train.
+
+### Validation run
+- Rolling smoke run (anchors 2020→2021) completed with:
+  - `expanding_window=1`
+  - `warm_start_effective=0`
+  - `objective_profile=epm_first`
+  - `monitor_metric=epm_ndcg10`
+  - report: `/Users/akashc/my-trankcopy/ml model/data/audit/rolling_retrain_report_20260220_115737.csv`
+
+## 2026-02-20 — Activity Pipeline Restore + Hard Gate Pass
+
+### Implemented
+- Restored end-to-end activity feature contract:
+  - `college_dunk_rate`
+  - `college_dunk_freq`
+  - `college_putback_rate`
+  - `college_rim_pressure_index`
+  - `college_contest_proxy`
+- Added strict gate runner:
+  - `nba_scripts/run_activity_feature_gate.py`
+- Unified table assembly hardening:
+  - coalesces suffixed activity merge columns (`_x/_y`) into canonical names
+  - explicit provenance/mask columns retained
+  - impact alias parity fields emitted for inference:
+    - `college_off_net_rating`
+    - `college_on_off_net_diff`
+    - `college_on_off_ortg_diff`
+    - `college_on_off_drtg_diff`
+
+### Coverage outcome (post-fix, unified table)
+- core activity non-null: 100% for all 5 core activity fields
+- gate status: PASS
+
+### Gate artifacts
+- `/Users/akashc/my-trankcopy/ml model/data/audit/activity_restore_stage0_snapshot.json`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/activity_feature_gate_report.csv`
+- `/Users/akashc/my-trankcopy/ml model/data/audit/activity_feature_gate_report.json`
+
+### Train + refresh
+- Trained model:
+  - `/Users/akashc/my-trankcopy/ml model/models/latent_model_20260220_191735/model.pt`
+- Refresh audit:
+  - `/Users/akashc/my-trankcopy/ml model/data/audit/inseason_refresh_20260220_191810.json`
+- Rankings exports:
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current.csv`
+  - `/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_top25_best_current_tabs.xlsx`
+
+### Dashboards regenerated (canonical HTML)
+- `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+- `/Users/akashc/my-trankcopy/ml model/docs/diagrams/input_data_contract_dashboard.html`
+- `/Users/akashc/my-trankcopy/ml model/docs/diagrams/layered_execution_dashboard.html`
+- `/Users/akashc/my-trankcopy/ml model/docs/diagrams/crosswalk_quality_dashboard.html`
+- `/Users/akashc/my-trankcopy/ml model/docs/diagrams/full_pipeline_active_learning_dashboard.html`
+- `/Users/akashc/my-trankcopy/ml model/docs/diagrams/activity_feature_quality_dashboard.html`

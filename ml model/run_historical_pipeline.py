@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Orchestration Script for Historical Data Pipeline
-Runs cleaning, backfill, RApM calculation, and reporting.
-"""
+"""Orchestration Script for Historical Data Pipeline."""
 import subprocess
 import sys
 import os
@@ -11,19 +8,38 @@ import time
 # Define steps
 STEPS = [
     {
-        "name": "Cleaning Historical PBP",
-        "script": "college_scripts/utils/clean_historical_pbp_v2.py",
+        "name": "Reconstruct Historical onFloor v3",
+        "script": "college_scripts/reconstruct_historical_onfloor_v3.py",
         "args": []
     },
     {
-        "name": "Deriving Minutes/Turnovers (Backfill)",
-        "script": "college_scripts/derive_minutes_from_historical_pbp.py",
-        "args": ["--all"]
+        "name": "Derive Minutes/Turnovers From Historical Subs",
+        "script": "college_scripts/derive_minutes_from_historical_subs.py",
+        "args": [
+            "--input",
+            "data/fact_play_historical_combined_v2.parquet",
+        ],
     },
     {
-        "name": "Calculating Historical RApM",
+        "name": "RAPM Diagnostics-Only Pass",
         "script": "college_scripts/calculate_historical_rapm.py",
-        "args": []
+        "args": [
+            "--input-parquet",
+            "data/fact_play_historical_combined_v2.parquet",
+            "--lineup-season-audit-csv",
+            "data/audit/historical_lineup_quality_by_season.csv",
+            "--diagnostics-only",
+        ],
+    },
+    {
+        "name": "Calculating Historical RApM (Gate-Pass Seasons)",
+        "script": "college_scripts/calculate_historical_rapm.py",
+        "args": [
+            "--input-parquet",
+            "data/fact_play_historical_combined_v2.parquet",
+            "--lineup-season-audit-csv",
+            "data/audit/historical_lineup_quality_by_season.csv",
+        ],
     },
     {
         "name": "Exporting RApM Rankings",

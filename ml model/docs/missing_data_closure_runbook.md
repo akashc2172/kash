@@ -67,3 +67,10 @@
 2. Respect cooldown for retryable failures from `retry_policy_cache.json`.
 3. Prefer manual-source coverage for availability accounting when API is source-empty.
 4. Use `--skip-bridges` only if you intentionally want to keep previous bridge state.
+
+## Historical Subs/Lineups Policy (Locked)
+
+1. Historical `subs/lineups` are manual-reconstruction first, not API-retry first.
+2. API retries for `subs/lineups` are restricted to modern seasons only (default min season `2024`).
+3. Use `scripts/run_missing_data_audit.py --subs-lineups-api-min-season 2024` (or later) to enforce this boundary.
+4. Pre-execute guard: `reingest_manifest_subs.csv` and `reingest_manifest_lineups.csv` must contain no seasons below the configured API min season.

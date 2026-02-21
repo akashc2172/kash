@@ -40,6 +40,12 @@ def _empty_output() -> pd.DataFrame:
         "impact_on_net_raw",
         "impact_on_ortg_raw",
         "impact_on_drtg_raw",
+        "impact_off_net_raw",
+        "impact_off_ortg_raw",
+        "impact_off_drtg_raw",
+        "impact_on_off_net_diff_raw",
+        "impact_on_off_ortg_diff_raw",
+        "impact_on_off_drtg_diff_raw",
         "impact_pm100_stint_raw",
         "impact_pm100_stint_non_garbage",
         "impact_pm100_stint_lev_wt",
@@ -162,6 +168,14 @@ def _load_historical_rapm_mapped() -> pd.DataFrame:
     hist["rapm_leverage_weighted"] = pd.to_numeric(hist["rapm_leverage_weighted"], errors="coerce") if "rapm_leverage_weighted" in hist.columns else hist["rapm_total"]
     hist["rapm_rubber_adj"] = pd.to_numeric(hist["rapm_rubber_adj"], errors="coerce") if "rapm_rubber_adj" in hist.columns else hist["rapm_total"]
     hist["poss_total"] = pd.to_numeric(hist["poss_total"], errors="coerce")
+    
+    hist["on_ortg"] = pd.to_numeric(hist["on_ortg"], errors="coerce") if "on_ortg" in hist.columns else np.nan
+    hist["on_drtg"] = pd.to_numeric(hist["on_drtg"], errors="coerce") if "on_drtg" in hist.columns else np.nan
+    hist["on_net_rating"] = pd.to_numeric(hist["on_net_rating"], errors="coerce") if "on_net_rating" in hist.columns else np.nan
+    hist["off_ortg"] = pd.to_numeric(hist["off_ortg"], errors="coerce") if "off_ortg" in hist.columns else np.nan
+    hist["off_drtg"] = pd.to_numeric(hist["off_drtg"], errors="coerce") if "off_drtg" in hist.columns else np.nan
+    hist["off_net_rating"] = pd.to_numeric(hist["off_net_rating"], errors="coerce") if "off_net_rating" in hist.columns else np.nan
+    
     hist["season"] = pd.to_numeric(hist["season"], errors="coerce").astype("Int64")
     hist["norm_name"] = hist["player_name"].map(_norm_name)
     hist = hist.dropna(subset=["season", "poss_total"])
@@ -193,6 +207,130 @@ def _load_historical_rapm_mapped() -> pd.DataFrame:
     return mapped
 
 
+def _load_player_game_on_off_season() -> pd.DataFrame:
+    """
+    Derive season-level on/off ratings from player-game and team-game tables.
+
+    For each player-game:
+      team_metric * team_seconds = on_metric * on_seconds + off_metric * off_seconds
+    """
+    if not WAREHOUSE_DUCKDB_PATH.exists():
+        return pd.DataFrame()
+
+    con = duckdb.connect(str(WAREHOUSE_DUCKDB_PATH), read_only=True)
+    try:
+        q = """
+            WITH pg AS (
+              SELECT
+                CAST(pg.gameId AS VARCHAR) AS game_id,
+                CAST(pg.athleteId AS BIGINT) AS athlete_id,
+                CAST(pg.teamId AS BIGINT) AS team_id,
+                CAST(pg.seconds_on AS DOUBLE) AS seconds_on,
+                CAST(pg.on_ortg AS DOUBLE) AS on_ortg,
+                CAST(pg.on_drtg AS DOUBLE) AS on_drtg,
+                CAST(pg.on_net_rating AS DOUBLE) AS on_net
+              FROM fact_player_game pg
+              WHERE pg.athleteId IS NOT NULL
+                AND pg.teamId IS NOT NULL
+                AND pg.seconds_on IS NOT NULL
+            ),
+            tg AS (
+              SELECT
+                CAST(gameId AS VARCHAR) AS game_id,
+                CAST(teamId AS BIGINT) AS team_id,
+                CAST(seconds_game AS DOUBLE) AS team_seconds,
+                CAST(offenseRating AS DOUBLE) AS team_ortg,
+                CAST(defenseRating AS DOUBLE) AS team_drtg,
+                CAST(netRating AS DOUBLE) AS team_net
+              FROM fact_team_game
+            ),
+            g AS (
+              SELECT CAST(id AS VARCHAR) AS game_id, CAST(season AS BIGINT) AS season
+              FROM dim_games
+              UNION ALL
+              SELECT CAST(sourceId AS VARCHAR) AS game_id, CAST(season AS BIGINT) AS season
+              FROM dim_games
+              WHERE sourceId IS NOT NULL
+            ),
+            joined AS (
+              SELECT
+                pg.athlete_id,
+                g.season,
+                pg.seconds_on,
+                GREATEST(tg.team_seconds - pg.seconds_on, 0.0) AS seconds_off,
+                pg.on_ortg,
+                pg.on_drtg,
+                pg.on_net,
+                tg.team_ortg,
+                tg.team_drtg,
+                tg.team_net,
+                tg.team_seconds
+              FROM pg
+              JOIN tg
+                ON pg.game_id = tg.game_id
+               AND pg.team_id = tg.team_id
+              JOIN g
+                ON pg.game_id = g.game_id
+              WHERE tg.team_seconds > 0
+            ),
+            game_level AS (
+              SELECT
+                athlete_id,
+                season,
+                seconds_on,
+                seconds_off,
+                on_ortg,
+                on_drtg,
+                on_net,
+                CASE WHEN seconds_off > 0
+                     THEN (team_ortg * team_seconds - on_ortg * seconds_on) / seconds_off
+                     ELSE NULL END AS off_ortg,
+                CASE WHEN seconds_off > 0
+                     THEN (team_drtg * team_seconds - on_drtg * seconds_on) / seconds_off
+                     ELSE NULL END AS off_drtg,
+                CASE WHEN seconds_off > 0
+                     THEN (team_net * team_seconds - on_net * seconds_on) / seconds_off
+                     ELSE NULL END AS off_net
+              FROM joined
+            )
+            SELECT
+              athlete_id,
+              season,
+              SUM(seconds_on) AS seconds_on_total,
+              SUM(seconds_off) AS seconds_off_total,
+              CASE WHEN SUM(seconds_on) > 0 THEN SUM(on_ortg * seconds_on) / SUM(seconds_on) END AS impact_on_ortg_raw,
+              CASE WHEN SUM(seconds_on) > 0 THEN SUM(on_drtg * seconds_on) / SUM(seconds_on) END AS impact_on_drtg_raw,
+              CASE WHEN SUM(seconds_on) > 0 THEN SUM(on_net * seconds_on) / SUM(seconds_on) END AS impact_on_net_raw,
+              CASE WHEN SUM(seconds_off) > 0 THEN SUM(off_ortg * seconds_off) / SUM(seconds_off) END AS impact_off_ortg_raw,
+              CASE WHEN SUM(seconds_off) > 0 THEN SUM(off_drtg * seconds_off) / SUM(seconds_off) END AS impact_off_drtg_raw,
+              CASE WHEN SUM(seconds_off) > 0 THEN SUM(off_net * seconds_off) / SUM(seconds_off) END AS impact_off_net_raw
+            FROM game_level
+            GROUP BY 1,2
+        """
+        df = con.execute(q).fetchdf()
+    finally:
+        con.close()
+
+    if df.empty:
+        return df
+
+    for c in [
+        "impact_on_ortg_raw",
+        "impact_on_drtg_raw",
+        "impact_on_net_raw",
+        "impact_off_ortg_raw",
+        "impact_off_drtg_raw",
+        "impact_off_net_raw",
+    ]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    df["impact_on_off_ortg_diff_raw"] = df["impact_on_ortg_raw"] - df["impact_off_ortg_raw"]
+    # For defense, lower DRTG is better => OFF-ON is positive defensive impact.
+    df["impact_on_off_drtg_diff_raw"] = df["impact_off_drtg_raw"] - df["impact_on_drtg_raw"]
+    df["impact_on_off_net_diff_raw"] = df["impact_on_net_raw"] - df["impact_off_net_raw"]
+    return df
+
+
 def build_impact_stack() -> pd.DataFrame:
     if not IMPACT_IN_PATH.exists():
         logger.warning("Input missing: %s", IMPACT_IN_PATH)
@@ -218,6 +356,12 @@ def build_impact_stack() -> pd.DataFrame:
     out["impact_on_net_raw"] = _safe_col(src, "on_net_rating")
     out["impact_on_ortg_raw"] = _safe_col(src, "on_ortg")
     out["impact_on_drtg_raw"] = _safe_col(src, "on_drtg")
+    out["impact_off_net_raw"] = np.nan
+    out["impact_off_ortg_raw"] = np.nan
+    out["impact_off_drtg_raw"] = np.nan
+    out["impact_on_off_net_diff_raw"] = np.nan
+    out["impact_on_off_ortg_diff_raw"] = np.nan
+    out["impact_on_off_drtg_diff_raw"] = np.nan
 
     # Stint-level proxy fields: v1 re-labels available on-net/rapm as proxies
     # where independent stint-level data is unavailable.  Downstream consumers
@@ -259,7 +403,29 @@ def build_impact_stack() -> pd.DataFrame:
     out["impact_reliability_weight"] = np.clip(inv_var, 0.05, 10.0)
     out.loc[np.isnan(sd_tot), "impact_reliability_weight"] = np.nan
 
-    out["has_impact_raw"] = out[["impact_on_net_raw", "impact_on_ortg_raw", "impact_on_drtg_raw"]].notna().any(axis=1).astype(int)
+    # Derive ON/OFF season features from player-game + team-game where available.
+    on_off = _load_player_game_on_off_season()
+    if not on_off.empty:
+        merge_cols = ["athlete_id", "season"]
+        enrich_cols = [
+            "impact_on_ortg_raw", "impact_on_drtg_raw", "impact_on_net_raw",
+            "impact_off_ortg_raw", "impact_off_drtg_raw", "impact_off_net_raw",
+            "impact_on_off_ortg_diff_raw", "impact_on_off_drtg_diff_raw", "impact_on_off_net_diff_raw",
+        ]
+        out = out.merge(on_off[merge_cols + enrich_cols], on=merge_cols, how="left", suffixes=("", "_pg"))
+        for c in enrich_cols:
+            pg = f"{c}_pg"
+            if pg in out.columns:
+                out[c] = pd.to_numeric(out[c], errors="coerce").combine_first(pd.to_numeric(out[pg], errors="coerce"))
+                out = out.drop(columns=[pg])
+
+    out["has_impact_raw"] = out[
+        [
+            "impact_on_net_raw", "impact_on_ortg_raw", "impact_on_drtg_raw",
+            "impact_off_net_raw", "impact_off_ortg_raw", "impact_off_drtg_raw",
+            "impact_on_off_net_diff_raw", "impact_on_off_ortg_diff_raw", "impact_on_off_drtg_diff_raw",
+        ]
+    ].notna().any(axis=1).astype(int)
     out["has_impact_stint"] = out[["impact_pm100_stint_raw", "impact_pm100_stint_non_garbage", "impact_pm100_stint_lev_wt"]].notna().any(axis=1).astype(int)
     out["has_impact_ripm"] = out["rIPM_tot_std"].notna().astype(int)
 
@@ -277,9 +443,15 @@ def build_impact_stack() -> pd.DataFrame:
                 "team_id": pd.Series(np.nan, index=hist.index),
                 "impact_version": VERSION,
                 "impact_source_mix": "historical_scrape",
-                "impact_on_net_raw": pd.Series(np.nan, index=hist.index),
-                "impact_on_ortg_raw": pd.Series(np.nan, index=hist.index),
-                "impact_on_drtg_raw": pd.Series(np.nan, index=hist.index),
+                "impact_on_net_raw": hist["on_net_rating"],
+                "impact_on_ortg_raw": hist["on_ortg"],
+                "impact_on_drtg_raw": hist["on_drtg"],
+                "impact_off_net_raw": hist["off_net_rating"],
+                "impact_off_ortg_raw": hist["off_ortg"],
+                "impact_off_drtg_raw": hist["off_drtg"],
+                "impact_on_off_net_diff_raw": hist["on_net_rating"] - hist["off_net_rating"],
+                "impact_on_off_ortg_diff_raw": hist["on_ortg"] - hist["off_ortg"],
+                "impact_on_off_drtg_diff_raw": hist["off_drtg"] - hist["on_drtg"],
                 "impact_pm100_stint_raw": hist["rapm_total"],
                 "impact_pm100_stint_non_garbage": hist["rapm_non_garbage"],
                 "impact_pm100_stint_lev_wt": hist["rapm_leverage_weighted"],
