@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Physical Feature Quality Dashboard</title>
+<style>
+:root {
+  --bg:#0f1115;
+  --panel:#171a21;
+  --text:#ebeff7;
+  --muted:#9aa6b2;
+  --accent:#26b3a8;
+  --ok:#42d392;
+  --warn:#f6c177;
+  --danger:#ef6f6c;
+}
+body {margin:0;background:radial-gradient(1200px 700px at 20% -10%,#1b2638 0%,#0f1115 45%),linear-gradient(180deg,#0f1115,#10141b);color:var(--text);font-family:Manrope,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+.wrap {max-width:1400px;margin:0 auto;padding:24px;}
+.header {display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;}
+.h1 {font-size:30px;font-weight:800;margin:0;}
+.sub {color:var(--muted);margin-top:6px;}
+.gen {color:var(--muted);font-size:13px;}
+.grid {display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:18px;}
+.card {background:var(--panel);border:1px solid #273041;border-radius:12px;padding:14px;}
+.span-3{grid-column:span 3;} .span-4{grid-column:span 4;} .span-6{grid-column:span 6;} .span-8{grid-column:span 8;} .span-12{grid-column:span 12;}
+.k {font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+.v {font-size:24px;font-weight:800;margin-top:6px;}
+.badge {display:inline-block;background:#1e2f2d;color:#8eeadf;padding:3px 8px;border-radius:999px;font-size:12px;margin-right:6px;}
+.metric-ok {color:var(--ok);}
+.metric-warn {color:var(--warn);}
+.metric-danger {color:var(--danger);}
+pre.mermaid {background:#121722;border-radius:10px;padding:8px;overflow:auto;}
+a {color:#8fd3ff;}
+ul {margin:8px 0 0 16px;color:var(--muted);}
+table {width:100%;border-collapse:collapse;font-size:13px;}
+th,td {padding:8px 10px;border-bottom:1px solid #273041;text-align:left;}
+th {color:#bcd2e8;font-weight:700;}
+</style>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }, layout: 'elk' });
+</script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1 class="h1">Physical Feature Quality Dashboard</h1>
+        <div class="sub">Season-by-season height/weight pipeline coverage and gates</div>
+      </div>
+      <div class="gen">Generated: 2026-02-20 20:55:19</div>
+    </div>
+    
+<div class="grid">
+  <div class="card span-3"><div class="k">Hard Gate Status</div><div class="v metric-ok">PASS</div></div>
+  <div class="card span-3"><div class="k">Height/Weight Threshold</div><div class="v">70.0%</div></div>
+  <div class="card span-3"><div class="k">Max Unresolved Rate</div><div class="v">5.0%</div></div>
+  <div class="card span-3"><div class="k">Artifacts</div><div class="v" style="font-size:13px;">/Users/akashc/my-trankcopy/ml model/data/audit/physical_feature_gate_report.csv<br>/Users/akashc/my-trankcopy/ml model/data/audit/physical_feature_gate_report.json<br>/Users/akashc/my-trankcopy/ml model/data/audit/physicals_coverage_by_season.csv<br>/Users/akashc/my-trankcopy/ml model/data/audit/physicals_linkage_quality.csv</div></div>
+
+  <div class="card span-12">
+    <span class="badge">Hard Fail</span><span class="badge">Physicals</span><span class="badge">Season-by-Season</span>
+    <pre class="mermaid">flowchart LR
+      A["raw_team_roster_physical"] --> B["identity resolution"]
+      B --> C["fact_college_player_physicals_by_season"]
+      C --> D["fact_college_player_physical_trajectory"]
+      D --> E["unified_training_table physical columns"]
+      E --> F{"Coverage + unresolved gates pass?"}
+      F -->|No| G["Fail closed + audit artifacts"]
+      F -->|Yes| H["Train/inference publish allowed"]
+    </pre>
+  </div>
+
+  <div class="card span-12"><div class="k">Gate Metrics</div><table><thead><tr><th>column</th><th>nonnull_pct</th><th>threshold_pct</th></tr></thead><tbody><tr><td>college_height_in</td><td>100.0</td><td>70.0</td></tr><tr><td>college_weight_lbs</td><td>99.81515711645102</td><td>70.0</td></tr><tr><td>unresolved_identity_rate_pct</td><td>2.365474900686168</td><td>5.0</td></tr></tbody></table></div>
+  <div class="card span-12"><div class="k">Coverage By Season</div><table><thead><tr><th>season</th><th>rows</th><th>height_cov_pct</th><th>weight_cov_pct</th><th>wingspan_cov_pct</th></tr></thead><tbody><tr><td>2011.0</td><td>416.0</td><td>100.0</td><td>99.7596153846154</td><td>0.0</td></tr><tr><td>2012.0</td><td>540.0</td><td>100.0</td><td>100.0</td><td>0.0</td></tr><tr><td>2014.0</td><td>578.0</td><td>99.65397923875432</td><td>98.96193771626297</td><td>0.0</td></tr><tr><td>2015.0</td><td>398.0</td><td>100.0</td><td>98.99497487437183</td><td>0.0</td></tr><tr><td>2016.0</td><td>417.0</td><td>100.0</td><td>98.8009592326139</td><td>0.0</td></tr><tr><td>2017.0</td><td>376.0</td><td>99.7340425531915</td><td>97.6063829787234</td><td>0.0</td></tr><tr><td>2018.0</td><td>397.0</td><td>98.2367758186398</td><td>95.96977329974813</td><td>0.0</td></tr><tr><td>2019.0</td><td>404.0</td><td>100.0</td><td>98.76237623762376</td><td>0.0</td></tr><tr><td>2020.0</td><td>424.0</td><td>98.3490566037736</td><td>96.22641509433964</td><td>0.0</td></tr><tr><td>2021.0</td><td>397.0</td><td>99.74811083123426</td><td>98.99244332493704</td><td>0.0</td></tr><tr><td>2022.0</td><td>290.0</td><td>100.0</td><td>100.0</td><td>0.0</td></tr><tr><td>2023.0</td><td>286.0</td><td>100.0</td><td>100.0</td><td>0.0</td></tr><tr><td>2024.0</td><td>247.0</td><td>100.0</td><td>100.0</td><td>0.0</td></tr><tr><td>2025.0</td><td>235.0</td><td>100.0</td><td>100.0</td><td>0.0</td></tr></tbody></table></div>
+  <div class="card span-12"><div class="k">Linkage Quality</div><table><thead><tr><th>raw_rows</th><th>resolved_rows</th><th>unresolved_rows</th><th>ambiguous_rows</th><th>resolved_rate_pct</th><th>unresolved_rate_pct</th><th>ambiguous_rate_pct</th></tr></thead><tbody><tr><td>11076.0</td><td>10812.0</td><td>262.0</td><td>2.0</td><td>97.61646803900324</td><td>2.365474900686168</td><td>0.0180570603105814</td></tr></tbody></table></div>
+  <div class="card span-12"><div class="k">Gate Failures</div><div class='metric-ok'>No hard-gate failures.</div></div>
+</div>
+
+  </div>
+</body>
+</html>

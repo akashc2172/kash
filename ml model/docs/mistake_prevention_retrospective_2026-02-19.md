@@ -583,3 +583,29 @@ If any critical guard fails, stop the run and produce a NO-GO audit. Do not cont
   - documented season-level diagnostics and required follow-up: normalize start-year/end-year mapping for manual backfill and add per-season source coverage gates.
 - Prevention guard:
   - enforce per-season games-source audit before publish: report coverage split by `api/box`, `manual_backfill`, `derived_proxy`; block if legacy cohorts rely primarily on `derived_proxy`.
+
+64. **Pre-2019 manual backfill identity bridge assumed full-name parity and dropped surname-only rows**
+- What happened: historical manual backfill contained surname-only player strings in older seasons (e.g., `OKOGIE`) while API bridge names were full names (`JOSH OKOGIE`), causing exact normalized-name joins to fail and dropping large pre-2019 coverage.
+- Why this hurt: legacy cohort games/minutes exposure was severely undercounted despite raw backfill data existing.
+- Fix applied:
+  - added deterministic surname-suffix fallback constrained by same team and season alignment variants in historical exposure mapping.
+  - added provenance-aware games selection and season-level source-mix audits.
+- Prevention guard:
+  - identity bridge tests must include full-name vs surname-only fixtures and require non-regression of pre-2019 mapped row counts.
+
+65. **Minutes selection treated zero as valid and masked backfill recovery**
+- What happened: inference minutes path used `combine_first`, which preserves `0` values and prevents fallback/backfill minutes from attaching.
+- Why this hurt: `college_minutes_total_raw` stayed zero for many rows even when valid backfill minutes existed, contaminating ranking exposure logic.
+- Fix applied:
+  - introduced shared minutes selector (`select_minutes_with_provenance`) that treats `<=0` as missing and uses deterministic source priority.
+- Prevention guard:
+  - all exposure selectors must normalize non-positive values to missing before fallback logic.
+
+66. **Ranking export estimated minutes leaked into qualification behavior**
+- What happened: export fallback (`games * 25`) created synthetic display minutes and allowed low-exposure players to pass qualification.
+- Why this hurt: qualified leaderboards included low-signal players and displayed artificial minute patterns (multiples of 5/25).
+- Fix applied:
+  - switched to strict `is_qualified_pool_v2` that uses raw minutes/possessions only.
+  - retained estimated minutes as optional display-only diagnostic column.
+- Prevention guard:
+  - no estimated or imputed display fields may be used by qualification gates.

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Activity Feature Quality Dashboard</title>
+<style>
+:root {
+  --bg:#0f1115;
+  --panel:#171a21;
+  --text:#ebeff7;
+  --muted:#9aa6b2;
+  --accent:#26b3a8;
+  --ok:#42d392;
+  --warn:#f6c177;
+  --danger:#ef6f6c;
+}
+body {margin:0;background:radial-gradient(1200px 700px at 20% -10%,#1b2638 0%,#0f1115 45%),linear-gradient(180deg,#0f1115,#10141b);color:var(--text);font-family:Manrope,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+.wrap {max-width:1400px;margin:0 auto;padding:24px;}
+.header {display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;}
+.h1 {font-size:30px;font-weight:800;margin:0;}
+.sub {color:var(--muted);margin-top:6px;}
+.gen {color:var(--muted);font-size:13px;}
+.grid {display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:18px;}
+.card {background:var(--panel);border:1px solid #273041;border-radius:12px;padding:14px;}
+.span-3{grid-column:span 3;} .span-4{grid-column:span 4;} .span-6{grid-column:span 6;} .span-8{grid-column:span 8;} .span-12{grid-column:span 12;}
+.k {font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+.v {font-size:24px;font-weight:800;margin-top:6px;}
+.badge {display:inline-block;background:#1e2f2d;color:#8eeadf;padding:3px 8px;border-radius:999px;font-size:12px;margin-right:6px;}
+.metric-ok {color:var(--ok);}
+.metric-warn {color:var(--warn);}
+.metric-danger {color:var(--danger);}
+pre.mermaid {background:#121722;border-radius:10px;padding:8px;overflow:auto;}
+a {color:#8fd3ff;}
+ul {margin:8px 0 0 16px;color:var(--muted);}
+table {width:100%;border-collapse:collapse;font-size:13px;}
+th,td {padding:8px 10px;border-bottom:1px solid #273041;text-align:left;}
+th {color:#bcd2e8;font-weight:700;}
+</style>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }, layout: 'elk' });
+</script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1 class="h1">Activity Feature Quality Dashboard</h1>
+        <div class="sub">Dunk/activity branch gate status and live coverage</div>
+      </div>
+      <div class="gen">Generated: 2026-02-20 20:55:19</div>
+    </div>
+    
+<div class="grid">
+  <div class="card span-3"><div class="k">Hard Gate Status</div><div class="v metric-ok">PASS</div></div>
+  <div class="card span-3"><div class="k">Coverage Threshold</div><div class="v">80.0%</div></div>
+  <div class="card span-6"><div class="k">Artifacts</div><div class="v" style="font-size:14px;">/Users/akashc/my-trankcopy/ml model/data/audit/activity_feature_gate_report.csv<br>/Users/akashc/my-trankcopy/ml model/data/audit/activity_feature_gate_report.json<br>/Users/akashc/my-trankcopy/ml model/data/audit/activity_restore_stage0_snapshot.json</div></div>
+
+  <div class="card span-12">
+    <span class="badge">Hard Fail</span><span class="badge">Activity Branch</span><span class="badge">Contract Gate</span>
+    <pre class="mermaid">flowchart LR
+      A["college_features_v1.parquet"] --> B["unified_training_table.parquet"]
+      B --> C["core activity columns present?"]
+      C --> D["coverage >= threshold?"]
+      D --> E["encoder and inference column parity?"]
+      E --> F{"Publish?"}
+      F -->|No| G["Fail closed + write audit"]
+      F -->|Yes| H["Train/refresh allowed"]
+    </pre>
+  </div>
+
+  <div class="card span-12">
+    <div class="k">Core Activity Coverage</div>
+    <table><thead><tr><th>column</th><th>nonnull_pct</th><th>nonzero_pct</th><th>threshold_pct</th></tr></thead><tbody><tr><td>college_dunk_rate</td><td>100.0</td><td>94.08502772643251</td><td>80.0</td></tr><tr><td>college_dunk_freq</td><td>100.0</td><td>98.42883548983365</td><td>80.0</td></tr><tr><td>college_putback_rate</td><td>100.0</td><td>8.22550831792976</td><td>80.0</td></tr><tr><td>college_rim_pressure_index</td><td>100.0</td><td>98.52125693160814</td><td>80.0</td></tr><tr><td>college_contest_proxy</td><td>100.0</td><td>8.040665434380777</td><td>80.0</td></tr></tbody></table>
+  </div>
+
+  <div class="card span-12">
+    <div class="k">Gate Failures</div>
+    <div class='metric-ok'>No hard-gate failures.</div>
+  </div>
+</div>
+
+  </div>
+</body>
+</html>

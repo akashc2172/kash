@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Full Pipeline Active-Learning Dashboard</title>
+<style>
+:root {
+  --bg:#0f1115;
+  --panel:#171a21;
+  --text:#ebeff7;
+  --muted:#9aa6b2;
+  --accent:#26b3a8;
+  --ok:#42d392;
+  --warn:#f6c177;
+  --danger:#ef6f6c;
+}
+body {margin:0;background:radial-gradient(1200px 700px at 20% -10%,#1b2638 0%,#0f1115 45%),linear-gradient(180deg,#0f1115,#10141b);color:var(--text);font-family:Manrope,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+.wrap {max-width:1400px;margin:0 auto;padding:24px;}
+.header {display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;}
+.h1 {font-size:30px;font-weight:800;margin:0;}
+.sub {color:var(--muted);margin-top:6px;}
+.gen {color:var(--muted);font-size:13px;}
+.grid {display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:18px;}
+.card {background:var(--panel);border:1px solid #273041;border-radius:12px;padding:14px;}
+.span-3{grid-column:span 3;} .span-4{grid-column:span 4;} .span-6{grid-column:span 6;} .span-8{grid-column:span 8;} .span-12{grid-column:span 12;}
+.k {font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+.v {font-size:24px;font-weight:800;margin-top:6px;}
+.badge {display:inline-block;background:#1e2f2d;color:#8eeadf;padding:3px 8px;border-radius:999px;font-size:12px;margin-right:6px;}
+.metric-ok {color:var(--ok);}
+.metric-warn {color:var(--warn);}
+.metric-danger {color:var(--danger);}
+pre.mermaid {background:#121722;border-radius:10px;padding:8px;overflow:auto;}
+a {color:#8fd3ff;}
+ul {margin:8px 0 0 16px;color:var(--muted);}
+table {width:100%;border-collapse:collapse;font-size:13px;}
+th,td {padding:8px 10px;border-bottom:1px solid #273041;text-align:left;}
+th {color:#bcd2e8;font-weight:700;}
+</style>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }, layout: 'elk' });
+</script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1 class="h1">Full Pipeline Active-Learning Dashboard</h1>
+        <div class="sub">Canonical detailed architecture + yearly retrain behavior + live metrics</div>
+      </div>
+      <div class="gen">Generated: 2026-02-20 20:55:19</div>
+    </div>
+    
+<div class="grid">
+  <div class="card span-3"><div class="k">Crosswalk Coverage (2011-2024)</div><div class="v metric-ok">83.0%</div></div>
+  <div class="card span-3"><div class="k">Unified Rows</div><div class="v">1,082</div></div>
+  <div class="card span-3"><div class="k">Peak Coverage</div><div class="v">42.0%</div></div>
+  <div class="card span-3"><div class="k">Year1 EPM Coverage</div><div class="v">76.4%</div></div>
+
+  <div class="card span-12">
+    <span class="badge">Canonical</span><span class="badge">Active Learning</span><span class="badge">EPM-first</span>
+    <pre class="mermaid">flowchart TB
+      A["Data Contracts"] --> B["Unified Training Table"]
+      B --> C["Train using prior years"]
+      C --> D["Validate rank quality: epm_ndcg10"]
+      D --> E{"Gate pass"}
+      E -->|No| F["Stop and write audit"]
+      E -->|Yes| G["Test next year out of time"]
+      G --> H["Save model and metrics"]
+      H --> I["Warm start next yearly run"]
+      I --> C
+      H --> J["Inference and matched qualified rankings"]
+    </pre>
+  </div>
+
+  <div class="card span-6">
+    <div class="k">What This Solves</div>
+    <ul>
+      <li>No manual player anchors: future outcomes are the anchor.</li>
+      <li>Year-over-year adaptation: each season adds supervision.</li>
+      <li>Era handling: sequential out-of-time retraining captures drift.</li>
+      <li>Fail-closed: gate failures stop publication.</li>
+    </ul>
+  </div>
+  <div class="card span-6">
+    <div class="k">Current Contracts</div>
+    <ul>
+      <li>Crosswalk direction: <code>NBA → NCAA</code>.</li>
+      <li>Rank exports include <code>matched_qualified</code> cohort.</li>
+      <li>Inference emits <code>pred_rank_target</code> + <code>pred_rank_score</code>.</li>
+      <li>Objective metadata persisted in model config.</li>
+    </ul>
+  </div>
+
+  <div class="card span-12">
+    <div class="k">Rolling Retrain (Latest Report)</div>
+    <table><thead><tr><th>Anchor</th><th>Objective</th><th>Monitor</th><th>Test EPM RMSE</th><th>Test RAPM RMSE</th><th>RC</th></tr></thead><tbody><tr><td>2020</td><td>epm_first</td><td>epm_ndcg10</td><td>2.533</td><td>nan</td><td>0</td></tr><tr><td>2021</td><td>epm_first</td><td>epm_ndcg10</td><td>2.524</td><td>nan</td><td>0</td></tr></tbody></table>
+  </div>
+
+  <div class="card span-12">
+    <div class="k">Latest Matched-Qualified Ranking Sample</div>
+    <table><thead><tr><th>college_final_season</th><th>season_rank_matched</th><th>player_name</th><th>pred_rank_target</th><th>pred_rank_score</th></tr></thead><tbody><tr><td>2025</td><td>1</td><td>Moussa Cisse</td><td>peak_rapm</td><td>0.9643799642760847</td></tr><tr><td>2025</td><td>2</td><td>Rasheer Fleming</td><td>peak_rapm</td><td>0.7423485937429822</td></tr><tr><td>2025</td><td>3</td><td>Drake Powell</td><td>peak_rapm</td><td>0.7309855134348354</td></tr><tr><td>2025</td><td>4</td><td>Ryan Kalkbrenner</td><td>peak_rapm</td><td>0.7309689361641755</td></tr><tr><td>2025</td><td>5</td><td>Maxime Raynaud</td><td>peak_rapm</td><td>0.7273942505606833</td></tr><tr><td>2025</td><td>6</td><td>Kobe Sanders</td><td>peak_rapm</td><td>0.7205297848767198</td></tr><tr><td>2025</td><td>7</td><td>Yanic Konan Niederhauser</td><td>peak_rapm</td><td>0.6976939563433353</td></tr><tr><td>2025</td><td>8</td><td>Walter Clayton Jr.</td><td>peak_rapm</td><td>0.6889729678730127</td></tr><tr><td>2025</td><td>9</td><td>Asa Newell</td><td>peak_rapm</td><td>0.6843713372686135</td></tr><tr><td>2025</td><td>10</td><td>Cooper Flagg</td><td>peak_rapm</td><td>0.6816532715630004</td></tr><tr><td>2025</td><td>11</td><td>Egor Demin</td><td>peak_rapm</td><td>0.6789386534842271</td></tr><tr><td>2025</td><td>12</td><td>Chaz Lanier</td><td>peak_rapm</td><td>0.6765941665799703</td></tr><tr><td>2025</td><td>13</td><td>VJ Edgecombe</td><td>peak_rapm</td><td>0.6752735205809333</td></tr><tr><td>2025</td><td>14</td><td>Ryan Nembhard</td><td>peak_rapm</td><td>0.6704872249147087</td></tr><tr><td>2025</td><td>15</td><td>Jase Richardson</td><td>peak_rapm</td><td>0.6699075009124481</td></tr><tr><td>2025</td><td>16</td><td>Nique Clifford</td><td>peak_rapm</td><td>0.6614482320262093</td></tr></tbody></table>
+  </div>
+
+  <div class="card span-12">
+    <div class="k">Artifact Paths</div>
+    <ul>
+      <li><code>/Users/akashc/my-trankcopy/ml model/data/audit/rolling_retrain_report_*.csv</code></li>
+      <li><code>/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_latest_best_current_matched_qualified.csv</code></li>
+      <li><code>/Users/akashc/my-trankcopy/ml model/data/inference/season_rankings_top25_best_current_tabs.xlsx</code></li>
+      <li><code>/Users/akashc/my-trankcopy/ml model/models/latent_model_*/model_config.json</code></li>
+    </ul>
+  </div>
+</div>
+
+  </div>
+</body>
+</html>

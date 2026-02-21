@@ -1,0 +1,12 @@
+{
+  "latent_dim": 32,
+  "n_archetypes": 8,
+  "use_vae": false,
+  "predict_uncertainty": true,
+  "condition_on_archetypes": true,
+  "year1_feature_dim": 5,
+  "tier1_dim": 32,
+  "tier2_dim": 9,
+  "career_dim": 37,
+  "within_dim": 6
+}

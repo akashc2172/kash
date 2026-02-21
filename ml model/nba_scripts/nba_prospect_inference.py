@@ -42,6 +42,11 @@ FEATURE_STORE = BASE_DIR / "data/college_feature_store"
 INFERENCE_DIR = BASE_DIR / "data/inference"
 YEAR1_INTERACTION_COLUMNS = ['year1_epm_tot', 'year1_epm_off', 'year1_epm_def', 'year1_usg', 'year1_tspct']
 
+from nba_scripts.games_played_selection import (
+    select_games_played_with_provenance,
+    select_minutes_with_provenance,
+)
+
 
 def _season_z(values: pd.Series, seasons: pd.Series) -> pd.Series:
     """Season-wise z-score with robust NaN/zero-std handling."""
@@ -219,6 +224,7 @@ def build_prospect_inference_table(
         load_team_strength_features,
         load_historical_text_games_backfill,
         load_historical_exposure_backfill,
+        load_api_event_games_candidate,
         load_crosswalk,
         load_dim_player_nba,
         load_nba_wingspan_bridge,
@@ -253,12 +259,26 @@ def build_prospect_inference_table(
                 else:
                     cf[target_col] = pd.to_numeric(cf[derived_col], errors="coerce")
         if "college_games_played" in cf.columns:
+            cf["derived_games_played_candidate"] = pd.to_numeric(cf["college_games_played"], errors="coerce")
             if "games_played" in cf.columns:
                 cf["games_played"] = pd.to_numeric(cf["games_played"], errors="coerce").combine_first(
                     pd.to_numeric(cf["college_games_played"], errors="coerce")
                 )
             else:
                 cf["games_played"] = pd.to_numeric(cf["college_games_played"], errors="coerce")
+    if "derived_minutes_total_candidate" not in cf.columns and "minutes_total" in cf.columns:
+        cf["derived_minutes_total_candidate"] = pd.to_numeric(cf["minutes_total"], errors="coerce")
+
+    # API event participation candidate (athlete-season).
+    api_event_games = load_api_event_games_candidate()
+    if not api_event_games.empty:
+        cf = cf.merge(api_event_games, on=["athlete_id", "season"], how="left")
+        if "games_played" in cf.columns:
+            cf["games_played"] = pd.to_numeric(cf["games_played"], errors="coerce").combine_first(
+                pd.to_numeric(cf.get("api_event_games_played"), errors="coerce")
+            )
+        else:
+            cf["games_played"] = pd.to_numeric(cf.get("api_event_games_played"), errors="coerce")
 
     # Historical manual text backfill for games-played (same logic as training build).
     hist_text_games = load_historical_text_games_backfill()
@@ -285,7 +305,11 @@ def build_prospect_inference_table(
         if "minutes_total" in cf.columns:
             m_exist = pd.to_numeric(cf["minutes_total"], errors="coerce")
             m_back = pd.to_numeric(cf.get("backfill_minutes_total"), errors="coerce")
-            cf["minutes_total"] = m_exist.combine_first(m_back)
+            cf["minutes_total"] = np.where(
+                (m_back > 0) & ((m_exist.isna()) | (m_exist <= 0) | ((m_back - m_exist) >= 50)),
+                m_back,
+                m_exist,
+            )
 
         if "games_played" in cf.columns:
             g_exist = pd.to_numeric(cf["games_played"], errors="coerce")
@@ -309,6 +333,26 @@ def build_prospect_inference_table(
         if "minutes_total" in cf.columns:
             cf["college_minutes_total"] = cf["minutes_total"]
             cf["college_minutes_total_display"] = cf["minutes_total"]
+
+    # Canonical minutes/games selection with provenance (must match training behavior).
+    cf = select_minutes_with_provenance(
+        cf,
+        api_col="minutes_total",
+        backfill_col="backfill_minutes_total",
+        hist_col="hist_minutes_total",
+        derived_col="derived_minutes_total_candidate",
+        backfill_variant_col="backfill_alignment_variant",
+        hist_variant_col="hist_alignment_variant",
+    )
+    cf = select_games_played_with_provenance(
+        cf,
+        api_col="games_played",
+        backfill_col="backfill_games_played",
+        hist_col="hist_games_played_text",
+        derived_col="derived_games_played_candidate",
+        backfill_variant_col="backfill_alignment_variant",
+        hist_variant_col="hist_alignment_variant",
+    )
 
     # Exposure plausibility guardrails.
     if "games_played" in cf.columns:
@@ -776,6 +820,22 @@ def main() -> None:
         "athlete_id": inf["athlete_id"].values,
         "college_final_season": inf.get("college_final_season", np.nan),
         "college_games_played": pd.to_numeric(inf.get("college_games_played", np.nan), errors="coerce"),
+        "college_games_played_source": inf.get("college_games_played_source", pd.Series(index=inf.index, dtype=object)),
+        "college_games_played_source_rank": pd.to_numeric(inf.get("college_games_played_source_rank", np.nan), errors="coerce"),
+        "college_games_played_conflict_flag": pd.to_numeric(inf.get("college_games_played_conflict_flag", np.nan), errors="coerce"),
+        "college_games_played_alignment_variant": inf.get("college_games_played_alignment_variant", pd.Series(index=inf.index, dtype=object)),
+        "college_games_played_candidate_api": pd.to_numeric(inf.get("college_games_played_candidate_api", np.nan), errors="coerce"),
+        "college_games_played_candidate_backfill": pd.to_numeric(inf.get("college_games_played_candidate_backfill", np.nan), errors="coerce"),
+        "college_games_played_candidate_hist_text": pd.to_numeric(inf.get("college_games_played_candidate_hist_text", np.nan), errors="coerce"),
+        "college_games_played_candidate_derived": pd.to_numeric(inf.get("college_games_played_candidate_derived", np.nan), errors="coerce"),
+        "college_minutes_total_source": inf.get("college_minutes_total_source", pd.Series(index=inf.index, dtype=object)),
+        "college_minutes_total_source_rank": pd.to_numeric(inf.get("college_minutes_total_source_rank", np.nan), errors="coerce"),
+        "college_minutes_total_conflict_flag": pd.to_numeric(inf.get("college_minutes_total_conflict_flag", np.nan), errors="coerce"),
+        "college_minutes_total_alignment_variant": inf.get("college_minutes_total_alignment_variant", pd.Series(index=inf.index, dtype=object)),
+        "college_minutes_total_candidate_api": pd.to_numeric(inf.get("college_minutes_total_candidate_api", np.nan), errors="coerce"),
+        "college_minutes_total_candidate_backfill": pd.to_numeric(inf.get("college_minutes_total_candidate_backfill", np.nan), errors="coerce"),
+        "college_minutes_total_candidate_hist_text": pd.to_numeric(inf.get("college_minutes_total_candidate_hist_text", np.nan), errors="coerce"),
+        "college_minutes_total_candidate_derived": pd.to_numeric(inf.get("college_minutes_total_candidate_derived", np.nan), errors="coerce"),
         "college_poss_proxy": pd.to_numeric(inf.get("college_poss_proxy", np.nan), errors="coerce"),
         "college_minutes_total": pd.to_numeric(inf.get("college_minutes_total", np.nan), errors="coerce"),
         "pred_peak_rapm": out["rapm_pred"][:, 0].cpu().numpy(),

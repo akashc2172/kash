@@ -122,16 +122,16 @@ def main() -> None:
     ranked = ranked.sort_values(["college_final_season", score_col], ascending=[True, False])
     ranked["season_rank_all"] = ranked.groupby("college_final_season").cumcount() + 1
 
-    # Display-friendly minutes for downstream sheets:
-    # if raw minutes are missing/zero but games are present, provide a transparent estimate.
+    # Minutes columns:
+    # - raw: canonical selected minutes from inference
+    # - display: defaults to raw (no synthetic inflation)
+    # - estimated: optional diagnostic only
     mins = pd.to_numeric(ranked.get("college_minutes_total", pd.Series(index=ranked.index, dtype=float)), errors="coerce")
     games = pd.to_numeric(ranked.get("college_games_played", pd.Series(index=ranked.index, dtype=float)), errors="coerce")
-    ranked["college_minutes_total_display"] = np.where(
-        mins > 0,
-        mins,
-        np.where(games > 0, games * 25.0, np.nan),
-    )
-    ranked["minutes_is_estimated"] = np.where((mins <= 0) & (games > 0), 1, 0)
+    ranked["college_minutes_total_raw"] = mins
+    ranked["college_minutes_total_display"] = mins
+    ranked["college_minutes_total_estimated"] = np.where((mins.isna() | (mins <= 0)) & (games > 0), games * 10.0, np.nan)
+    ranked["minutes_is_estimated"] = np.where(ranked["college_minutes_total_estimated"].notna(), 1, 0)
 
     # Qualified prospect pool:
     # keep raw rank for completeness, and add a practical rank that excludes tiny-sample rows.
@@ -139,15 +139,31 @@ def main() -> None:
     # Strict exposure gate to avoid tiny-sample rows dominating seasonal leaderboards.
     # Allow either possessions or minutes-based evidence to qualify.
     ranked["is_qualified_pool"] = ((games >= 14) & ((poss >= 200) | (ranked["college_minutes_total_display"] >= 400))).astype(int)
+    # Strict v2: estimated minutes never qualify a player.
+    minutes_ok_v2 = pd.to_numeric(ranked["college_minutes_total_raw"], errors="coerce") >= 400
+    poss_ok_v2 = poss >= 200
+    games_ok_v2 = games >= 14
+    exposure_ok_v2 = poss_ok_v2 | minutes_ok_v2
+    ranked["is_qualified_pool_v2"] = (games_ok_v2 & exposure_ok_v2).astype(int)
+    ranked["qualified_reason"] = np.select(
+        [
+            ranked["is_qualified_pool_v2"] == 1,
+            ~games_ok_v2,
+            games_ok_v2 & ~exposure_ok_v2 & (pd.to_numeric(ranked["college_minutes_total_raw"], errors="coerce").fillna(0) <= 0),
+            games_ok_v2 & ~exposure_ok_v2,
+        ],
+        ["PASS", "LOW_GAMES", "MISSING_MINUTES", "LOW_EXPOSURE"],
+        default="UNKNOWN",
+    )
     ranked["season_rank_qualified"] = pd.NA
     for season, g in ranked.groupby("college_final_season", sort=False):
-        q_idx = g.index[g["is_qualified_pool"] == 1]
+        q_idx = g.index[g["is_qualified_pool_v2"] == 1]
         if len(q_idx):
             ranked.loc[q_idx, "season_rank_qualified"] = range(1, len(q_idx) + 1)
     ranked["season_rank"] = ranked["season_rank_qualified"]
     ranked["season_rank_matched"] = pd.NA
     for season, g in ranked.groupby("college_final_season", sort=False):
-        q_idx = g.index[(g["is_qualified_pool"] == 1) & (g["is_nba_matched"] == 1)]
+        q_idx = g.index[(g["is_qualified_pool_v2"] == 1) & (g["is_nba_matched"] == 1)]
         if len(q_idx):
             ranked.loc[q_idx, "season_rank_matched"] = range(1, len(q_idx) + 1)
 
@@ -158,7 +174,7 @@ def main() -> None:
         g_obs = g[g["actual_peak_rapm"].notna()].sort_values("actual_peak_rapm", ascending=False)
         if len(g_obs):
             ranked.loc[g_obs.index, "actual_rapm_rank_class"] = range(1, len(g_obs) + 1)
-        g_obs_q = g[(g["actual_peak_rapm"].notna()) & (g["is_qualified_pool"] == 1)].sort_values("actual_peak_rapm", ascending=False)
+        g_obs_q = g[(g["actual_peak_rapm"].notna()) & (g["is_qualified_pool_v2"] == 1)].sort_values("actual_peak_rapm", ascending=False)
         if len(g_obs_q):
             ranked.loc[g_obs_q.index, "actual_rapm_rank_class_qualified"] = range(1, len(g_obs_q) + 1)
 
@@ -168,10 +184,33 @@ def main() -> None:
     if score_col != "pred_peak_rapm" and "pred_peak_rapm_reliability" in ranked.columns:
         keep.insert(5, "pred_peak_rapm_reliability")
     # Export minutes as populated display value; keep raw for audits.
-    ranked["college_minutes_total_raw"] = mins
     ranked["college_minutes_total"] = ranked["college_minutes_total_display"]
 
-    for c in ["season_rank_all", "season_rank_qualified", "season_rank_matched", "is_qualified_pool", "is_nba_matched", "college_games_played", "college_poss_proxy", "college_minutes_total", "college_minutes_total_raw", "college_minutes_total_display", "minutes_is_estimated"]:
+    for c in ["season_rank_all", "season_rank_qualified", "season_rank_matched", "is_qualified_pool", "is_qualified_pool_v2", "qualified_reason", "is_nba_matched", "college_games_played", "college_poss_proxy", "college_minutes_total", "college_minutes_total_raw", "college_minutes_total_display", "college_minutes_total_estimated", "minutes_is_estimated"]:
+        if c in ranked.columns:
+            keep.append(c)
+    for c in [
+        "college_games_played_source",
+        "college_games_played_source_rank",
+        "college_games_played_conflict_flag",
+        "college_games_played_alignment_variant",
+        "college_games_played_candidate_api",
+        "college_games_played_candidate_backfill",
+        "college_games_played_candidate_hist_text",
+        "college_games_played_candidate_derived",
+    ]:
+        if c in ranked.columns:
+            keep.append(c)
+    for c in [
+        "college_minutes_total_source",
+        "college_minutes_total_source_rank",
+        "college_minutes_total_conflict_flag",
+        "college_minutes_total_alignment_variant",
+        "college_minutes_total_candidate_api",
+        "college_minutes_total_candidate_backfill",
+        "college_minutes_total_candidate_hist_text",
+        "college_minutes_total_candidate_derived",
+    ]:
         if c in ranked.columns:
             keep.append(c)
     for c in ["actual_peak_rapm", "actual_peak_poss", "actual_rapm_rank_class", "actual_rapm_rank_class_qualified"]:
@@ -181,14 +220,14 @@ def main() -> None:
         if c in ranked.columns:
             keep.append(c)
     out_all = ranked[keep].copy()
-    out_qualified = ranked[ranked["is_qualified_pool"] == 1][keep].copy()
+    out_qualified = ranked[ranked["is_qualified_pool_v2"] == 1][keep].copy()
 
     csv_path = INFERENCE_DIR / "season_rankings_latest_best_current.csv"
     out_all.to_csv(csv_path, index=False)
     csv_q_path = INFERENCE_DIR / "season_rankings_latest_best_current_qualified.csv"
     out_qualified.to_csv(csv_q_path, index=False)
     out_matched = out_all[out_all["is_nba_matched"] == 1].copy()
-    out_matched_q = out_all[(out_all["is_nba_matched"] == 1) & (out_all["is_qualified_pool"] == 1)].copy()
+    out_matched_q = out_all[(out_all["is_nba_matched"] == 1) & (out_all["is_qualified_pool_v2"] == 1)].copy()
     # For matched exports, primary displayed rank should be matched-cohort rank, not global-qualified rank.
     if "season_rank_matched" in out_matched.columns:
         out_matched["season_rank"] = out_matched["season_rank_matched"]
