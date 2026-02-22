@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Input Data Contract Dashboard</title>
+<title>Advanced ML Pipeline Dashboard</title>
 <style>
 :root {
   --bg:#0f1115;
@@ -46,27 +46,29 @@ mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', flowchart: { use
   <div class="wrap">
     <div class="header">
       <div>
-        <h1 class="h1">Input Data Contract Dashboard</h1>
-        <div class="sub">Data contracts and join semantics</div>
+        <h1 class="h1">Advanced ML Pipeline Dashboard</h1>
+        <div class="sub">2026 stack with three-surface architecture and strict gates</div>
       </div>
       <div class="gen">Generated: 2026-02-21 13:38:05</div>
     </div>
     
 <div class="grid">
+  <div class="card span-3"><div class="k">Foundation Rows</div><div class="v">n/a</div></div>
+  <div class="card span-3"><div class="k">Supervised Rows</div><div class="v">1082</div></div>
+  <div class="card span-3"><div class="k">Primary Objective</div><div class="v">y_peak_epm_window</div></div>
+  <div class="card span-3"><div class="k">Policy</div><div class="v">Three-Surface</div></div>
   <div class="card span-12">
     <pre class="mermaid">flowchart LR
-      A[College: stg_shots / career / impact / transfer] --> C[Final college season + trajectory]
-      B[NBA: dim_player_nba + targets] --> D[Target surface]
-      E[Crosswalk (nba_id, athlete_id)] --> F[Join plane]
-      C --> F
-      D --> F
-      F --> G[unified_training_table.parquet]
+      A["Foundation Surface: athlete_id + season"] --> B["Masked Pretrain Encoder"]
+      C["Supervised Surface: nba_id unique"] --> D["Supervised Fine-Tune"]
+      B --> D
+      E["Joint Surface: features + masks + targets"] --> D
+      D --> F["Heteroscedastic Head: mu/logvar"]
+      F --> G["Walk-forward CV Gates"]
+      G --> H{"Publish Approved"}
+      H -->|No| I["Fail Closed + Audit"]
+      H -->|Yes| J["Inference + XLSX/CSV Exports"]
     </pre>
-    <ul>
-      <li>Canonical linkage direction: NBA→NCAA.</li>
-      <li>Draft signals in matching: <code>d_y</code>, <code>d_n</code>, <code>draft_year_proxy</code>.</li>
-      <li>One-to-one publish gate enforced on <code>nba_id</code> and <code>athlete_id</code>.</li>
-    </ul>
   </div>
 </div>
 

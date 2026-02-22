@@ -499,7 +499,7 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
         GROUP BY 1, 2
     """).df()
     
-    # 2. Existing fact fallback (only has 2005/2025)
+    # 2. Existing fact fallback (only has 2005/2025 for many warehouses)
     box_stats = con.execute("""
         SELECT
             season,
@@ -514,6 +514,27 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
             minutes AS minutes_total
         FROM fact_player_season_stats
     """).df()
+    # Dedupe: keep one row per (season, athlete_id) to avoid merging duplicates (e.g. conference splits).
+    if not box_stats.empty and 'minutes_total' in box_stats.columns:
+        box_stats = box_stats.sort_values('minutes_total', ascending=False).drop_duplicates(
+            subset=['season', 'athlete_id'], keep='first'
+        )
+
+    # 2b. Minutes from lineup bridge (fix for 2006-2024 when fact_player_season_stats is empty)
+    # Same source as impact stack: real on-court seconds from PBP → avoid zeroing stars like Banchero.
+    try:
+        minutes_from_bridge = con.execute("""
+            SELECT
+                g.season,
+                la.athleteId AS athlete_id,
+                SUM(la.totalSeconds) / 60.0 AS minutes_from_bridge
+            FROM bridge_lineup_athletes la
+            JOIN v_games_canon g ON g.gameId = la.gameId
+            GROUP BY 1, 2
+        """).df()
+    except Exception as e:
+        logger.warning("Minutes from bridge_lineup_athletes unavailable: %s", e)
+        minutes_from_bridge = pd.DataFrame(columns=['season', 'athlete_id', 'minutes_from_bridge'])
     
     # Merge Logic: Use fact table if available, else derived
     df = df_features.merge(athlete_team, on=['season', 'athlete_id'], how='left')
@@ -527,6 +548,13 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
     df = df.merge(box_stats, on=['season', 'athlete_id'], how='left')
     df = df.merge(tov_df, on=['season', 'athlete_id'], how='left')
 
+    # Coalesce minutes: fact first, then bridge (real PBP-derived) so we never zero out stars when fact is empty.
+    if not minutes_from_bridge.empty and 'minutes_from_bridge' not in df.columns:
+        df = df.merge(minutes_from_bridge, on=['season', 'athlete_id'], how='left')
+    if 'minutes_from_bridge' in df.columns:
+        df['minutes_total'] = df['minutes_total'].fillna(df['minutes_from_bridge'])
+        df = df.drop(columns=['minutes_from_bridge'])
+
     # Coalesce TOV: prefer fact (official), fallback to derived PBP turnovers
     if 'tov_total_derived' in df.columns:
         df['tov_total'] = df['tov_total'].fillna(df['tov_total_derived'])
@@ -535,7 +563,11 @@ def join_team_context(con, df_features: pd.DataFrame) -> pd.DataFrame:
     # Fill box stats with 0 if missing (but only if player existed in shots)
     box_cols = ['ast_total', 'tov_total', 'stl_total', 'blk_total', 'orb_total', 'drb_total', 'trb_total', 'minutes_total']
     for c in box_cols:
-        df[c] = df[c].fillna(0).astype(int)
+        if c == 'minutes_total':
+            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+            df[c] = df[c].round().astype(int)
+        else:
+            df[c] = df[c].fillna(0).astype(int)
 
     # Recompute power-conference flag after fallback conference merge.
     conf_norm = df['conference'].fillna('').astype(str)

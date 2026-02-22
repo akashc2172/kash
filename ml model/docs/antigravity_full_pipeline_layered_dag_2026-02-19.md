@@ -5,6 +5,15 @@ This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml
 
 Summary: Layered runbook DAG mirrored; stage gates and hard-stop policy canonicalized in HTML.
 
+Last mirror refresh: 2026-02-21 13:38:05
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/layered_execution_dashboard.html`
+
+Summary: Layered runbook DAG mirrored; stage gates and hard-stop policy canonicalized in HTML.
+
 Last mirror refresh: 2026-02-20 20:55:19
 
 

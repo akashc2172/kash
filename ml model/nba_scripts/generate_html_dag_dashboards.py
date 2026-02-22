@@ -524,6 +524,171 @@ def build_physical_quality_dashboard() -> None:
     )
 
 
+def build_advanced_ml_pipeline_dashboard() -> None:
+    baseline_path = AUDIT / "stack2026_stage0_baseline.json"
+    baseline = {}
+    if baseline_path.exists():
+        try:
+            baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        except Exception:
+            baseline = {}
+    foundation_rows = baseline.get("foundation_row_count", "n/a")
+    supervised_rows = baseline.get("supervised_row_count", "n/a")
+    objective = baseline.get("score_source_col", "y_peak_epm_window")
+    body = f"""
+<div class=\"grid\">
+  <div class=\"card span-3\"><div class=\"k\">Foundation Rows</div><div class=\"v\">{foundation_rows}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Supervised Rows</div><div class=\"v\">{supervised_rows}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Primary Objective</div><div class=\"v\">{objective}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Policy</div><div class=\"v\">Three-Surface</div></div>
+  <div class=\"card span-12\">
+    <pre class=\"mermaid\">flowchart LR
+      A["Foundation Surface: athlete_id + season"] --> B["Masked Pretrain Encoder"]
+      C["Supervised Surface: nba_id unique"] --> D["Supervised Fine-Tune"]
+      B --> D
+      E["Joint Surface: features + masks + targets"] --> D
+      D --> F["Heteroscedastic Head: mu/logvar"]
+      F --> G["Walk-forward CV Gates"]
+      G --> H{{"Publish Approved"}}
+      H -->|No| I["Fail Closed + Audit"]
+      H -->|Yes| J["Inference + XLSX/CSV Exports"]
+    </pre>
+  </div>
+</div>
+"""
+    _write(
+        DIAGRAMS / "advanced_ml_pipeline_dashboard.html",
+        _html_shell("Advanced ML Pipeline Dashboard", "2026 stack with three-surface architecture and strict gates", body),
+    )
+
+
+def build_foundation_coverage_dashboard() -> None:
+    summary_path = AUDIT / "build_unified_surface_summary_foundation.json"
+    maturity_path = AUDIT / "target_maturity_report_foundation.csv"
+    summary = {}
+    maturity = pd.DataFrame()
+    if summary_path.exists():
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            summary = {}
+    if maturity_path.exists():
+        try:
+            maturity = pd.read_csv(maturity_path)
+        except Exception:
+            maturity = pd.DataFrame()
+    mtable = "<div class='metric-warn'>Foundation maturity report missing.</div>"
+    if not maturity.empty:
+        head = "".join(f"<th>{c}</th>" for c in maturity.columns)
+        rows = []
+        for _, r in maturity.iterrows():
+            rows.append("<tr>" + "".join(f"<td>{r[c]}</td>" for c in maturity.columns) + "</tr>")
+        mtable = f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    body = f"""
+<div class=\"grid\">
+  <div class=\"card span-3\"><div class=\"k\">Rows</div><div class=\"v\">{summary.get('n_rows','n/a')}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Unique Athlete</div><div class=\"v\">{summary.get('n_unique_athlete_id','n/a')}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Unique Seasons</div><div class=\"v\">{summary.get('n_unique_college_final_season','n/a')}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Grain Duplicate Rows</div><div class=\"v\">{summary.get('grain_duplicate_rows','n/a')}</div></div>
+  <div class=\"card span-12\"><div class=\"k\">Target/Maturity Coverage</div>{mtable}</div>
+</div>
+"""
+    _write(
+        DIAGRAMS / "foundation_data_coverage_dashboard.html",
+        _html_shell("Foundation Data Coverage Dashboard", "Foundation surface grain and maturity/target coverage", body),
+    )
+
+
+def build_combine_linkage_dashboard() -> None:
+    qpath = AUDIT / "combine_linkage_quality.csv"
+    upath = AUDIT / "combine_unmatched.csv"
+    qdf = pd.DataFrame()
+    udf = pd.DataFrame()
+    if qpath.exists():
+        try:
+            qdf = pd.read_csv(qpath)
+        except Exception:
+            qdf = pd.DataFrame()
+    if upath.exists():
+        try:
+            udf = pd.read_csv(upath)
+        except Exception:
+            udf = pd.DataFrame()
+    quality_html = "<div class='metric-warn'>combine_linkage_quality.csv missing.</div>"
+    if not qdf.empty:
+        head = "".join(f"<th>{c}</th>" for c in qdf.columns)
+        rows = []
+        for _, r in qdf.iterrows():
+            rows.append("<tr>" + "".join(f"<td>{r[c]}</td>" for c in qdf.columns) + "</tr>")
+        quality_html = f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    unmatched_html = "<div class='metric-warn'>combine_unmatched.csv missing.</div>"
+    if not udf.empty:
+        show = udf.head(25)
+        head = "".join(f"<th>{c}</th>" for c in show.columns)
+        rows = []
+        for _, r in show.iterrows():
+            rows.append("<tr>" + "".join(f"<td>{r[c]}</td>" for c in show.columns) + "</tr>")
+        unmatched_html = f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    body = f"""
+<div class=\"grid\">
+  <div class=\"card span-12\">
+    <pre class=\"mermaid\">flowchart LR
+      A["raw_nba_draft_combine.parquet"] --> B["Exact ID Link"]
+      B --> C["Draft-year constrained fuzzy fallback"]
+      C --> D["fact_player_combine_measurements.parquet"]
+      D --> E["fact_player_combine_imputed.parquet"]
+      E --> F["Unified Surfaces"]
+    </pre>
+  </div>
+  <div class=\"card span-12\"><div class=\"k\">Linkage Quality</div>{quality_html}</div>
+  <div class=\"card span-12\"><div class=\"k\">Unmatched Sample (Top 25)</div>{unmatched_html}</div>
+</div>
+"""
+    _write(
+        DIAGRAMS / "combine_linkage_quality_dashboard.html",
+        _html_shell("Combine Linkage Quality Dashboard", "Measured combine linkage quality and unresolved catalog", body),
+    )
+
+
+def build_model_signal_dashboard() -> None:
+    gate_path = AUDIT / "model_publish_gate.json"
+    if not gate_path.exists():
+        gate_path = AUDIT / "stage5_publish_gate.json"
+    gate = {}
+    if gate_path.exists():
+        try:
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        except Exception:
+            gate = {}
+    std_val = gate.get("score_std", "n/a")
+    iqr_val = gate.get("score_iqr", "n/a")
+    cv_val = gate.get("cv_majority_beats_xgb", "n/a")
+    pub = gate.get("publish_approved", False)
+    pub_cls = "metric-ok" if pub else "metric-danger"
+    body = f"""
+<div class=\"grid\">
+  <div class=\"card span-3\"><div class=\"k\">Score Std</div><div class=\"v\">{std_val}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Score IQR</div><div class=\"v\">{iqr_val}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">CV Majority Beats Baseline</div><div class=\"v\">{cv_val}</div></div>
+  <div class=\"card span-3\"><div class=\"k\">Publish Approved</div><div class=\"v {pub_cls}\">{pub}</div></div>
+  <div class=\"card span-12\">
+    <pre class=\"mermaid\">flowchart TB
+      A["Walk-forward folds"] --> B["Neural vs baseline metrics"]
+      B --> C["Anti-compression checks"]
+      C --> D["CV majority gate"]
+      D --> E{{"publish_approved"}}
+      E -->|False| F["No-Go"]
+      E -->|True| G["Go"]
+    </pre>
+  </div>
+</div>
+"""
+    _write(
+        DIAGRAMS / "model_signal_separation_dashboard.html",
+        _html_shell("Model Signal Separation Dashboard", "Anti-compression + CV publish gate status", body),
+    )
+
+
 def update_markdown_mirror(md_path: Path, html_path: Path, summary: str) -> None:
     stamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     mirror_header = (
@@ -555,6 +720,10 @@ def update_markdown_mirror(md_path: Path, html_path: Path, summary: str) -> None
 def main() -> None:
     DIAGRAMS.mkdir(parents=True, exist_ok=True)
 
+    build_advanced_ml_pipeline_dashboard()
+    build_foundation_coverage_dashboard()
+    build_combine_linkage_dashboard()
+    build_model_signal_dashboard()
     build_crosswalk_dashboard()
     build_model_arch_dashboard()
     build_input_contract_dashboard()
@@ -590,6 +759,10 @@ def main() -> None:
         needle = "## Canonical HTML Dashboards\n"
         section = (
             "## Canonical HTML Dashboards\n"
+            "- `docs/diagrams/advanced_ml_pipeline_dashboard.html`\n"
+            "- `docs/diagrams/foundation_data_coverage_dashboard.html`\n"
+            "- `docs/diagrams/combine_linkage_quality_dashboard.html`\n"
+            "- `docs/diagrams/model_signal_separation_dashboard.html`\n"
             "- `docs/diagrams/model_architecture_dashboard.html`\n"
             "- `docs/diagrams/input_data_contract_dashboard.html`\n"
             "- `docs/diagrams/layered_execution_dashboard.html`\n"
@@ -612,6 +785,10 @@ def main() -> None:
 
     print(json.dumps({
         "generated": [
+            str(DIAGRAMS / "advanced_ml_pipeline_dashboard.html"),
+            str(DIAGRAMS / "foundation_data_coverage_dashboard.html"),
+            str(DIAGRAMS / "combine_linkage_quality_dashboard.html"),
+            str(DIAGRAMS / "model_signal_separation_dashboard.html"),
             str(DIAGRAMS / "model_architecture_dashboard.html"),
             str(DIAGRAMS / "input_data_contract_dashboard.html"),
             str(DIAGRAMS / "layered_execution_dashboard.html"),

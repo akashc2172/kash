@@ -716,3 +716,23 @@ Rebuilt entire chain: `build_prospect_career_store_v2.py` → `build_transfer_co
   - trajectory fields (`college_height_delta_yoy`, `college_weight_delta_yoy`, `college_height_slope_3yr`, `college_weight_slope_3yr`) are schema-complete but sparse/null in NBA-crosswalk cohort.
 - Action to increase trajectory coverage:
   - run ingest with season roster providers (`cbd` and/or `cbbpy`/`sportsipy`) and/or populate `/Users/akashc/my-trankcopy/ml model/data/manual_physicals`.
+
+## 2026-02-21 — Patch Set A Hardening (Readiness Pass)
+- Fixed baseline source to supervised surface (`unified_training_table_supervised.parquet`) in `/Users/akashc/my-trankcopy/ml model/scripts/run_stage0_baseline.py`.
+- Moved and corrected maturity/target masks in `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py`:
+  - `has_peak_rapm_target` -> `y_peak_ovr`
+  - `has_peak_epm_target` -> `y_peak_epm_window|3y|2y|1y`
+  - `has_year1_epm_target` -> `year1_epm_tot`
+- Enforced foundation grain (`athlete_id`,`season`) with zero duplicates in foundation contract report.
+- Aligned Stage 4 objective to `TARGET_COL = 'y_peak_epm_window'` in `/Users/akashc/my-trankcopy/ml model/scripts/train_2026_model.py`.
+- Hardened publish gate in `/Users/akashc/my-trankcopy/ml model/scripts/run_stage5_evaluation.py` to require CV-majority criterion.
+- Repaired mixed-type feature coercion in Stage 4/5 training+evaluation matrix assembly.
+- Updated combine contract outputs to `warehouse_v2`:
+  - `/Users/akashc/my-trankcopy/ml model/data/warehouse_v2/raw_nba_draft_combine.parquet`
+  - `/Users/akashc/my-trankcopy/ml model/data/warehouse_v2/fact_player_combine_measurements.parquet`
+  - `/Users/akashc/my-trankcopy/ml model/data/warehouse_v2/fact_player_combine_imputed.parquet`
+- Added canonical 2026 HTML dashboards under `/Users/akashc/my-trankcopy/ml model/docs/diagrams/`:
+  - `advanced_ml_pipeline_dashboard.html`
+  - `foundation_data_coverage_dashboard.html`
+  - `combine_linkage_quality_dashboard.html`
+  - `model_signal_separation_dashboard.html`

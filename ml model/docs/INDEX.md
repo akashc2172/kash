@@ -58,6 +58,10 @@
 
 
 ## Canonical HTML Dashboards
+- `docs/diagrams/advanced_ml_pipeline_dashboard.html`
+- `docs/diagrams/foundation_data_coverage_dashboard.html`
+- `docs/diagrams/combine_linkage_quality_dashboard.html`
+- `docs/diagrams/model_signal_separation_dashboard.html`
 - `docs/diagrams/model_architecture_dashboard.html`
 - `docs/diagrams/input_data_contract_dashboard.html`
 - `docs/diagrams/layered_execution_dashboard.html`

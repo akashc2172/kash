@@ -5,6 +5,15 @@ This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml
 
 Summary: End-to-end architecture now maintained as canonical HTML dashboard.
 
+Last mirror refresh: 2026-02-21 13:38:05
+
+
+# Markdown Mirror
+
+This file is a mirror. Canonical visual artifact: `/Users/akashc/my-trankcopy/ml model/docs/diagrams/model_architecture_dashboard.html`
+
+Summary: End-to-end architecture now maintained as canonical HTML dashboard.
+
 Last mirror refresh: 2026-02-20 20:55:19
 
 

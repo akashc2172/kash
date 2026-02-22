@@ -629,3 +629,45 @@ If any critical guard fails, stop the run and produce a NO-GO audit. Do not cont
   - added `_safe_median()` helper in `/Users/akashc/my-trankcopy/ml model/nba_scripts/analyze_peak_epm_alignment.py` to coerce and guard empty/NA series.
 - Prevention guard:
   - all diagnostics aggregations must use NA-safe reducers (`_safe_median`, `_safe_corr`) and py_compile + smoke-run before publish.
+
+69. **Foundation/joint maturity masks failed on nullable boolean casting (`NA` to int)**
+- What happened: `is_epm_mature` and `is_rapm_mature` used direct `.astype(int)` after a nullable comparison, which raised `ValueError: cannot convert NA to integer` for non-NBA-linked rows.
+- Why this hurt: `foundation` and `joint` surface builds failed during Patch Set A rerun.
+- Fix applied:
+  - updated maturity mask construction in `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py` to use `.ge(3).fillna(False).astype(int)`.
+- Prevention guard:
+  - any boolean-to-int conversion on nullable series must explicitly fill nulls before cast.
+
+70. **Target mask builders used scalar fallback from `df.get(...)` when columns absent**
+- What happened: `pd.to_numeric(df.get('y_peak_ovr'), ...)` can return scalar `np.nan` when the column is missing, causing `'numpy.float64' object has no attribute 'notna'` in foundation mode.
+- Why this hurt: foundation surface build crashed after dedupe/joins.
+- Fix applied:
+  - replaced scalar-prone `df.get(...)` usage with index-aligned fallback series (`pd.Series(np.nan, index=df.index)`) in `/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py`.
+- Prevention guard:
+  - mask code paths must always operate on pandas Series, never scalar fallbacks.
+
+71. **Stage 4/5 tensor assembly assumed all feature columns were scalar numeric**
+- What happened: `astype(np.float32)` was applied directly on mixed-type feature frames; sequence/object columns caused `ValueError: setting an array element with a sequence`.
+- Why this hurt: Phase B fine-tuning and Stage 5 walk-forward evaluation failed despite completed pretraining.
+- Fix applied:
+  - added robust numeric coercion (`pd.to_numeric(errors='coerce')`) then `fillna(0)` in both:
+    - `/Users/akashc/my-trankcopy/ml model/scripts/train_2026_model.py`
+    - `/Users/akashc/my-trankcopy/ml model/scripts/run_stage5_evaluation.py`
+- Prevention guard:
+  - every training/eval matrix assembly must coerce per-column numeric before tensor conversion.
+
+72. **Partial-window lineup reconstruction silently overwrote combined historical artifact**
+- What happened: running `reconstruct_historical_onfloor_v3.py` for a narrow season range rewrote `data/fact_play_historical_combined_v2.parquet` with only that range.
+- Why this hurt: downstream RAPM/impact builds looked like broad historical coverage but were actually operating on a truncated source.
+- Fix applied:
+  - added deterministic slice-merge rebuild procedure in this run (2020 and 2021-2023 slices merged back to one canonical file) before recalculating RAPM/impact/pathway outputs.
+- Prevention guard:
+  - every partial reconstruction run must either write to a versioned temp path or be followed by an explicit merge step before publishing canonical `*_combined_v2.parquet`.
+
+73. **Context source labeling under-reported true/proxy mix when `ctx_adj_onoff_*` was non-null**
+- What happened: many rows had `ctx_adj_onoff_net` populated while `path_onoff_source='missing'`, creating misleading source-mix audits.
+- Why this hurt: coverage diagnostics appeared worse and obscured the real blocker (ID/season linkage + cohort composition).
+- Fix applied:
+  - tightened diagnostics to report both value coverage and source labels; identified misalignment as a separate blocker from raw data availability.
+- Prevention guard:
+  - any context coverage gate must include consistency check: `ctx_adj_onoff_net.notna()` implies non-missing source label.

@@ -79,7 +79,19 @@ def name_variants(name: str) -> set[str]:
     return {v.strip() for v in variants if v.strip()}
 
 
-def name_score(nba_name: str, college_name: str) -> float:
+def name_score(nba_name: str, college_name: str, strict_first_name: bool = True) -> float:
+    n1_norm = normalize_name(nba_name)
+    n2_norm = normalize_name(college_name)
+    
+    if strict_first_name:
+        t1 = n1_norm.split()
+        t2 = n2_norm.split()
+        if t1 and t2:
+            f1, f2 = t1[0], t2[0]
+            # Strict first-name similarity check to prevent "Amen" -> "Ardell" or "Scoot" -> "Sam"
+            if SequenceMatcher(None, f1, f2).ratio() < 0.85:
+                return 0.0
+
     v1 = name_variants(nba_name)
     v2 = name_variants(college_name)
     if not v1 or not v2:
@@ -90,10 +102,10 @@ def name_score(nba_name: str, college_name: str) -> float:
             s = SequenceMatcher(None, a, b).ratio()
             if s > best:
                 best = s
-    t1 = set(normalize_name(nba_name).split())
-    t2 = set(normalize_name(college_name).split())
-    if t1 and t2:
-        jacc = len(t1 & t2) / len(t1 | t2)
+    t1_set = set(n1_norm.split())
+    t2_set = set(n2_norm.split())
+    if t1_set and t2_set:
+        jacc = len(t1_set & t2_set) / len(t1_set | t2_set)
         best = max(best, 0.7 * best + 0.3 * jacc)
     return float(best)
 
@@ -279,6 +291,15 @@ def generate_candidates(
     candidates: List[Dict[str, Any]] = []
     unmatched_rows: List[Dict[str, Any]] = []
 
+    # Hardcoded blocklist of known non-NCAA players (2021-2024 classes)
+    NON_NCAA_BLOCKLIST = {
+        "scoot henderson", "amen thompson", "ausar thompson", "victor wembanyama",
+        "jalen green", "jonathan kuminga", "dyson daniels", "leonard miller",
+        "matas buzelis", "ron holland", "alex sarr", "zaccharie risacher",
+        "tidjane salaun", "nikola topic", "alperen sengun", "josh giddey",
+        "bilal coulibaly"
+    }
+
     for _, nba in nba_df.iterrows():
         nba_id = int(nba["nba_id"])
         nba_name = str(nba.get("player_name") or "")
@@ -286,6 +307,15 @@ def generate_candidates(
         n_draft = pd.to_numeric(pd.Series([nba.get("draft_year_proxy")]), errors="coerce").iloc[0]
         n_pid = str(nba.get("pid") or "").strip()
         n_bbr = str(nba.get("bbr_id") or "").strip()
+
+        if n_norm in NON_NCAA_BLOCKLIST:
+            unmatched_rows.append({
+                "nba_id": nba_id,
+                "nba_name": nba_name,
+                "draft_year_proxy": n_draft,
+                "reason": "explicit_non_ncaa_blocklist",
+            })
+            continue
 
         seed = None
         seed_method = None

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Input Data Contract Dashboard</title>
+<title>Model Signal Separation Dashboard</title>
 <style>
 :root {
   --bg:#0f1115;
@@ -46,27 +46,26 @@ mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', flowchart: { use
   <div class="wrap">
     <div class="header">
       <div>
-        <h1 class="h1">Input Data Contract Dashboard</h1>
-        <div class="sub">Data contracts and join semantics</div>
+        <h1 class="h1">Model Signal Separation Dashboard</h1>
+        <div class="sub">Anti-compression + CV publish gate status</div>
       </div>
       <div class="gen">Generated: 2026-02-21 13:38:05</div>
     </div>
     
 <div class="grid">
+  <div class="card span-3"><div class="k">Score Std</div><div class="v">n/a</div></div>
+  <div class="card span-3"><div class="k">Score IQR</div><div class="v">n/a</div></div>
+  <div class="card span-3"><div class="k">CV Majority Beats Baseline</div><div class="v">True</div></div>
+  <div class="card span-3"><div class="k">Publish Approved</div><div class="v metric-ok">True</div></div>
   <div class="card span-12">
-    <pre class="mermaid">flowchart LR
-      A[College: stg_shots / career / impact / transfer] --> C[Final college season + trajectory]
-      B[NBA: dim_player_nba + targets] --> D[Target surface]
-      E[Crosswalk (nba_id, athlete_id)] --> F[Join plane]
-      C --> F
-      D --> F
-      F --> G[unified_training_table.parquet]
+    <pre class="mermaid">flowchart TB
+      A["Walk-forward folds"] --> B["Neural vs baseline metrics"]
+      B --> C["Anti-compression checks"]
+      C --> D["CV majority gate"]
+      D --> E{"publish_approved"}
+      E -->|False| F["No-Go"]
+      E -->|True| G["Go"]
     </pre>
-    <ul>
-      <li>Canonical linkage direction: NBA→NCAA.</li>
-      <li>Draft signals in matching: <code>d_y</code>, <code>d_n</code>, <code>draft_year_proxy</code>.</li>
-      <li>One-to-one publish gate enforced on <code>nba_id</code> and <code>athlete_id</code>.</li>
-    </ul>
   </div>
 </div>
 

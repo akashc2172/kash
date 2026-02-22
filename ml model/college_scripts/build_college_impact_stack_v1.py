@@ -186,14 +186,37 @@ def _load_historical_rapm_mapped() -> pd.DataFrame:
         logger.warning("Historical RAPM bridge is empty; cannot map to athlete_id.")
         return pd.DataFrame()
 
-    mapped = hist.merge(bridge, on=["season", "norm_name"], how="inner")
+    # Season convention mismatch is common (start-year vs end-year labeling).
+    # Primary mapping uses season+1, then falls back to exact-season.
+    hist_plus1 = hist.copy()
+    hist_plus1["bridge_season"] = hist_plus1["season"] + 1
+    m_plus1 = hist_plus1.merge(
+        bridge.rename(columns={"season": "bridge_season"}),
+        on=["bridge_season", "norm_name"],
+        how="inner",
+    )
+    m_plus1["map_priority"] = 0
+
+    hist_exact = hist.copy()
+    hist_exact["bridge_season"] = hist_exact["season"]
+    m_exact = hist_exact.merge(
+        bridge.rename(columns={"season": "bridge_season"}),
+        on=["bridge_season", "norm_name"],
+        how="inner",
+    )
+    m_exact["map_priority"] = 1
+
+    mapped = pd.concat([m_plus1, m_exact], ignore_index=True, sort=False)
     if mapped.empty:
         logger.warning("Historical RAPM mapping produced 0 rows.")
         return pd.DataFrame()
 
     # Keep best-exposure row per athlete-season.
     mapped = (
-        mapped.sort_values(["athlete_id", "season", "poss_total"], ascending=[True, True, False])
+        mapped.sort_values(
+            ["athlete_id", "season", "map_priority", "poss_total"],
+            ascending=[True, True, True, False],
+        )
         .drop_duplicates(subset=["athlete_id", "season"], keep="first")
         .reset_index(drop=True)
     )
@@ -485,7 +508,7 @@ def build_impact_stack() -> pd.DataFrame:
         hist_rows["impact_ripm_sd_def"] = sd_tot_h
         inv_var_h = 1.0 / np.clip(np.square(sd_tot_h), 1e-6, None)
         hist_rows["impact_reliability_weight"] = np.clip(inv_var_h, 0.05, 10.0)
-        hist_rows["has_impact_raw"] = 0
+        hist_rows["has_impact_raw"] = 1
         hist_rows["has_impact_stint"] = 1
         hist_rows["has_impact_ripm"] = 1
 

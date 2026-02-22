@@ -1,0 +1,181 @@
+2026-02-21 17:40:54,157 - INFO - Starting build_unified_training_table in SUPERVISED mode
+2026-02-21 17:40:54,157 - INFO - ============================================================
+2026-02-21 17:40:54,157 - INFO - Building Unified Training Table
+2026-02-21 17:40:54,157 - INFO - ============================================================
+2026-02-21 17:40:54,911 - INFO - Loaded 949,642 college feature rows (all splits)
+2026-02-21 17:40:55,254 - INFO - Loaded team-strength rows: 10,759
+2026-02-21 17:40:55,266 - INFO - Loaded 118,872 derived box stat rows
+2026-02-21 17:41:02,755 - INFO - Loaded API event games candidate rows: 118,872
+2026-02-21 17:41:02,767 - INFO - Loaded enhanced activity rows: 114,470
+2026-02-21 17:41:12,759 - INFO - Loaded mapped historical exposure backfill rows: 66,871
+2026-02-21 17:41:18,341 - WARNING - Clipping 105 historical text-games rows above 45 games
+2026-02-21 17:41:18,341 - INFO - Loaded historical text games backfill rows: 45,084
+2026-02-21 17:41:18,361 - INFO - Loaded 28,770 college impact stack rows
+2026-02-21 17:41:18,371 - INFO - Loaded 114,470 college pathway context rows
+2026-02-21 17:41:18,430 - INFO - Merged derived box stats. Rows: 114470 -> 114470
+2026-02-21 17:41:18,459 - INFO - Merged API event games candidate. Rows: 114470 -> 114470
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1586: FutureWarning: errors='ignore' is deprecated and will raise in a future version. Use to_numeric without passing `errors` and catch exceptions explicitly instead
+  pd.to_numeric(sx, errors="ignore")
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:1585: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  college_features[c] = pd.to_numeric(sy, errors="ignore").combine_first(
+2026-02-21 17:41:18,725 - INFO - Merged enhanced activity proxies on ['athlete_id', 'season', 'split_id']. Rows: 114470 -> 114470
+2026-02-21 17:41:18,784 - INFO - PAOLO TRACE POST-EXPOSURE: games_played=[39.0]
+2026-02-21 17:41:18,784 - INFO - Merged historical exposure backfill. Rows: 114470 -> 114470
+2026-02-21 17:41:18,814 - INFO - PAOLO TRACE POST-HIST: games_played=[39.0]
+2026-02-21 17:41:18,814 - INFO - Merged historical text games backfill. Rows: 114470 -> 114470
+2026-02-21 17:41:29,734 - INFO - Loaded 59,078 career feature rows
+2026-02-21 17:41:29,970 - INFO - Loaded 59,078 trajectory feature rows
+2026-02-21 17:41:29,975 - INFO - Loaded 59,078 college dev-rate rows
+2026-02-21 17:41:30,600 - INFO - Loaded transfer summary rows: 7,987
+2026-02-21 17:41:30,602 - INFO - Loaded canonical college physicals rows: 7,524
+2026-02-21 17:41:30,603 - INFO - Loaded college physical trajectory rows: 7,524
+2026-02-21 17:41:30,604 - INFO - Loaded 1,218 crosswalk entries
+2026-02-21 17:41:30,606 - INFO - Loaded 2,461 NBA dimension rows
+2026-02-21 17:41:30,616 - INFO - Loaded NBA ws bridge rows: 2,223
+2026-02-21 17:41:30,636 - INFO - Loaded recruiting physicals rows: 7,897
+2026-02-21 17:41:30,638 - INFO - Loaded 2,239 peak RAPM targets
+2026-02-21 17:41:30,642 - INFO - Loaded 2,461 year-1 EPM targets
+2026-02-21 17:41:30,644 - INFO - Loaded 2,025 peak/rolling EPM targets
+2026-02-21 17:41:30,645 - INFO - Loaded 1,114 gap targets
+2026-02-21 17:41:30,647 - INFO - Loaded 2,461 development-rate targets
+2026-02-21 17:41:30,949 - INFO - Extracted 59,078 final college seasons
+2026-02-21 17:41:30,959 - INFO - PAOLO TRACE POST-AGGREGATOR: college_games_played=[39.0] / games_played=MISSING
+2026-02-21 17:41:30,966 - INFO -   Added leverage-rate features to final season frame
+2026-02-21 17:41:31,095 - INFO -   Applied era + team normalization on full population (59,078 rows, 9 derived cols)
+2026-02-21 17:41:31,095 - INFO - Applying data surface grain for mode: supervised
+2026-02-21 17:41:31,104 - INFO - Integrating Combine Athleticism Signals...
+2026-02-21 17:41:31,116 - INFO -   Combine integration complete from fact_player_combine_measurements.parquet/fact_player_combine_imputed.parquet. Measured rows matching: 903
+2026-02-21 17:41:31,121 - INFO -   Added canonical college physicals by season
+2026-02-21 17:41:31,123 - INFO -   Added college physical trajectory features
+2026-02-21 17:41:31,124 - INFO -   Added team-strength/SRS features
+2026-02-21 17:41:31,184 - INFO -   Added college impact stack features (dual-season): 43
+2026-02-21 17:41:46,191 - INFO -   Applied name-based Linkage Patch: Updated athlete_ids for 397 players
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:2074: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  df[c] = base.combine_first(alt)
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:2074: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  df[c] = base.combine_first(alt)
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:2113: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  df[c] = base.combine_first(alt)
+/Users/akashc/my-trankcopy/ml model/nba_scripts/build_unified_training_table.py:2113: FutureWarning: The behavior of array concatenation with empty entries is deprecated. In a future version, this will no longer exclude empty items when determining the result dtype. To retain the old behavior, exclude the empty entries before the concat operation.
+  df[c] = base.combine_first(alt)
+2026-02-21 17:41:46,330 - INFO -   Added college pathway context features (dual-season): 30
+2026-02-21 17:41:46,342 - INFO -   Added college dev-rate features: 17
+2026-02-21 17:41:46,345 - INFO -   Added transfer summary features: 12
+2026-02-21 17:41:46,427 - INFO -   Added 44 trajectory features
+2026-02-21 17:41:46,434 - WARNING - Supervised Mode: Dropped 136 duplicate nba_id rows.
+2026-02-21 17:41:46,446 - INFO - Applied cohort filter draft_year_proxy >= 2011: kept 1076 / 1218 (dropped 142)
+2026-02-21 17:41:46,449 - INFO - Joined dataset: 1,076 rows
+2026-02-21 17:41:46,461 - INFO - After target filter (min=1): 1,076 rows
+2026-02-21 17:41:46,461 - INFO - 
+========================================
+2026-02-21 17:41:46,461 - INFO - COVERAGE STATISTICS
+2026-02-21 17:41:46,461 - INFO - ========================================
+2026-02-21 17:41:46,461 - INFO - Total rows: 1,076
+2026-02-21 17:41:46,461 - INFO -   y_peak_ovr: 451 (41.9%)
+2026-02-21 17:41:46,461 - INFO -   gap_ts_legacy: 802 (74.5%)
+2026-02-21 17:41:46,461 - INFO -   year1_epm_tot: 822 (76.4%)
+2026-02-21 17:41:46,461 - INFO -   y_peak_epm_3y: 703 (65.3%)
+2026-02-21 17:41:46,461 - INFO -   year1_epm_off: 822 (76.4%)
+2026-02-21 17:41:46,461 - INFO -   year1_epm_def: 822 (76.4%)
+2026-02-21 17:41:46,461 - INFO -   dev_rate_y1_y3_mean: 1,076 (100.0%)
+2026-02-21 17:41:46,461 - INFO -   made_nba: 1,076 (100.0%)
+2026-02-21 17:41:46,461 - INFO -   dev_rate_quality_weight: 1,076 (100.0%)
+2026-02-21 17:41:46,461 - INFO -   dev_rate_y1_y3_sd: 1,076 (100.0%)
+2026-02-21 17:41:46,461 - INFO -   college_dev_quality_weight: 838 (77.9%)
+2026-02-21 17:41:46,461 - INFO -   college_dev_p50: 838 (77.9%)
+2026-02-21 17:41:46,461 - INFO -   has_impact_raw: 23.7%
+2026-02-21 17:41:46,461 - INFO -   has_impact_stint: 23.7%
+2026-02-21 17:41:46,461 - INFO -   has_impact_ripm: 23.7%
+2026-02-21 17:41:46,462 - INFO -   impact_reliability_weight: 255 (23.7%)
+2026-02-21 17:41:46,462 - INFO -   has_transfer_context: 161 (15.0%)
+2026-02-21 17:41:46,462 - INFO -   transfer_event_count: 161 (15.0%)
+2026-02-21 17:41:46,462 - INFO -   transfer_max_shock: 161 (15.0%)
+2026-02-21 17:41:46,462 - INFO -   has_spatial_data: 416 (38.7%)
+2026-02-21 17:41:46,462 - INFO - 
+Season distribution:
+2026-02-21 17:41:46,462 - INFO -   2010: 9
+2026-02-21 17:41:46,462 - INFO -   2011: 63
+2026-02-21 17:41:46,462 - INFO -   2012: 66
+2026-02-21 17:41:46,462 - INFO -   2013: 56
+2026-02-21 17:41:46,462 - INFO -   2014: 67
+2026-02-21 17:41:46,462 - INFO -   2015: 57
+2026-02-21 17:41:46,462 - INFO -   2016: 82
+2026-02-21 17:41:46,462 - INFO -   2017: 93
+2026-02-21 17:41:46,462 - INFO -   2018: 89
+2026-02-21 17:41:46,462 - INFO -   2019: 96
+2026-02-21 17:41:46,462 - INFO -   2020: 86
+2026-02-21 17:41:46,462 - INFO -   2021: 85
+2026-02-21 17:41:46,462 - INFO -   2022: 81
+2026-02-21 17:41:46,462 - INFO -   2023: 75
+2026-02-21 17:41:46,462 - INFO -   2024: 70
+2026-02-21 17:41:46,462 - INFO -   2025: 1
+2026-02-21 17:41:46,465 - INFO - Published feature branch health audit: feature_branch_health_supervised.csv
+2026-02-21 17:41:46,467 - INFO - Published target maturity report: target_maturity_report_supervised.csv
+2026-02-21 17:41:46,690 - INFO - Saved training table to /Users/akashc/my-trankcopy/ml model/data/training/unified_training_table_supervised.parquet
+2026-02-21 17:41:46,692 - INFO - Saved games-played source mix audit to /Users/akashc/my-trankcopy/ml model/data/audit/games_played_source_mix_by_season.csv
+2026-02-21 17:41:46,693 - INFO - Saved minutes source mix audit to /Users/akashc/my-trankcopy/ml model/data/audit/minutes_source_mix_by_season.csv
+2026-02-21 17:41:46,694 - INFO - Contract report saved: /Users/akashc/my-trankcopy/ml model/data/audit/surface_grain_contract_report_supervised.json
+2026-02-21 17:41:46,694 - INFO - 
+============================================================
+2026-02-21 17:41:46,694 - INFO - UNIFIED TRAINING TABLE (SUPERVISED) COMPLETE
+2026-02-21 17:41:46,694 - INFO - ============================================================
+2026-02-21 17:41:46,694 - INFO - Rows: 1,076
+2026-02-21 17:41:46,694 - INFO - Columns: 606

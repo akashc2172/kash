@@ -39,9 +39,25 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
 COLLEGE_FEATURE_STORE = BASE_DIR / "data/college_feature_store"
-WAREHOUSE_V2 = BASE_DIR / "data/warehouse_v2"
-OUTPUT_DIR = BASE_DIR / "data/training"
+WAREHOUSE_V2 = BASE_DIR / "data" / "warehouse_v2"
+DB_PATH = BASE_DIR / "data" / "warehouse.duckdb"
+OUTPUT_DIR = BASE_DIR / "data" / "training"
+
+def clean_name_for_join(name_series: pd.Series) -> pd.Series:
+    """Standardize names for linkage patching."""
+    s = name_series.astype(str).str.lower()
+    s = s.str.replace(r'[^a-z\s]', '', regex=True)
+    s = s.str.replace(r'\s+(jr|sr|iii|ii|iv|v)$', '', regex=True)
+    return s.str.strip()
 AUDIT_DIR = BASE_DIR / "data/audit"
+PHYSICALS_DIR = BASE_DIR / "data/physicals"
+COMBINE_DIR = BASE_DIR / "data/combine"
+
+# 2026 contract-first paths (warehouse_v2), with backward-compatible fallback
+COMBINE_MEASUREMENTS_PATH = WAREHOUSE_V2 / "fact_player_combine_measurements.parquet"
+COMBINE_IMPUTED_PATH = WAREHOUSE_V2 / "fact_player_combine_imputed.parquet"
+COMBINE_MEASUREMENTS_FALLBACK = COMBINE_DIR / "fact_player_combine_measurements.parquet"
+COMBINE_IMPUTED_FALLBACK = COMBINE_DIR / "fact_player_combine_imputed.parquet"
 
 from nba_scripts.games_played_selection import (
     select_games_played_with_provenance,
@@ -653,6 +669,17 @@ def load_college_impact_stack() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_parquet(path)
     logger.info(f"Loaded {len(df):,} college impact stack rows")
+    return df
+
+
+def load_college_pathway_context() -> pd.DataFrame:
+    """Load college pathway context v2 features (athlete-season grain)."""
+    path = COLLEGE_FEATURE_STORE / "college_pathway_context_v2.parquet"
+    if not path.exists():
+        logger.warning(f"College pathway context v2 not found: {path}")
+        return pd.DataFrame()
+    df = pd.read_parquet(path)
+    logger.info(f"Loaded {len(df):,} college pathway context rows")
     return df
 
 
@@ -1440,6 +1467,7 @@ def build_unified_training_table(
     apply_normalization: bool = True,
     min_targets: int = 1,
     min_draft_year: Optional[int] = 2011,
+    mode: str = "supervised",
 ) -> pd.DataFrame:
     """
     Build the unified training table.
@@ -1467,6 +1495,7 @@ def build_unified_training_table(
     exposure_backfill = load_historical_exposure_backfill()
     hist_text_games = load_historical_text_games_backfill()
     college_impact_stack = load_college_impact_stack()
+    college_pathway_context = load_college_pathway_context()
     
     # Merge derived stats to fill missing signal (2010-2024 gaps)
     if not derived_stats.empty and not college_features.empty:
@@ -1658,6 +1687,12 @@ def build_unified_training_table(
             backfill_variant_col="backfill_alignment_variant",
             hist_variant_col="hist_alignment_variant",
         )
+        
+        # Enforce Explicit Provenance Columns
+        if 'minutes_source' in college_features.columns:
+            college_features = college_features.rename(columns={'minutes_source': 'college_minutes_total_source'})
+        if 'games_source' in college_features.columns:
+            college_features = college_features.rename(columns={'games_source': 'college_games_played_source'})
 
     career_features = load_career_features()
     trajectory_features = load_trajectory_features()
@@ -1718,19 +1753,81 @@ def build_unified_training_table(
             final_college[c] = fc_with_career[c].values
         logger.info(f"  Applied era + team normalization on full population ({len(final_college):,} rows, {len(norm_cols)} derived cols)")
     
-    # 3. Join college features via crosswalk
-    # crosswalk has: athlete_id (college) -> nba_id
-    logger.info("Joining college features to NBA targets via crosswalk...")
+    # 3. Apply Mode Grain
+    logger.info(f"Applying data surface grain for mode: {mode}")
     
     base_cols = ['athlete_id', 'nba_id']
     for c in ['wingspan_in', 'standing_reach_in', 'wingspan_minus_height_in']:
         if c in crosswalk.columns:
             base_cols.append(c)
-    df = crosswalk[base_cols].copy()
+    cw = crosswalk[base_cols].copy()
     
-    # Join final college season
-    if not final_college.empty:
-        df = df.merge(final_college, on='athlete_id', how='left')
+    if mode in ["foundation", "joint"]:
+        # Foundation/joint surfaces are explicit athlete-season training planes.
+        # Do NOT collapse to final season here.
+        if college_features.empty:
+            df = pd.DataFrame(columns=['athlete_id', 'season', 'college_final_season'])
+        else:
+            df = college_features.copy()
+            if "season" not in df.columns:
+                df["season"] = np.nan
+            # Keep a stable season key used by downstream scripts.
+            df["college_final_season"] = pd.to_numeric(df["season"], errors="coerce")
+            df = df.drop_duplicates(subset=["athlete_id", "season"])
+        # Join leverage-rate features at athlete-season grain.
+        if not leverage_features.empty:
+            lev = leverage_features.rename(columns={"college_final_season": "season"})
+            lev_keep = ["athlete_id", "season"] + [c for c in ["high_lev_att_rate", "garbage_att_rate", "leverage_poss_share"] if c in lev.columns]
+            df = df.merge(lev[lev_keep], on=["athlete_id", "season"], how="left")
+        df = df.merge(cw, on='athlete_id', how='left')
+        df['has_nba_link'] = df['nba_id'].notna().astype(int)
+    else:
+        df = cw.copy()
+        if not final_college.empty:
+            df = df.merge(final_college, on='athlete_id', how='left')
+        df['has_nba_link'] = 1
+        
+    # 4. Integrate Combine Signals (Measured & Imputed)
+    logger.info("Integrating Combine Athleticism Signals...")
+    combine_meas_path = COMBINE_MEASUREMENTS_PATH if COMBINE_MEASUREMENTS_PATH.exists() else COMBINE_MEASUREMENTS_FALLBACK
+    combine_imp_path = COMBINE_IMPUTED_PATH if COMBINE_IMPUTED_PATH.exists() else COMBINE_IMPUTED_FALLBACK
+    if combine_meas_path.exists() and combine_imp_path.exists():
+        df_meas = pd.read_parquet(combine_meas_path)
+        df_imp = pd.read_parquet(combine_imp_path)
+        
+        # Prefix combine measurement columns to avoid collisions with existing physicals
+        combine_raw_cols = ['wingspan_in', 'standing_reach_in', 'height_wo_shoes_in',
+                            'weight_lbs', 'no_step_vertical_in', 'max_vertical_in',
+                            'lane_agility_s', 'three_quarter_sprint_s']
+        rename_map = {c: f'combine_{c}' for c in combine_raw_cols if c in df_meas.columns}
+        df_meas = df_meas.rename(columns=rename_map)
+        
+        drop_cols = ['nba_id', 'combine_player_name', 'combine_year', 'link_method']
+        df = df.merge(df_meas.drop(columns=[c for c in drop_cols if c in df_meas.columns]), on='athlete_id', how='left')
+        df = df.merge(df_imp, on=['athlete_id', 'college_final_season'], how='left')
+        
+        combine_targets = ['wingspan_in', 'standing_reach_in', 'no_step_vertical_in', 'max_vertical_in', 'lane_agility_s', 'three_quarter_sprint_s']
+        
+        for t in combine_targets:
+            meas_col = f'combine_{t}'
+            imp_col = t.replace('_in', '').replace('_s', '') + '_imputed'
+            sd_col = t.replace('_in', '').replace('_s', '') + '_imputed_sd'
+            final_col = f'combine_{t}_combined'
+            
+            if meas_col in df.columns and imp_col in df.columns:
+                is_meas = df[meas_col].notna()
+                df[final_col] = np.where(is_meas, df[meas_col], df[imp_col])
+                df[f'combine_{t}_uncertainty'] = np.where(is_meas, 0.0, df.get(sd_col, np.nan))
+                df[f'source_combine_{t}'] = np.where(is_meas, 'measured', np.where(df[imp_col].notna(), 'imputed', 'missing'))
+                
+        # Fill global combine flag
+        df['has_combine_measured'] = df.get('has_combine_measured', pd.Series(0, index=df.index)).fillna(0).astype(int)
+        df['has_combine_imputed'] = df.get('is_imputed', pd.Series(0, index=df.index)).fillna(0).astype(int)
+        
+        logger.info(
+            f"  Combine integration complete from {combine_meas_path.name}/{combine_imp_path.name}. "
+            f"Measured rows matching: {df['has_combine_measured'].sum()}"
+        )
 
     # Join canonical college physicals at final college season grain.
     if not physicals_by_season.empty and "college_final_season" in df.columns:
@@ -1828,16 +1925,219 @@ def build_unified_training_table(
             recruit_w
         )
 
-    # Join college impact stack by final season when available.
+    # Join college impact stack by final season with dual season mapping:
+    # exact season and (season + 1) fallback for start-year vs end-year conventions.
     if not college_impact_stack.empty and "college_final_season" in df.columns:
         impact = college_impact_stack.copy()
-        # Align season key to final season key for one-row joins.
-        impact = impact.rename(columns={"season": "college_final_season"})
-        impact_cols = ["athlete_id", "college_final_season"] + [
-            c for c in impact.columns if c not in {"athlete_id", "college_final_season"}
+        impact["season"] = pd.to_numeric(impact["season"], errors="coerce")
+        impact_exact = impact.rename(columns={"season": "college_final_season"})
+        impact_plus1 = impact.copy()
+        impact_plus1["college_final_season"] = impact_plus1["season"] + 1
+        impact_plus1 = impact_plus1.drop(columns=["season"], errors="ignore")
+        impact_cols = [
+            c for c in impact_exact.columns
+            if c not in {"athlete_id", "college_final_season"}
         ]
-        df = df.merge(impact[impact_cols], on=["athlete_id", "college_final_season"], how="left")
-        logger.info(f"  Added college impact stack features: {len(impact_cols) - 2}")
+        df = df.merge(
+            impact_exact[["athlete_id", "college_final_season"] + impact_cols],
+            on=["athlete_id", "college_final_season"],
+            how="left",
+        )
+        p1_cols = ["athlete_id", "college_final_season"] + impact_cols
+        p1_rename = {c: f"{c}_p1" for c in impact_cols}
+        df = df.merge(
+            impact_plus1[p1_cols].rename(columns=p1_rename),
+            on=["athlete_id", "college_final_season"],
+            how="left",
+        )
+        for c in impact_cols:
+            c_p1 = f"{c}_p1"
+            if c_p1 in df.columns:
+                base = pd.to_numeric(df[c], errors="coerce") if c in df.columns else pd.Series(np.nan, index=df.index)
+                alt = pd.to_numeric(df[c_p1], errors="coerce")
+                df[c] = base.combine_first(alt)
+                df.drop(columns=[c_p1], inplace=True, errors="ignore")
+        logger.info(f"  Added college impact stack features (dual-season): {len(impact_cols)}")
+
+    # Join college pathway context v2 with dual season mapping.
+    if not college_pathway_context.empty and "college_final_season" in df.columns:
+        # Linkage Gap Patch:
+        # If athlete_id linkage is broken for recent years, try a name-based fallback.
+        if mode == "supervised":
+            try:
+                con = duckdb.connect(str(DB_PATH), read_only=True)
+                name_map = con.execute("SELECT shooterAthleteId as athlete_id, mode(shooter_name) as shooter_name FROM stg_shots GROUP BY 1").df()
+                con.close()
+                
+                # Standardize pathway context for matching
+                pctx_m = college_pathway_context.merge(name_map, on="athlete_id", how="inner")
+                pctx_m["clean_name"] = clean_name_for_join(pctx_m["shooter_name"])
+                
+                # Standardize supervised table for matching
+                # Ensure we have player_name from dim_nba
+                if "player_name" not in df.columns and not dim_nba.empty:
+                    df = df.merge(dim_nba[["nba_id", "player_name"]], on="nba_id", how="left")
+                
+                if "player_name" in df.columns:
+                    df["clean_name"] = clean_name_for_join(df["player_name"])
+                    
+                    # Target season for matching: prioritize college_final_season, then draft_year_proxy
+                    df["target_season"] = df["college_final_season"].fillna(df.get("draft_year_proxy", np.nan))
+                    df["target_season"] = pd.to_numeric(df["target_season"], errors="coerce")
+                    
+                    # Missing context mask: 
+                    # Row needs patching if its current [athlete_id, season] lacks valid context data
+                    # OR if the existing athlete_id points to a DIFFERENT person (crosswalk swap).
+                    pctx_valid = college_pathway_context[college_pathway_context["ctx_adj_onoff_net"].notna()]
+                    valid_links = set(zip(pctx_valid["athlete_id"], pctx_valid["season"]))
+                    
+                    # Pre-calculate internal name map for name-validation
+                    con = duckdb.connect(str(DB_PATH), read_only=True)
+                    name_map = con.execute("""
+                        SELECT athlete_id, mode(name) as shooter_name FROM (
+                            SELECT shooterAthleteId as athlete_id, shooter_name as name FROM stg_shots
+                            UNION ALL
+                            SELECT athleteId, athlete_name FROM stg_participants
+                        ) GROUP BY 1
+                    """).df()
+                    con.close()
+                    
+                    # Standardize names in map
+                    name_map["clean_name"] = clean_name_for_join(name_map["shooter_name"])
+                    aid_to_name = name_map.set_index("athlete_id")["clean_name"].to_dict()
+
+                    def is_missing_link(row):
+                        aid, name, fseason = row["athlete_id"], row["clean_name"], row["target_season"]
+                        if pd.isna(aid) or pd.isna(fseason): return True
+                        
+                        # Case A: Current ID/Season has NO data in pctx
+                        has_data = (aid, fseason) in valid_links or (aid, fseason - 1) in valid_links
+                        if not has_data: return True
+                        
+                        # Case B: Current ID points to a different name (Crosswalk Corruption)
+                        if aid in aid_to_name:
+                            if aid_to_name[aid] != name:
+                                return True
+                        
+                        return False
+                    
+                    missing_mask = df.apply(is_missing_link, axis=1)
+                    
+                    if missing_mask.any():
+                        logger.info(f"  Linkage Patch Debug: missing_mask count = {missing_mask.sum()}")
+                        
+                        pctx_m_ext = college_pathway_context.merge(name_map, on="athlete_id", how="inner")
+                        pctx_m_ext["clean_name"] = clean_name_for_join(pctx_m_ext["shooter_name"])
+                        pctx_v_ext = pctx_m_ext[pctx_m_ext["ctx_adj_onoff_net"].notna()]
+                        
+                        for shift in [0, 1]:
+                            patch_c = pctx_v_ext.copy()
+                            # Use season + shift to align pctx season with the prospect's draft/final season
+                            patch_c["target_season"] = patch_c["season"] + shift
+                            patch_map = patch_c.drop_duplicates(subset=["clean_name", "target_season"])
+                            
+                            patch = df[missing_mask].merge(
+                                patch_map[["clean_name", "target_season", "athlete_id"]],
+                                on=["clean_name", "target_season"],
+                                how="inner",
+                                suffixes=("", "_patched")
+                            )
+                            
+                            if not patch.empty:
+                                # Trace ALL cohort patches
+                                trace_cohort = patch[patch.target_season.isin([2021, 2022, 2023])]
+                                for _, p_row in trace_cohort.iterrows():
+                                    logger.info(f"  [COHORT PATCH] NBA:{p_row['nba_id']} | NAME:{p_row['clean_name']} | AID:{p_row['athlete_id']} -> {p_row['athlete_id_patched']} | T_SEASON:{p_row['target_season']}")
+                                
+                                patch_dict = patch.set_index("nba_id")["athlete_id_patched"].to_dict()
+                                # Update only the missing links
+                                df["athlete_id"] = df["nba_id"].map(patch_dict).combine_first(df["athlete_id"])
+                                # Update missing mask for next shift
+                                missing_mask = df.apply(is_missing_link, axis=1)
+                        
+                        logger.info(f"  Applied name-based Linkage Patch: Updated athlete_ids for {len(df) - missing_mask.sum()} players")
+                    
+                    df = df.drop(columns=["clean_name", "target_season"], errors="ignore")
+            except Exception as e:
+                logger.warning(f"Failed to apply Linkage Patch: {e}")
+
+        pctx = college_pathway_context.copy()
+        pctx["season"] = pd.to_numeric(pctx["season"], errors="coerce")
+        pctx_exact = pctx.rename(columns={"season": "college_final_season"})
+        pctx_plus1 = pctx.copy()
+        pctx_plus1["college_final_season"] = pctx_plus1["season"] + 1
+        pctx_plus1 = pctx_plus1.drop(columns=["season"], errors="ignore")
+        pctx_cols = [c for c in pctx_exact.columns if c not in {"athlete_id", "college_final_season"}]
+        df = df.merge(
+            pctx_exact[["athlete_id", "college_final_season"] + pctx_cols],
+            on=["athlete_id", "college_final_season"],
+            how="left",
+        )
+        p1_cols = ["athlete_id", "college_final_season"] + pctx_cols
+        p1_rename = {c: f"{c}_p1" for c in pctx_cols}
+        df = df.merge(
+            pctx_plus1[p1_cols].rename(columns=p1_rename),
+            on=["athlete_id", "college_final_season"],
+            how="left",
+        )
+        numeric_path_cols = {"path_onoff_poss", "path_onoff_seconds", "path_onoff_reliability_weight"}
+        for c in pctx_cols:
+            c_p1 = f"{c}_p1"
+            if c_p1 not in df.columns:
+                continue
+            base = df[c] if c in df.columns else pd.Series(np.nan, index=df.index, dtype=float)
+            if pd.api.types.is_numeric_dtype(base) or c.startswith("ctx_") or c in numeric_path_cols:
+                base = pd.to_numeric(base, errors="coerce").astype(float)
+                alt = pd.to_numeric(df[c_p1], errors="coerce").astype(float)
+            else:
+                alt = df[c_p1]
+            # Prefer base, fill with alt where base is NaN (avoids FutureWarning from combine_first with empty/mixed dtypes).
+            out = base.fillna(alt)
+            df[c] = out
+            df.drop(columns=[c_p1], inplace=True, errors="ignore")
+
+        # Prior-season fallback:
+        # if final-season context is missing, use nearest prior valid season
+        # (real observed data only) within a bounded window.
+        left = df[["athlete_id", "college_final_season"]].copy()
+        left = left.reset_index(drop=False).rename(columns={"index": "_rid"})
+        # Only fallback to rows that actually HAVE data.
+        cand = pctx[pctx["ctx_adj_onoff_net"].notna()].copy()
+        cand["cand_final_season"] = cand["season"] + 1
+        cand = cand.drop(columns=["season"], errors="ignore")
+        cand_join = left.merge(cand, on="athlete_id", how="left")
+        cand_join["delta"] = (
+            pd.to_numeric(cand_join["college_final_season"], errors="coerce")
+            - pd.to_numeric(cand_join["cand_final_season"], errors="coerce")
+        )
+        cand_join = cand_join[
+            cand_join["delta"].notna()
+            & (cand_join["delta"] >= 0)
+            & (cand_join["delta"] <= 4)
+        ].copy()
+        if not cand_join.empty:
+            cand_join = cand_join.sort_values(["_rid", "delta"], ascending=[True, True])
+            best = cand_join.drop_duplicates(subset=["_rid"], keep="first")
+            best_cols = ["_rid"] + [c for c in pctx_cols if c in best.columns]
+            best = best[best_cols].rename(columns={c: f"{c}_prior" for c in pctx_cols if c in best.columns})
+            df = df.reset_index(drop=True)
+            df["_rid"] = np.arange(len(df))
+            df = df.merge(best, on="_rid", how="left")
+            for c in pctx_cols:
+                c_prior = f"{c}_prior"
+                if c_prior not in df.columns:
+                    continue
+                base = df[c] if c in df.columns else pd.Series(np.nan, index=df.index, dtype=float)
+                if pd.api.types.is_numeric_dtype(base) or c.startswith("ctx_") or c in numeric_path_cols:
+                    base = pd.to_numeric(base, errors="coerce").astype(float)
+                    alt = pd.to_numeric(df[c_prior], errors="coerce").astype(float)
+                else:
+                    alt = df[c_prior]
+                out = base.fillna(alt)
+                df[c] = out
+                df.drop(columns=[c_prior], inplace=True, errors="ignore")
+            df.drop(columns=["_rid"], inplace=True, errors="ignore")
+        logger.info(f"  Added college pathway context features (dual-season): {len(pctx_cols)}")
 
     # Impact aliases used by inference/ranking contract.
     alias_map = {
@@ -1901,6 +2201,27 @@ def build_unified_training_table(
             m = pd.to_numeric(df[mask], errors="coerce")
             df[mask] = np.where(m.notna(), m, df[feat].isna().astype(int)).astype(int)
 
+    # Pathway context v2 contract flags.
+    if "has_ctx_onoff_core" not in df.columns:
+        ctx_core_cols = [c for c in [
+            "ctx_adj_onoff_net", "ctx_adj_onoff_ortg", "ctx_adj_onoff_drtg",
+            "ctx_adj_onoff_ast_per100", "ctx_adj_onoff_reb_per100",
+            "ctx_adj_onoff_stl_per100", "ctx_adj_onoff_blk_per100", "ctx_adj_onoff_tov_per100",
+            "ctx_adj_onoff_transition", "ctx_adj_onoff_dunk_pressure",
+        ] if c in df.columns]
+        df["has_ctx_onoff_core"] = df[ctx_core_cols].notna().any(axis=1).astype(int) if ctx_core_cols else 0
+    else:
+        df["has_ctx_onoff_core"] = pd.to_numeric(df["has_ctx_onoff_core"], errors="coerce").fillna(0).astype(int)
+
+    if "has_ctx_velocity" not in df.columns:
+        ctx_vel_cols = [c for c in [
+            "ctx_vel_net_yoy", "ctx_vel_ortg_yoy", "ctx_vel_drtg_yoy",
+            "ctx_vel_ast_yoy", "ctx_vel_reb_yoy", "ctx_vel_transition_yoy", "ctx_vel_dunk_pressure_yoy",
+        ] if c in df.columns]
+        df["has_ctx_velocity"] = df[ctx_vel_cols].notna().any(axis=1).astype(int) if ctx_vel_cols else 0
+    else:
+        df["has_ctx_velocity"] = pd.to_numeric(df["has_ctx_velocity"], errors="coerce").fillna(0).astype(int)
+
     # Join athlete-level college development-rate features.
     if not college_dev_rate.empty:
         dev = college_dev_rate.copy()
@@ -1925,27 +2246,35 @@ def build_unified_training_table(
         logger.info(f"  Added {len(trajectory_features.columns)-1} trajectory features")
     
     # Join NBA targets
-    df = df.merge(nba_targets, on='nba_id', how='inner')  # Inner: must have at least one target
+    if mode == "supervised":
+        df = df.merge(nba_targets, on='nba_id', how='inner')
+    else:
+        df = df.merge(nba_targets, on='nba_id', how='left')
+        
+    # Drop target columns if foundation mode
+    if mode == "foundation":
+        drop_targs = [c for c in nba_targets.columns if c != 'nba_id']
+        df = df.drop(columns=[c for c in drop_targs if c in df.columns])
 
-    # Enforce one row per nba_id to keep downstream joins deterministic.
-    # Crosswalk noise can occasionally produce duplicate athlete->nba mappings.
-    if 'nba_id' in df.columns:
-        dup_count = int(df.duplicated(subset=['nba_id']).sum())
+    # Enforce Duplicates / Grain Contract
+    if mode == "supervised":
+        if 'nba_id' in df.columns:
+            dup_count = int(df.duplicated(subset=['nba_id']).sum())
+            if dup_count > 0:
+                sort_cols = ['nba_id']
+                ascending = [True]
+                if 'college_final_season' in df.columns:
+                    sort_cols.append('college_final_season')
+                    ascending.append(False)
+                df = df.sort_values(sort_cols, ascending=ascending).drop_duplicates(subset=['nba_id'], keep='first')
+                logger.warning(f"Supervised Mode: Dropped {dup_count} duplicate nba_id rows.")
+    elif mode in ["foundation", "joint"]:
+        # Foundation/joint grain is athlete_id + season.
+        dedupe_keys = ['athlete_id', 'season'] if 'season' in df.columns else ['athlete_id', 'college_final_season']
+        dup_count = int(df.duplicated(subset=dedupe_keys).sum())
         if dup_count > 0:
-            sort_cols = ['nba_id']
-            ascending = [True]
-            if 'college_final_season' in df.columns:
-                sort_cols.append('college_final_season')
-                ascending.append(False)
-            if 'career_years' in df.columns:
-                sort_cols.append('career_years')
-                ascending.append(False)
-            df = df.sort_values(sort_cols, ascending=ascending).drop_duplicates(subset=['nba_id'], keep='first')
-            logger.warning(
-                "Detected %d duplicate nba_id rows from joins; kept one row per nba_id (now %d rows).",
-                dup_count,
-                len(df),
-            )
+            df = df.sort_values(dedupe_keys).drop_duplicates(subset=dedupe_keys, keep='first')
+            logger.warning(f"{mode.capitalize()} Mode: Dropped {dup_count} duplicate athlete_id+season rows.")
 
     # Join draft/rookie metadata for cohort filtering + downstream audits.
     if not dim_nba.empty:
@@ -2015,6 +2344,38 @@ def build_unified_training_table(
             df["draft_year_proxy"] = draft_proxy.loc[df.index]
         else:
             logger.warning("min_draft_year set but no draft_year/rookie_season_year columns available; skipping filter.")
+
+    # Build target maturity + target-availability masks after rookie metadata join.
+    # (Do this here, not earlier, to avoid all-null maturity fields.)
+    df['target_asof_year'] = 2024
+    if 'rookie_season_year' in df.columns:
+        rookie_year = pd.to_numeric(df['rookie_season_year'], errors='coerce')
+        df['epm_years_observed'] = (df['target_asof_year'] - rookie_year + 1).clip(lower=0)
+        df['rapm_years_observed'] = (df['target_asof_year'] - rookie_year + 1).clip(lower=0)
+        df['is_epm_mature'] = (
+            pd.to_numeric(df['epm_years_observed'], errors='coerce').ge(3).fillna(False).astype(int)
+        )
+        df['is_rapm_mature'] = (
+            pd.to_numeric(df['rapm_years_observed'], errors='coerce').ge(3).fillna(False).astype(int)
+        )
+    else:
+        df['epm_years_observed'] = np.nan
+        df['rapm_years_observed'] = np.nan
+        df['is_epm_mature'] = 0
+        df['is_rapm_mature'] = 0
+
+    # Availability masks must reference real column names on this table.
+    rapm_src = df['y_peak_ovr'] if 'y_peak_ovr' in df.columns else pd.Series(np.nan, index=df.index)
+    df['has_peak_rapm_target'] = pd.to_numeric(rapm_src, errors='coerce').notna().astype(int)
+    peak_epm_cols = [c for c in ['y_peak_epm_window', 'y_peak_epm_3y', 'y_peak_epm_2y', 'y_peak_epm_1y'] if c in df.columns]
+    if peak_epm_cols:
+        df['has_peak_epm_target'] = (
+            pd.concat([pd.to_numeric(df[c], errors='coerce') for c in peak_epm_cols], axis=1).notna().any(axis=1).astype(int)
+        )
+    else:
+        df['has_peak_epm_target'] = 0
+    y1_src = df['year1_epm_tot'] if 'year1_epm_tot' in df.columns else pd.Series(np.nan, index=df.index)
+    df['has_year1_epm_target'] = pd.to_numeric(y1_src, errors='coerce').notna().astype(int)
     
     logger.info(f"Joined dataset: {len(df):,} rows")
     
@@ -2052,18 +2413,61 @@ def build_unified_training_table(
     #    Skipping here to avoid recomputing on the filtered cohort (which causes
     #    train-serve skew).
     
-    # 6. Filter: require minimum number of targets
-    target_cols = [PRIMARY_TARGET] + AUX_TARGETS
-    target_cols = [c for c in target_cols if c in df.columns]
-    
-    if target_cols:
-        target_count = df[target_cols].notna().sum(axis=1)
-        df = df[target_count >= min_targets]
-        logger.info(f"After target filter (min={min_targets}): {len(df):,} rows")
+    # 6. Filter: require minimum number of targets (Supervised only)
+    if mode == "supervised":
+        target_cols = [PRIMARY_TARGET] + AUX_TARGETS
+        target_cols = [c for c in target_cols if c in df.columns]
+        
+        if target_cols:
+            target_count = df[target_cols].notna().sum(axis=1)
+            df = df[target_count >= min_targets]
+            logger.info(f"After target filter (min={min_targets}): {len(df):,} rows")
     
     # 7. Log coverage statistics
     log_coverage_stats(df)
     
+    # 8. Active Feature Registry Gate
+    feature_branches = [
+        "dunk_rate", "putback_rate", "rim_pressure_index", "contest_proxy",
+        "transition_freq", "deflection_proxy", "pressure_handle_proxy",
+        "avg_shot_dist", "corner_3_rate", "deep_3_rate", "rim_purity"
+    ]
+    branch_health = []
+    for branch in feature_branches:
+        col = f"college_{branch}" if f"college_{branch}" in df.columns else branch
+        if col in df.columns:
+            non_null = df[col].notna().sum()
+            non_zero = (pd.to_numeric(df[col], errors='coerce').fillna(0) > 0).sum()
+            total = len(df)
+            health = {
+                "branch": branch,
+                "feature_col": col,
+                "non_null_rate": non_null / total if total > 0 else 0,
+                "non_zero_rate": non_zero / total if total > 0 else 0,
+            }
+            # Gate: Auto-demote/mask any branch with < 1% non-zero rate
+            if health['non_zero_rate'] < 0.01:
+                health['status'] = 'INACTIVE_AUTO_MASKED'
+                df[col] = np.nan
+            else:
+                health['status'] = 'ACTIVE'
+            branch_health.append(health)
+            
+    if branch_health:
+        health_df = pd.DataFrame(branch_health)
+        health_df.to_csv(AUDIT_DIR / f"feature_branch_health_{mode}.csv", index=False)
+        logger.info(f"Published feature branch health audit: feature_branch_health_{mode}.csv")
+    
+    # 9. Target Maturity Report
+    if mode in ["supervised", "joint"] and "draft_year_proxy" in df.columns:
+        mat_df = df.groupby("draft_year_proxy").agg(
+            total_players=("athlete_id", "nunique"),
+            epm_mature=("is_epm_mature", "sum"),
+            rapm_mature=("is_rapm_mature", "sum")
+        ).reset_index()
+        mat_df.to_csv(AUDIT_DIR / f"target_maturity_report_{mode}.csv", index=False)
+        logger.info(f"Published target maturity report: target_maturity_report_{mode}.csv")
+
     return df
 
 
@@ -2156,29 +2560,65 @@ def save_games_played_audits(df: pd.DataFrame) -> None:
 
 def main():
     """Main entry point."""
-    # Build the table
+    import argparse
+    import json
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', choices=['supervised', 'foundation', 'joint'], default='supervised')
+    args = parser.parse_args()
+    
+    logger.info(f"Starting build_unified_training_table in {args.mode.upper()} mode")
+    
     df = build_unified_training_table(
         use_career_features=True,
         apply_normalization=True,
         min_targets=1,
-        min_draft_year=2011,
+        min_draft_year=2011 if args.mode == 'supervised' else None,
+        mode=args.mode,
     )
     
     if df.empty:
         logger.error("Failed to build training table - no data!")
         return
     
-    # Save
-    save_training_table(df)
+    file_map = {
+        'supervised': 'unified_training_table_supervised.parquet',
+        'foundation': 'foundation_college_table.parquet',
+        'joint': 'unified_training_table_joint.parquet'
+    }
+    
+    filename = file_map[args.mode]
+    save_training_table(df, filename=filename)
     save_games_played_audits(df)
+    
+    # Generate contract report
+    if args.mode in ("foundation", "joint"):
+        grain_keys = ["athlete_id", "season"] if "season" in df.columns else ["athlete_id", "college_final_season"]
+        grain_dups = int(df.duplicated(subset=grain_keys).sum())
+    else:
+        grain_keys = ["nba_id"]
+        grain_dups = int(df.duplicated(subset=["nba_id"]).sum()) if "nba_id" in df.columns else len(df)
+
+    report = {
+        "mode": args.mode,
+        "row_count": len(df),
+        "nba_id_nulls": int(df['nba_id'].isna().sum()) if 'nba_id' in df.columns else 0,
+        "nba_id_unique": int(df['nba_id'].nunique()) if 'nba_id' in df.columns else 0,
+        "athlete_id_unique": int(df['athlete_id'].nunique()) if 'athlete_id' in df.columns else 0,
+        "grain_keys": grain_keys,
+        "grain_duplicate_rows": grain_dups,
+        "epm_years_observed_non_null_rate": float(pd.to_numeric(df.get("epm_years_observed"), errors="coerce").notna().mean()) if "epm_years_observed" in df.columns else 0.0,
+    }
+    rpt_path = AUDIT_DIR / f"surface_grain_contract_report_{args.mode}.json"
+    with open(rpt_path, 'w') as f:
+        json.dump(report, f, indent=2)
+    logger.info(f"Contract report saved: {rpt_path}")
     
     # Summary
     logger.info("\n" + "=" * 60)
-    logger.info("UNIFIED TRAINING TABLE COMPLETE")
+    logger.info(f"UNIFIED TRAINING TABLE ({args.mode.upper()}) COMPLETE")
     logger.info("=" * 60)
     logger.info(f"Rows: {len(df):,}")
     logger.info(f"Columns: {len(df.columns)}")
-    logger.info(f"Feature columns: {[c for c in df.columns if c.startswith('college_') or c.startswith('final_') or c.startswith('career_')]}")
 
 
 if __name__ == "__main__":
