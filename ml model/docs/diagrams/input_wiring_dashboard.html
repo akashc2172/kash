@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Input Wiring Dashboard</title>
+<style>
+:root {
+  --bg:#0f1115;
+  --panel:#171a21;
+  --text:#ebeff7;
+  --muted:#9aa6b2;
+  --accent:#26b3a8;
+}
+body {margin:0;background:radial-gradient(1200px 700px at 20% -10%,#1b2638 0%,#0f1115 45%),linear-gradient(180deg,#0f1115,#10141b);color:var(--text);font-family:Manrope,ui-sans-serif,system-ui,sans-serif;}
+.wrap {max-width:1400px;margin:0 auto;padding:24px;}
+.header {display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;}
+.h1 {font-size:30px;font-weight:800;margin:0;}
+.sub {color:var(--muted);margin-top:6px;}
+.grid {display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:18px;}
+.card {background:var(--panel);border:1px solid #273041;border-radius:12px;padding:14px;}
+.span-12{grid-column:span 12;}
+table {width:100%;border-collapse:collapse;font-size:13px;}
+th,td {padding:8px 10px;border-bottom:1px solid #273041;text-align:left;}
+th {color:#bcd2e8;font-weight:700;}
+code {background:#121722;padding:2px 6px;border-radius:4px;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1 class="h1">Input Wiring Dashboard</h1>
+        <div class="sub">Per-column source and category</div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card span-12">
+        <h3>Per-column wiring (selected inputs)</h3>
+        <p>Canonical source for each model input. Full schema in <code>docs/model_inputs_manifest/</code>.</p>
+        <table class="wiring-table">
+          <thead><tr><th>Column</th><th>Source</th><th>Category</th></tr></thead>
+          <tbody>
+            <tr><td><code>college_rim_att</code></td><td>college_features_v1 / shot profile</td><td>shooting</td></tr>
+            <tr><td><code>college_rim_made</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_rim_fg_pct</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_rim_share</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_mid_att</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_three_att</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_three_fg_pct</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_ft_pct</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_fga_total</code></td><td>college_features_v1</td><td>shooting</td></tr>
+            <tr><td><code>college_minutes_total</code></td><td>college_features_v1 + backfill/hist</td><td>exposure</td></tr>
+            <tr><td><code>college_games_played</code></td><td>games_played_selection (api/backfill/hist/derived)</td><td>exposure</td></tr>
+            <tr><td><code>college_ast_total_per100poss</code></td><td>derived: college_ast_total / poss_proxy</td><td>rates</td></tr>
+            <tr><td><code>college_orb_total_per100poss</code></td><td>derived: college_orb_total / poss_proxy</td><td>rates</td></tr>
+            <tr><td><code>college_drb_total_per100poss</code></td><td>derived: college_drb_total / poss_proxy</td><td>rates</td></tr>
+            <tr><td><code>college_trb_total_per100poss</code></td><td>derived: college_trb_total / poss_proxy</td><td>rates</td></tr>
+            <tr><td><code>college_height_in</code></td><td>college physicals + combine + recruit</td><td>physical</td></tr>
+            <tr><td><code>college_weight_lbs</code></td><td>college physicals + combine + recruit</td><td>physical</td></tr>
+            <tr><td><code>wingspan_in</code></td><td>combine / nba_wingspan_bridge</td><td>physical</td></tr>
+            <tr><td><code>college_rapm_standard</code></td><td>college_impact_stack_v1</td><td>impact</td></tr>
+            <tr><td><code>college_on_net_rating</code></td><td>college_impact_stack_v1</td><td>impact</td></tr>
+            <tr><td><code>final_trueShootingPct</code></td><td>prospect_career_v1</td><td>career</td></tr>
+            <tr><td><code>final_usage</code></td><td>prospect_career_v1</td><td>career</td></tr>
+            <tr><td><code>career_years</code></td><td>prospect_career_v1</td><td>career</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -19,6 +19,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error
 
@@ -26,14 +27,24 @@ import sys
 
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "scripts"))
-from train_2026_model import Stack2026Model, TARGET_COL  # noqa: E402
+from train_2026_model import (  # noqa: E402
+    LAMBDA_3Y,
+    LAMBDA_RANK,
+    LAMBDA_TRAJ,
+    N_TARGETS_TRAIN,
+    TARGET_COL,
+    TARGET_COL_3Y,
+    TARGET_COL_TRAJ,
+    TARGET_COL_WINDOW_FALLBACK,
+    Stack2026Model,
+    heteroscedastic_loss,
+)
 
 SUPERVISED_PATH = BASE / "data" / "training" / "unified_training_table_supervised.parquet"
 FOUNDATION_PATH = BASE / "data" / "training" / "foundation_college_table.parquet"
 MODEL_DIR = BASE / "models" / "stack2026"
 ROLLING_MODEL_DIR = MODEL_DIR / "rolling"
-AUDIT_DIR = BASE / "data" / "audit" / "rolling_yearly"
-OUT_DIR = BASE / "data" / "inference" / "rolling_yearly"
+DEFAULT_OUTPUT_SUBDIR = "rolling_yearly"
 
 
 def _as_numeric_matrix(df: pd.DataFrame, cols: List[str]) -> np.ndarray:
@@ -64,31 +75,39 @@ def _rank_export(
     sd: np.ndarray,
     target_col: str,
     id_cols_priority: List[str],
+    extra_cols: List[str] | None = None,
 ) -> pd.DataFrame:
     id_cols = [c for c in id_cols_priority if c in df.columns]
-    out = df[id_cols].copy() if id_cols else pd.DataFrame(index=df.index)
-    out["pred_mu"] = mu
-    out["pred_pathway_integrated_mu"] = mu
-    out["pred_sd"] = sd
-    out["pred_upside"] = out["pred_mu"] + out["pred_sd"]
-    out["pred_floor"] = out["pred_mu"] - out["pred_sd"]
-    out["pred_rank"] = out["pred_mu"].rank(ascending=False, method="min").astype(int)
-    out["pred_rank_top_weighted"] = out["pred_rank"]
-    if target_col in df.columns:
-        out["actual_target"] = pd.to_numeric(df[target_col], errors="coerce")
-        non_null = out["actual_target"].notna()
-        out["actual_rank"] = np.nan
-        if non_null.any():
-            out.loc[non_null, "actual_rank"] = (
-                out.loc[non_null, "actual_target"]
-                .rank(ascending=False, method="min")
-                .astype(int)
-            )
-        out["rank_error"] = np.where(
-            out["actual_rank"].notna(),
-            out["pred_rank"] - out["actual_rank"],
-            np.nan,
-        )
+    base = df[id_cols].copy() if id_cols else pd.DataFrame(index=df.index)
+    pred_mu = np.asarray(mu, dtype=np.float64)
+    pred_sd = np.asarray(sd, dtype=np.float64)
+    pred_rank = pd.Series(pred_mu).rank(ascending=False, method="min").astype(int)
+    actual_target = pd.to_numeric(df[target_col], errors="coerce") if target_col in df.columns else pd.Series(np.nan, index=df.index)
+    actual_rank = pd.Series(np.nan, index=df.index)
+    if actual_target.notna().any():
+        actual_rank = actual_target.rank(ascending=False, method="min").astype(float)
+        actual_rank = actual_rank.where(actual_target.notna(), np.nan)
+    rank_error = np.where(actual_rank.notna(), pred_rank.values - actual_rank.values, np.nan)
+    parts = [
+        base,
+        pd.DataFrame({
+            "pred_mu": pred_mu,
+            "pred_pathway_integrated_mu": pred_mu,
+            "pred_sd": pred_sd,
+            "pred_upside": pred_mu + pred_sd,
+            "pred_floor": pred_mu - pred_sd,
+            "pred_rank": pred_rank.values,
+            "pred_rank_top_weighted": pred_rank.values,
+            "actual_target": actual_target.values,
+            "actual_rank": actual_rank.values,
+            "rank_error": rank_error,
+        }, index=df.index),
+    ]
+    if extra_cols:
+        add_cols = [c for c in extra_cols if c in df.columns and c not in base.columns]
+        if add_cols:
+            parts.append(df[add_cols].copy())
+    out = pd.concat(parts, axis=1).copy()
     return out.sort_values("pred_rank")
 
 
@@ -164,10 +183,12 @@ def _year_gate(
     return metrics
 
 
-def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
+def run(start_year: int, end_year: int, epochs: int, lr: float, output_subdir: str = DEFAULT_OUTPUT_SUBDIR) -> None:
+    out_dir = BASE / "data" / "inference" / output_subdir
+    audit_dir = BASE / "data" / "audit" / output_subdir
     ROLLING_MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    audit_dir.mkdir(parents=True, exist_ok=True)
 
     pretrained = torch.load(MODEL_DIR / "pretrained_encoder.pt", weights_only=False)
     base_supervised = torch.load(MODEL_DIR / "stack2026_supervised.pt", weights_only=False)
@@ -197,7 +218,8 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
 
     for year in range(start_year, end_year + 1):
         train_df = supervised[supervised["draft_year_proxy"] <= (year - 1)].copy()
-        y = pd.to_numeric(train_df[TARGET_COL], errors="coerce")
+        primary_col = TARGET_COL if TARGET_COL in train_df.columns else TARGET_COL_WINDOW_FALLBACK
+        y = pd.to_numeric(train_df[primary_col], errors="coerce")
         mature = pd.to_numeric(train_df.get("is_epm_mature"), errors="coerce").fillna(0).astype(int)
         keep = y.notna() & (mature == 1)
         if keep.sum() < 100:
@@ -210,9 +232,9 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         replay_df = pd.DataFrame()
         if year - 2 >= start_year and REPLAY_STRATIFY_COL in supervised.columns:
             past = supervised[supervised["draft_year_proxy"] <= (year - 2)].copy()
-            y_past = pd.to_numeric(past[TARGET_COL], errors="coerce")
-            keep_past = y_past.notna()
-            past = past.loc[keep_past]
+            y_past = pd.to_numeric(past[primary_col], errors="coerce") if primary_col in past.columns else pd.Series(dtype=float)
+            keep_past = y_past.notna() if len(y_past) else pd.Series([], dtype=bool)
+            past = past.loc[keep_past] if keep_past.any() else pd.DataFrame()
             if len(past) > 0:
                 n_replay = min(REPLAY_SIZE, len(past))
                 try:
@@ -227,33 +249,84 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
 
         x_train = _as_numeric_matrix(train_df, feat_cols)
         x_train = (x_train - means) / stds
-        y_raw = pd.to_numeric(train_df[TARGET_COL], errors="coerce").to_numpy(dtype=np.float32)
-        y_mean = float(np.nanmean(y_raw))
-        y_std = float(np.nanstd(y_raw))
-        if y_std < 1e-6:
-            y_std = 1.0
-        y_train = ((y_raw - y_mean) / y_std).reshape(-1, 1)
         ctx_train = _extract_context(train_df, context_cols)
 
+        # Multi-head targets (primary + trajectory + 3y) aligned with Phase B for ranking/trajectory signal
+        t_primary = pd.to_numeric(train_df[primary_col], errors="coerce") if primary_col in train_df.columns else pd.Series(np.nan, index=train_df.index)
+        t_3y = pd.to_numeric(train_df[TARGET_COL_3Y], errors="coerce") if TARGET_COL_3Y in train_df.columns else pd.Series(np.nan, index=train_df.index)
+        t_traj = pd.to_numeric(train_df[TARGET_COL_TRAJ], errors="coerce") if TARGET_COL_TRAJ in train_df.columns else pd.Series(np.nan, index=train_df.index)
+        y_raw_1 = t_primary.to_numpy(dtype=np.float32)
+        y_raw_3y = t_3y.to_numpy(dtype=np.float32)
+        y_raw_traj = t_traj.to_numpy(dtype=np.float32)
+        y_mean = float(np.nanmean(y_raw_1))
+        y_std = float(np.nanstd(y_raw_1))
+        if y_std < 1e-6:
+            y_std = 1.0
+        y_norm_1 = (y_raw_1 - y_mean) / y_std
+        fin_3y = np.isfinite(y_raw_3y)
+        y_mean_3y = float(np.nanmean(y_raw_3y[fin_3y])) if fin_3y.any() else 0.0
+        y_std_3y = float(np.nanstd(y_raw_3y[fin_3y])) if fin_3y.sum() > 1 else 1.0
+        if y_std_3y < 1e-6:
+            y_std_3y = 1.0
+        y_norm_3y = np.where(fin_3y, (y_raw_3y - y_mean_3y) / y_std_3y, 0.0)
+        mask_3y = fin_3y.astype(np.float32)
+        fin_traj = np.isfinite(y_raw_traj)
+        y_mean_traj = float(np.nanmean(y_raw_traj[fin_traj])) if fin_traj.any() else 0.0
+        y_std_traj = float(np.nanstd(y_raw_traj[fin_traj])) if fin_traj.sum() > 1 else 1.0
+        if y_std_traj < 1e-6:
+            y_std_traj = 1.0
+        y_norm_traj = np.where(fin_traj, (y_raw_traj - y_mean_traj) / y_std_traj, 0.0)
+        mask_traj = fin_traj.astype(np.float32)
+        y_fill = np.stack([y_norm_1, y_norm_traj, mask_traj, y_norm_3y, mask_3y], axis=1)
+        y_t = torch.FloatTensor(y_fill)
+
         prev_ckpt = torch.load(prev_ckpt_path, weights_only=False) if prev_ckpt_path.exists() else {}
-        n_targets = int(prev_ckpt.get("n_targets", 1)) if prev_ckpt else 1
-        model = Stack2026Model(input_dim=input_dim, use_hypernetwork=len(context_cols) > 0, n_targets=max(1, n_targets))
+        n_targets = max(1, int(prev_ckpt.get("n_targets", N_TARGETS_TRAIN)))
+        model = Stack2026Model(input_dim=input_dim, use_hypernetwork=len(context_cols) > 0, n_targets=n_targets)
         if prev_ckpt:
             model.load_state_dict(prev_ckpt["model_state_dict"])
         prev_params = {n: p.clone().detach() for n, p in model.named_parameters()} if prev_ckpt and EWC_LAMBDA > 0 else {}
 
-        model.train()
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+        # Freeze encoder for first 20 epochs (Phase B alignment)
+        for param in model.autoencoder.encoder.parameters():
+            param.requires_grad = False
+        optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=1e-4)
         x_t = torch.FloatTensor(x_train)
-        y_t = torch.FloatTensor(y_train)
         c_t = torch.FloatTensor(ctx_train) if len(context_cols) > 0 else None
-        for _ in range(epochs):
+
+        for epoch in range(epochs):
+            if epoch == 20:
+                for param in model.autoencoder.encoder.parameters():
+                    param.requires_grad = True
+                optimizer = torch.optim.AdamW(model.parameters(), lr=lr * 0.1, weight_decay=1e-4)
+            model.train()
             mu, logvar = model(x_t, c_t)
             logvar = torch.clamp(logvar, -4.0, 4.0)
-            mu_primary = mu[:, 0:1] if mu.shape[1] > 1 else mu
-            logvar_primary = logvar[:, 0:1] if logvar.shape[1] > 1 else logvar
-            precision = torch.exp(-logvar_primary)
-            loss = 0.5 * (precision * (y_t - mu_primary) ** 2 + logvar_primary).mean()
+            nll1 = heteroscedastic_loss(mu[:, 0:1], logvar[:, 0:1], y_t[:, 0:1])
+            loss = nll1
+            mask_traj_b = y_t[:, 2] > 0.5
+            if mask_traj_b.any() and mu.shape[1] > 1:
+                nll_traj = heteroscedastic_loss(
+                    mu[:, 1:2][mask_traj_b], logvar[:, 1:2][mask_traj_b], y_t[:, 1:2][mask_traj_b]
+                )
+                loss = loss + LAMBDA_TRAJ * nll_traj
+            mask_3y_b = y_t[:, 4] > 0.5
+            if mask_3y_b.any() and mu.shape[1] > 2:
+                nll3y = heteroscedastic_loss(
+                    mu[:, 2:3][mask_3y_b], logvar[:, 2:3][mask_3y_b], y_t[:, 3:4][mask_3y_b]
+                )
+                loss = loss + LAMBDA_3Y * nll3y
+            if LAMBDA_RANK > 0 and mu.shape[1] > 0:
+                y_prim = y_t[:, 0]
+                mu_prim = mu[:, 0]
+                n_ = mu_prim.size(0)
+                idx = torch.randperm(n_, device=mu_prim.device)
+                half = n_ // 2
+                i, j = idx[:half], idx[half : half * 2]
+                if i.numel() > 0 and j.numel() > 0:
+                    margin = 0.1
+                    rank_loss = F.relu(margin - (mu_prim[i] - mu_prim[j]) * (y_prim[i] - y_prim[j]).sign()).mean()
+                    loss = loss + LAMBDA_RANK * rank_loss
             if prev_params and EWC_LAMBDA > 0:
                 ewc = 0.0
                 for n, p in model.named_parameters():
@@ -262,6 +335,7 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
                 loss = loss + EWC_LAMBDA * 0.5 * ewc
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
         year_model_path = ROLLING_MODEL_DIR / f"model_{year}.pt"
@@ -277,6 +351,12 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
                 "n_targets": n_targets,
                 "year": int(year),
                 "train_rows": int(len(train_df)),
+                "y_mean": float(y_mean),
+                "y_std": float(y_std),
+                "y_mean_traj": float(y_mean_traj),
+                "y_std_traj": float(y_std_traj),
+                "y_mean_3y": float(y_mean_3y),
+                "y_std_3y": float(y_std_3y),
             },
             year_model_path,
         )
@@ -309,21 +389,25 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
             pred_sd_all = np.exp(0.5 * lv_primary.numpy()) * y_std
 
         id_cols = ["player_name", "nba_id", "athlete_id", "bbr_id", "draft_year_proxy", "college_final_season", "season"]
-        ranked_all = _rank_export(all_df, pred_mu_all, pred_sd_all, TARGET_COL, id_cols)
+        input_review_cols = [c for c in (feat_cols + context_cols) if c in all_df.columns]
+        ranked_all = _rank_export(all_df, pred_mu_all, pred_sd_all, TARGET_COL, id_cols, extra_cols=input_review_cols)
         # NBA-mapped = same board order, only rows with nba_id (so pred_rank is global rank on full board)
         if "nba_id" in ranked_all.columns:
             has_nba = pd.to_numeric(ranked_all["nba_id"], errors="coerce").notna()
         else:
             has_nba = pd.Series(False, index=ranked_all.index)
         ranked_nba = ranked_all.loc[has_nba].copy()
+        # Rank within NBA cohort only for comparable eval (pred_rank stays global)
+        ranked_nba["pred_rank_nba_only"] = ranked_nba["pred_mu"].rank(ascending=False, method="min").astype(int)
 
-        year_dir = OUT_DIR / str(year)
+        year_dir = out_dir / str(year)
         year_dir.mkdir(parents=True, exist_ok=True)
         nba_csv = year_dir / f"rankings_{year}_nba_mapped.csv"
         all_csv = year_dir / f"rankings_{year}_all_college.csv"
         ranked_nba.to_csv(nba_csv, index=False)
         ranked_all.to_csv(all_csv, index=False)
         with pd.ExcelWriter(year_dir / f"rankings_{year}.xlsx", engine="openpyxl") as writer:
+            writer.book.properties.title = f"Rankings {year}"
             ranked_nba.head(250).to_excel(writer, sheet_name="nba_mapped", index=False)
             ranked_all.head(250).to_excel(writer, sheet_name="all_college", index=False)
 
@@ -331,19 +415,19 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         gate["model_path"] = str(year_model_path)
         gate["nba_csv"] = str(nba_csv)
         gate["all_csv"] = str(all_csv)
-        with open(AUDIT_DIR / f"gate_{year}.json", "w", encoding="utf-8") as f:
+        with open(audit_dir / f"gate_{year}.json", "w", encoding="utf-8") as f:
             json.dump(gate, f, indent=2)
         summary_rows.append(gate)
 
         # Season card: top misses, calibration, drift (for "pause and learn")
-        year_audit_dir = AUDIT_DIR / str(year)
+        year_audit_dir = audit_dir / str(year)
         year_audit_dir.mkdir(parents=True, exist_ok=True)
         season_card = _run_year_diagnostics(year, ranked_nba, supervised, feat_cols)
         with open(year_audit_dir / "season_card.json", "w", encoding="utf-8") as f:
             json.dump(season_card, f, indent=2)
 
     if summary_rows:
-        pd.DataFrame(summary_rows).sort_values("year").to_csv(AUDIT_DIR / "rolling_summary.csv", index=False)
+        pd.DataFrame(summary_rows).sort_values("year").to_csv(audit_dir / "rolling_summary.csv", index=False)
 
 
 def main() -> None:
@@ -352,8 +436,14 @@ def main() -> None:
     parser.add_argument("--end-year", type=int, default=2024)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=5e-4)
+    parser.add_argument(
+        "--output-subdir",
+        type=str,
+        default=DEFAULT_OUTPUT_SUBDIR,
+        help="Subdir under data/inference and data/audit (e.g. rolling_yearly or other_rolling)",
+    )
     args = parser.parse_args()
-    run(args.start_year, args.end_year, args.epochs, args.lr)
+    run(args.start_year, args.end_year, args.epochs, args.lr, args.output_subdir)
 
 
 if __name__ == "__main__":

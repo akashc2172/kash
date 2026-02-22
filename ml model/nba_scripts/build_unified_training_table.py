@@ -64,6 +64,7 @@ from nba_scripts.games_played_selection import (
     select_minutes_with_provenance,
     games_source_mix_by_season,
     minutes_source_mix_by_season,
+    write_games_played_audit,
 )
 
 # =============================================================================
@@ -1699,6 +1700,7 @@ def build_unified_training_table(
             backfill_variant_col="backfill_alignment_variant",
             hist_variant_col="hist_alignment_variant",
         )
+        write_games_played_audit(college_features, AUDIT_DIR, season_col="season")
         
         # Enforce Explicit Provenance Columns
         if 'minutes_source' in college_features.columns:
@@ -2489,6 +2491,9 @@ def build_unified_training_table(
         mat_df.to_csv(AUDIT_DIR / f"target_maturity_report_{mode}.csv", index=False)
         logger.info(f"Published target maturity report: target_maturity_report_{mode}.csv")
 
+    # Physical consolidation: drop doublet columns; keep only canonical height, weight, wingspan (+ ratio).
+    _drop_physical_doublets(df)
+
     return df
 
 
@@ -2554,8 +2559,38 @@ def log_coverage_stats(df: pd.DataFrame) -> None:
             logger.info(f"  {season}: {count:,}")
 
 
+# Physical consolidation: only three canonical inputs (plan: height, weight, wingspan). Drop doublets.
+CANONICAL_PHYSICAL_COLS = {"college_height_in", "college_weight_lbs", "wingspan_in", "college_wingspan_to_height_ratio"}
+PHYSICAL_DOUBLETS_TO_DROP = [
+    "height_in", "weight_lbs", "standing_reach_in", "wingspan_minus_height_in",
+    "recruit_height_in", "recruit_weight_lbs", "nba_wingspan_in",
+    "ht_first", "ht_max", "wt_first", "wt_max", "ht_peak_delta", "wt_peak_delta",
+    "nba_height_cm", "nba_weight_lbs",
+]
+
+
+def _drop_physical_doublets(df: pd.DataFrame) -> None:
+    """Keep only canonical physical columns; drop doublet columns from unified schema."""
+    to_drop = [c for c in PHYSICAL_DOUBLETS_TO_DROP if c in df.columns]
+    if to_drop:
+        df.drop(columns=to_drop, inplace=True)
+        logger.info(f"Dropped physical doublets: {to_drop}")
+
+
+# Broken proxies: do not leave as 0 so exports/audits don't show fake "real zeros" (plan: set to NaN)
+BROKEN_PROXY_COLUMNS = ["deflection_proxy", "contest_proxy", "college_deflection_proxy", "college_contest_proxy"]
+
+
+def _null_broken_proxies(df: pd.DataFrame) -> None:
+    """Set broken proxy columns to NaN so they are treated as missing, not as real zeros."""
+    for c in BROKEN_PROXY_COLUMNS:
+        if c in df.columns:
+            df[c] = np.nan
+
+
 def save_training_table(df: pd.DataFrame, filename: str = "unified_training_table.parquet") -> Path:
-    """Save the training table to disk."""
+    """Save the training table to disk. Nulls broken proxies (deflection/contest) to NaN before save."""
+    _null_broken_proxies(df)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = OUTPUT_DIR / filename
     df.to_parquet(output_path, index=False)

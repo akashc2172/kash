@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+from typing import Optional
+
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def _as_valid_games(series: pd.Series, lo: float = 1.0, hi: float = 45.0) -> pd.Series:
@@ -100,6 +106,88 @@ def select_games_played_with_provenance(
     out["college_games_played_conflict_flag"] = conflict.astype(int)
     out["college_games_played_alignment_variant"] = align
     return out
+
+
+def games_played_audit_df(
+    df: pd.DataFrame,
+    *,
+    api_col: str = "college_games_played_candidate_api",
+    backfill_col: str = "college_games_played_candidate_backfill",
+    hist_col: str = "college_games_played_candidate_hist_text",
+    derived_col: str = "college_games_played_candidate_derived",
+    selected_col: str = "college_games_played",
+    source_col: str = "college_games_played_source",
+    season_col: str = "season",
+) -> pd.DataFrame:
+    """
+    Build audit of games-played: backfill-but-not-API, API-but-not-backfill, and selected != max.
+    Returns one row per athlete-season in the audit (all rows that match any of the three conditions).
+    """
+    needed = [api_col, backfill_col, hist_col, derived_col, selected_col, source_col]
+    if not all(c in df.columns for c in needed):
+        return pd.DataFrame()
+    api = pd.to_numeric(df[api_col], errors="coerce")
+    backfill = pd.to_numeric(df[backfill_col], errors="coerce")
+    hist = pd.to_numeric(df[hist_col], errors="coerce")
+    derived = pd.to_numeric(df[derived_col], errors="coerce")
+    selected = pd.to_numeric(df[selected_col], errors="coerce")
+    max_val = pd.concat([api, backfill, hist, derived], axis=1).max(axis=1)
+
+    backfill_not_api = backfill.notna() & (backfill > 0) & (api.isna() | (api < backfill))
+    api_not_backfill = api.notna() & (api > 0) & (backfill.isna() | (backfill < api))
+    selected_ne_max = selected.notna() & max_val.notna() & (selected != max_val)
+
+    mask = backfill_not_api | api_not_backfill | selected_ne_max
+    if not mask.any():
+        return pd.DataFrame()
+
+    out = df.loc[mask].copy()
+    out = out[[c for c in [season_col, "athlete_id", api_col, backfill_col, hist_col, derived_col, selected_col, source_col] if c in out.columns]]
+    out = out.rename(columns={
+        api_col: "api_games",
+        backfill_col: "backfill_games",
+        hist_col: "hist_text_games",
+        derived_col: "derived_games",
+        selected_col: "selected_games",
+        source_col: "source_used",
+    })
+    if season_col in out.columns:
+        out = out.rename(columns={season_col: "season"})
+    return out
+
+
+def write_games_played_audit(
+    df: pd.DataFrame,
+    audit_dir: Path,
+    *,
+    season_col: str = "season",
+) -> None:
+    """Write two-sided games audit CSV and log counts (backfill-not-API, API-not-backfill, selected != max)."""
+    audit_df = games_played_audit_df(df, season_col=season_col)
+    if audit_df.empty:
+        logger.info("Games audit: no rows with backfill-not-API, API-not-backfill, or selected != max.")
+        return
+    audit_dir = Path(audit_dir)
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    from datetime import datetime
+    path = audit_dir / f"games_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    audit_df.to_csv(path, index=False)
+    logger.info(f"Games audit: {len(audit_df):,} rows -> {path}")
+    api = pd.to_numeric(df.get("college_games_played_candidate_api"), errors="coerce")
+    backfill = pd.to_numeric(df.get("college_games_played_candidate_backfill"), errors="coerce")
+    n_backfill_not_api = (backfill.notna() & (backfill > 0) & (api.isna() | (api < backfill))).sum()
+    n_api_not_backfill = (api.notna() & (api > 0) & (backfill.isna() | (backfill < api))).sum()
+    selected = pd.to_numeric(df.get("college_games_played"), errors="coerce")
+    max_val = pd.concat([
+        pd.to_numeric(df.get("college_games_played_candidate_api"), errors="coerce"),
+        pd.to_numeric(df.get("college_games_played_candidate_backfill"), errors="coerce"),
+        pd.to_numeric(df.get("college_games_played_candidate_hist_text"), errors="coerce"),
+        pd.to_numeric(df.get("college_games_played_candidate_derived"), errors="coerce"),
+    ], axis=1).max(axis=1)
+    n_selected_ne_max = (selected.notna() & max_val.notna() & (selected != max_val)).sum()
+    logger.info(f"  backfill has games but API does not (or API < backfill): {int(n_backfill_not_api):,}")
+    logger.info(f"  API has games but backfill missing/lower: {int(n_api_not_backfill):,}")
+    logger.info(f"  selected != max(api, backfill, hist, derived): {int(n_selected_ne_max):,}")
 
 
 def games_source_mix_by_season(

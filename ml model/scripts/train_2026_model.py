@@ -49,6 +49,21 @@ EXCLUDE_PREFIXES = [
 
 EXCLUDE_SUFFIXES = ['_missing', '_source']
 
+# Explicit exclude: broken or proxy-only columns (do not use as features)
+EXCLUDE_FEATURE_COLUMNS = {
+    'derived_minutes_total_candidate',
+    'xy_coverage',
+    'deflection_proxy',
+    'contest_proxy',
+}
+# Also exclude college_-prefixed versions if present
+for _c in list(EXCLUDE_FEATURE_COLUMNS):
+    EXCLUDE_FEATURE_COLUMNS.add(f'college_{_c}')
+
+# Auto-drop: variance threshold and near-constant threshold (per df slice)
+VARIANCE_MIN = 1e-12
+NEAR_CONSTANT_PCT = 0.999  # drop if >= 99.9% same value (e.g. all zero)
+
 # Primary: peak 1y EPM in seasons with >60 games; fallback to window if column missing
 TARGET_COL = 'y_peak_epm_1y_60gp'
 TARGET_COL_3Y = 'y_peak_epm_3y'
@@ -61,17 +76,44 @@ LAMBDA_TRAJ = 0.3  # weight for trajectory head when present
 LAMBDA_RANK = 0.1  # optional pairwise ranking loss on primary head (Shai > Bagley ordering)
 
 
-def get_feature_columns(df: pd.DataFrame) -> list:
-    """Select numeric feature columns, excluding IDs, targets, masks."""
+def _auto_drop_zero_variance(df: pd.DataFrame, cols: list) -> list:
+    """Drop columns that are all-NaN, zero variance, or > 99.9% identical (e.g. all zero)."""
+    kept = []
+    for c in cols:
+        if c not in df.columns:
+            continue
+        s = pd.to_numeric(df[c], errors='coerce')
+        if s.isna().all():
+            continue
+        var = s.var()
+        if var is None or (np.isfinite(var) and var < VARIANCE_MIN):
+            continue
+        # Near-constant: same value in >= 99.9% of non-NaN rows
+        n_valid = s.notna().sum()
+        if n_valid == 0:
+            continue
+        mode_pct = s.value_counts(dropna=True).iloc[0] / n_valid
+        if mode_pct >= NEAR_CONSTANT_PCT:
+            continue
+        kept.append(c)
+    return kept
+
+
+def get_feature_columns(df: pd.DataFrame, auto_drop: bool = True) -> list:
+    """Select numeric feature columns, excluding IDs, targets, masks. Optionally auto-drop zero-variance."""
     cols = []
     for c in df.columns:
         if any(c.startswith(p) or c == p for p in EXCLUDE_PREFIXES):
             continue
         if any(c.endswith(s) for s in EXCLUDE_SUFFIXES):
             continue
+        if c in EXCLUDE_FEATURE_COLUMNS:
+            continue
         if df[c].dtype in ['object', 'bool', 'category']:
             continue
         cols.append(c)
+    if auto_drop and cols:
+        cols = _auto_drop_zero_variance(df, cols)
     return cols
 
 

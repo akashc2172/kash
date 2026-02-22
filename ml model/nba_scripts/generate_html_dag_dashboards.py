@@ -240,6 +240,58 @@ def build_input_contract_dashboard() -> None:
     )
 
 
+# Per-column wiring for model inputs (column -> source, category)
+INPUT_WIRING = [
+    ("college_rim_att", "college_features_v1 / shot profile", "shooting"),
+    ("college_rim_made", "college_features_v1", "shooting"),
+    ("college_rim_fg_pct", "college_features_v1", "shooting"),
+    ("college_rim_share", "college_features_v1", "shooting"),
+    ("college_mid_att", "college_features_v1", "shooting"),
+    ("college_three_att", "college_features_v1", "shooting"),
+    ("college_three_fg_pct", "college_features_v1", "shooting"),
+    ("college_ft_pct", "college_features_v1", "shooting"),
+    ("college_fga_total", "college_features_v1", "shooting"),
+    ("college_minutes_total", "college_features_v1 + backfill/hist", "exposure"),
+    ("college_games_played", "games_played_selection (api/backfill/hist/derived)", "exposure"),
+    ("college_ast_total_per100poss", "derived: college_ast_total / poss_proxy", "rates"),
+    ("college_orb_total_per100poss", "derived: college_orb_total / poss_proxy", "rates"),
+    ("college_drb_total_per100poss", "derived: college_drb_total / poss_proxy", "rates"),
+    ("college_trb_total_per100poss", "derived: college_trb_total / poss_proxy", "rates"),
+    ("college_height_in", "college physicals + combine + recruit", "physical"),
+    ("college_weight_lbs", "college physicals + combine + recruit", "physical"),
+    ("wingspan_in", "combine / nba_wingspan_bridge", "physical"),
+    ("college_rapm_standard", "college_impact_stack_v1", "impact"),
+    ("college_on_net_rating", "college_impact_stack_v1", "impact"),
+    ("final_trueShootingPct", "prospect_career_v1", "career"),
+    ("final_usage", "prospect_career_v1", "career"),
+    ("career_years", "prospect_career_v1", "career"),
+]
+
+
+def build_input_wiring_dashboard() -> None:
+    """Generate HTML table of per-column input wiring (column, source, category)."""
+    rows = "".join(
+        f"<tr><td><code>{col}</code></td><td>{src}</td><td>{cat}</td></tr>"
+        for col, src, cat in INPUT_WIRING
+    )
+    body = f"""
+<div class=\"grid\">
+  <div class=\"card span-12\">
+    <h3>Per-column wiring (selected inputs)</h3>
+    <p>Canonical source for each model input. Full schema in <code>docs/model_inputs_manifest/</code>.</p>
+    <table class=\"wiring-table\">
+      <thead><tr><th>Column</th><th>Source</th><th>Category</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+</div>
+"""
+    _write(
+        DIAGRAMS / "input_wiring_dashboard.html",
+        _html_shell("Input Wiring Dashboard", "Per-column source and category", body),
+    )
+
+
 def build_layered_execution_dashboard() -> None:
     body = """
 <div class=\"grid\">
@@ -727,6 +779,7 @@ def main() -> None:
     build_crosswalk_dashboard()
     build_model_arch_dashboard()
     build_input_contract_dashboard()
+    build_input_wiring_dashboard()
     build_layered_execution_dashboard()
     build_detailed_pipeline_dashboard()
     build_activity_quality_dashboard()
@@ -791,6 +844,7 @@ def main() -> None:
             str(DIAGRAMS / "model_signal_separation_dashboard.html"),
             str(DIAGRAMS / "model_architecture_dashboard.html"),
             str(DIAGRAMS / "input_data_contract_dashboard.html"),
+            str(DIAGRAMS / "input_wiring_dashboard.html"),
             str(DIAGRAMS / "layered_execution_dashboard.html"),
             str(DIAGRAMS / "crosswalk_quality_dashboard.html"),
             str(DIAGRAMS / "full_pipeline_active_learning_dashboard.html"),
