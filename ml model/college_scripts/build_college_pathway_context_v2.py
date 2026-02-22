@@ -320,6 +320,11 @@ def main() -> None:
         ).loc[rescue_mask].fillna(0.0)
         logger.info("Superstar rescue override: %d rows (excluded/missing -> proxy_from_box)", rescue_mask.sum())
 
+    # Contract: path_onoff_source in [impact_or_onoff, proxy_from_box] => ctx_adj_onoff_net/ortg/drtg must be non-null
+    source_set = df["path_onoff_source"].isin(["impact_or_onoff", "proxy_from_box"])
+    for col in ["ctx_adj_onoff_net", "ctx_adj_onoff_ortg", "ctx_adj_onoff_drtg"]:
+        df.loc[source_set, col] = df.loc[source_set, col].fillna(0.0)
+
     keep = [
         "athlete_id", "season",
         "ctx_adj_onoff_net", "ctx_adj_onoff_ortg", "ctx_adj_onoff_drtg",

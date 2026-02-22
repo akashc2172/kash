@@ -671,3 +671,14 @@ If any critical guard fails, stop the run and produce a NO-GO audit. Do not cont
   - tightened diagnostics to report both value coverage and source labels; identified misalignment as a separate blocker from raw data availability.
 - Prevention guard:
   - any context coverage gate must include consistency check: `ctx_adj_onoff_net.notna()` implies non-missing source label.
+
+74. **Pathway context NaN poisoning + unified table combine_first not filling**
+- What happened: (1) In `build_college_pathway_context_v2.py`, `ctx_adj_onoff_net = onoff_net * rel` produced NaN when `rel` was NaN (e.g. poss missing) even when `onoff_net` was valid (impact_or_onoff). (2) In `build_unified_training_table.py`, pathway columns were merged with `base.combine_first(alt)`; with mixed/empty dtypes this triggered FutureWarning and sometimes did not fill NaNs from the plus1/prior-season merge.
+- Why this hurt: stars (e.g. Banchero, Holmgren) showed `path_onoff_source=impact_or_onoff` but `ctx_adj_onoff_net=NaN` in the supervised table, so the model never saw their real context.
+- Fix applied:
+  - Pathway: introduced `rel_safe` (use 0.5 when we have valid signal but rel is NaN); fill ctx_adj_onoff_* with 0 when still NaN but we have has_impact_raw or has_box_signal; keep one row per (athlete_id, season) by max exposure (minutes/poss/shots/fga) so we don’t keep a zero split.
+  - Unified table: replaced `combine_first` with `base.fillna(alt)` for pathway context columns and used explicit float dtypes to avoid FutureWarning and ensure alt values are used where base is NaN.
+- Prevention guard:
+  - run `scripts/run_pathway_context_nan_check.py` (or equivalent) after building pathway + unified table: assert no row has `path_onoff_source` in `['impact_or_onoff','proxy_from_box']` and `ctx_adj_onoff_net` null.
+  - other feature families that use left-merge + combine/fill: use `fillna(alt)` and consistent dtypes; add a contract test that “non-null from right side is preserved after merge.”
+- Other features: this bug was limited to pathway context columns and their merge in the unified table; other feature families (physicals, activity, RAPM, etc.) use different joins and were not affected. The checker script above validates the pathway contract only.
