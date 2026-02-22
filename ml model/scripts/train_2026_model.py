@@ -49,8 +49,16 @@ EXCLUDE_PREFIXES = [
 
 EXCLUDE_SUFFIXES = ['_missing', '_source']
 
-TARGET_COL = 'y_peak_epm_window'
+# Primary: peak 1y EPM in seasons with >60 games; fallback to window if column missing
+TARGET_COL = 'y_peak_epm_1y_60gp'
+TARGET_COL_3Y = 'y_peak_epm_3y'
+TARGET_COL_TRAJ = 'latent_peak_within_7y'  # horizon-bounded trajectory target (optional third head)
+TARGET_COL_WINDOW_FALLBACK = 'y_peak_epm_window'
 AUX_TARGETS = ['year1_epm_tot', 'y_peak_ovr']
+N_TARGETS_TRAIN = 3  # primary + 3y + optional latent_peak_within_7y
+LAMBDA_3Y = 0.5  # weight for 3y loss in composite
+LAMBDA_TRAJ = 0.3  # weight for trajectory head when present
+LAMBDA_RANK = 0.1  # optional pairwise ranking loss on primary head (Shai > Bagley ordering)
 
 
 def get_feature_columns(df: pd.DataFrame) -> list:
@@ -338,25 +346,48 @@ def train_phase_b(supervised_path: Path, model_dir: Path, epochs: int = 100, lr:
     X = x_frame.fillna(0.0).to_numpy(dtype=np.float32)
     X = (X - means) / stds
 
-    # Targets - use mature/observed rows only for primary supervision.
-    if TARGET_COL not in df.columns:
-        logger.error(f"Target column {TARGET_COL} not found!")
+    # Multi-head targets: primary (1y_60gp) + optional latent_peak_within_7y + 3y for Pareto
+    primary_col = TARGET_COL if TARGET_COL in df.columns else TARGET_COL_WINDOW_FALLBACK
+    if primary_col not in df.columns:
+        logger.error(f"Primary target column {TARGET_COL} or {TARGET_COL_WINDOW_FALLBACK} not found!")
         return
-    t = pd.to_numeric(df[TARGET_COL], errors='coerce')
+    t_primary = pd.to_numeric(df[primary_col], errors='coerce')
+    t_3y = pd.to_numeric(df.get(TARGET_COL_3Y), errors='coerce') if TARGET_COL_3Y in df.columns else pd.Series(np.nan, index=df.index)
+    t_traj = pd.to_numeric(df.get(TARGET_COL_TRAJ), errors='coerce') if TARGET_COL_TRAJ in df.columns else pd.Series(np.nan, index=df.index)
     mature = pd.to_numeric(df.get('is_epm_mature'), errors='coerce').fillna(0).astype(int) if 'is_epm_mature' in df.columns else pd.Series(1, index=df.index)
-    keep = t.notna() & (mature == 1)
+    keep = t_primary.notna() & (mature == 1)
     if keep.sum() < 100:
-        logger.warning("Too few mature rows for strict mask; falling back to non-null target rows.")
-        keep = t.notna()
+        logger.warning("Too few mature rows for strict mask; falling back to non-null primary target rows.")
+        keep = t_primary.notna()
     df = df.loc[keep].reset_index(drop=True)
     X = X[keep.values]
-    y_raw = t.loc[keep].astype(np.float32).values
-    y_mean = y_raw.mean()
-    y_std = y_raw.std()
+    y_raw_1 = t_primary.loc[keep].astype(np.float32).values
+    y_raw_3y = t_3y.loc[keep].astype(np.float32).values
+    y_raw_traj = t_traj.loc[keep].astype(np.float32).values
+    y_mean = float(np.nanmean(y_raw_1))
+    y_std = float(np.nanstd(y_raw_1))
     if y_std < 1e-6:
         y_std = 1.0
-    y = ((y_raw - y_mean) / y_std).reshape(-1, 1)
-    logger.info(f"  Target stats: mean={y_mean:.4f}, std={y_std:.4f}")
+    y_mean_3y = float(np.nanmean(y_raw_3y))
+    y_std_3y = float(np.nanstd(y_raw_3y))
+    if y_std_3y < 1e-6:
+        y_std_3y = 1.0
+    y_mean_traj = float(np.nanmean(y_raw_traj[np.isfinite(y_raw_traj)])) if np.any(np.isfinite(y_raw_traj)) else 0.0
+    y_std_traj = float(np.nanstd(y_raw_traj[np.isfinite(y_raw_traj)])) if np.sum(np.isfinite(y_raw_traj)) > 1 else 1.0
+    if y_std_traj < 1e-6:
+        y_std_traj = 1.0
+    y_norm_1 = (y_raw_1 - y_mean) / y_std
+    y_norm_3y = np.where(np.isfinite(y_raw_3y), (y_raw_3y - y_mean_3y) / y_std_3y, 0.0)
+    y_norm_traj = np.where(np.isfinite(y_raw_traj), (y_raw_traj - y_mean_traj) / y_std_traj, 0.0)
+    mask_3y = np.isfinite(y_raw_3y)
+    mask_traj = np.isfinite(y_raw_traj)
+    # (N, 6): primary, traj_norm, mask_traj, 3y_norm, mask_3y (head0=primary, head1=traj, head2=3y)
+    y_fill = np.stack([y_norm_1, y_norm_traj, mask_traj.astype(np.float32), y_norm_3y, mask_3y.astype(np.float32)], axis=1)
+    y_tensor = torch.FloatTensor(y_fill)
+    mask_1 = np.ones(len(y_fill), dtype=bool)
+    logger.info(f"  Primary target ({primary_col}): mean={y_mean:.4f}, std={y_std:.4f}, n_valid={mask_1.sum()}")
+    logger.info(f"  Trajectory target ({TARGET_COL_TRAJ}): n_valid={mask_traj.sum()}")
+    logger.info(f"  3y target: mean={y_mean_3y:.4f}, std={y_std_3y:.4f}, n_valid={mask_3y.sum()}")
 
     # Context features for hypernetwork (age/class/career at college time).
     context_cols = []
@@ -376,8 +407,8 @@ def train_phase_b(supervised_path: Path, model_dir: Path, epochs: int = 100, lr:
     else:
         ctx = np.zeros((len(df), 3), dtype=np.float32)
 
-    # Build full model
-    model = Stack2026Model(input_dim=input_dim, use_hypernetwork=has_context)
+    # Build full model (two-head for Pareto: primary + 3y)
+    model = Stack2026Model(input_dim=input_dim, use_hypernetwork=has_context, n_targets=N_TARGETS_TRAIN)
 
     # Load pretrained encoder weights
     model.autoencoder.encoder.load_state_dict(ckpt['encoder_state_dict'])
@@ -392,7 +423,10 @@ def train_phase_b(supervised_path: Path, model_dir: Path, epochs: int = 100, lr:
         lr=lr, weight_decay=1e-4
     )
 
-    dataset = TabularDataset(X, y)
+    # Include context in dataset so batch order matches (shuffle-safe)
+    from torch.utils.data import TensorDataset
+    ctx_t = torch.FloatTensor(ctx)
+    dataset = TensorDataset(torch.FloatTensor(X), ctx_t, y_tensor)
     loader = DataLoader(dataset, batch_size=64, shuffle=True, drop_last=False)
 
     best_loss = float('inf')
@@ -410,13 +444,31 @@ def train_phase_b(supervised_path: Path, model_dir: Path, epochs: int = 100, lr:
         epoch_loss = 0
         n_batches = 0
 
-        for i, (x_batch, y_batch) in enumerate(loader):
-            ctx_batch = torch.FloatTensor(ctx[i * 64: (i + 1) * 64]) if has_context else None
-            if ctx_batch is not None and len(ctx_batch) != len(x_batch):
-                ctx_batch = ctx_batch[:len(x_batch)]
-
-            mu, logvar = model(x_batch, ctx_batch)
-            loss = heteroscedastic_loss(mu, logvar, y_batch)
+        for i, (x_batch, ctx_batch, y_batch) in enumerate(loader):
+            mu, logvar = model(x_batch, ctx_batch if has_context else None)
+            # y_batch: [primary, traj_norm, mask_traj, 3y_norm, mask_3y]; heads 0=primary, 1=traj, 2=3y
+            logvar = torch.clamp(logvar, -4.0, 4.0)
+            nll1 = heteroscedastic_loss(mu[:, 0:1], logvar[:, 0:1], y_batch[:, 0:1])
+            loss = nll1
+            mask_traj_b = y_batch[:, 2] > 0.5
+            if mask_traj_b.any() and mu.shape[1] > 1:
+                nll_traj = heteroscedastic_loss(mu[:, 1:2][mask_traj_b], logvar[:, 1:2][mask_traj_b], y_batch[:, 1:2][mask_traj_b])
+                loss = loss + LAMBDA_TRAJ * nll_traj
+            mask_3y_b = y_batch[:, 4] > 0.5
+            if mask_3y_b.any() and mu.shape[1] > 2:
+                nll3y = heteroscedastic_loss(mu[:, 2:3][mask_3y_b], logvar[:, 2:3][mask_3y_b], y_batch[:, 3:4][mask_3y_b])
+                loss = loss + LAMBDA_3Y * nll3y
+            # Optional pairwise ranking loss on primary head (higher target -> higher pred)
+            if LAMBDA_RANK > 0 and mu.shape[1] > 0:
+                y_prim = y_batch[:, 0]
+                mu_prim = mu[:, 0]
+                # Sample pairs: i has higher target than j -> want mu_i > mu_j
+                idx = torch.randperm(mu_prim.size(0), device=mu_prim.device)
+                i, j = idx[: idx.size(0) // 2], idx[idx.size(0) // 2 : idx.size(0) // 2 * 2]
+                if i.numel() > 0 and j.numel() > 0:
+                    margin = 0.1
+                    rank_loss = F.relu(margin - (mu_prim[i] - mu_prim[j]) * (y_prim[i] - y_prim[j]).sign()).mean()
+                    loss = loss + LAMBDA_RANK * rank_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -438,6 +490,16 @@ def train_phase_b(supervised_path: Path, model_dir: Path, epochs: int = 100, lr:
                 'stds': stds.tolist(),
                 'input_dim': input_dim,
                 'context_cols': context_cols,
+                'target_col': primary_col,
+                'target_col_3y': TARGET_COL_3Y,
+                'target_col_traj': TARGET_COL_TRAJ,
+                'y_mean': y_mean,
+                'y_std': y_std,
+                'y_mean_3y': y_mean_3y,
+                'y_std_3y': y_std_3y,
+                'y_mean_traj': y_mean_traj,
+                'y_std_traj': y_std_traj,
+                'n_targets': N_TARGETS_TRAIN,
             }, model_dir / 'stack2026_supervised.pt')
 
         if (epoch + 1) % 20 == 0:
@@ -454,9 +516,11 @@ def train_phase_b(supervised_path: Path, model_dir: Path, epochs: int = 100, lr:
         mu_pred, logvar_pred = model(X_tensor, ctx_tensor)
         sd_pred = torch.exp(0.5 * logvar_pred)
 
-    # Rescale predictions back to original scale
-    df['pred_mu'] = (mu_pred.numpy().flatten() * y_std) + y_mean
-    df['pred_sd'] = sd_pred.numpy().flatten() * y_std
+    # Primary (first head) for ranking; optional second head for Pareto
+    df['pred_mu'] = (mu_pred[:, 0].numpy() * y_std) + y_mean
+    df['pred_sd'] = sd_pred[:, 0].numpy() * y_std
+    if mu_pred.shape[1] > 1:
+        df['pred_mu_3y'] = (mu_pred[:, 1].numpy() * y_std_3y) + y_mean_3y
     df['pred_upside'] = df['pred_mu'] + 1.0 * df['pred_sd']
     df['pred_floor'] = df['pred_mu'] - 1.0 * df['pred_sd']
 

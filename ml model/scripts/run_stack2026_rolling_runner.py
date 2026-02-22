@@ -92,6 +92,49 @@ def _rank_export(
     return out.sort_values("pred_rank")
 
 
+REPLAY_SIZE = 500  # diverse past examples for continual learning
+REPLAY_STRATIFY_COL = "draft_year_proxy"
+EWC_LAMBDA = 0.01  # L2 penalty toward previous year's weights (mild consolidation)
+SEASON_CARD_TOP_MISSES = 20
+
+
+def _run_year_diagnostics(
+    year: int,
+    ranked_nba: pd.DataFrame,
+    supervised: pd.DataFrame,
+    feat_cols: List[str],
+) -> Dict:
+    """Build season card: top archetype misses, calibration by decile, drift stats."""
+    card = {"year": year}
+    has_actual = "actual_target" in ranked_nba.columns and ranked_nba["actual_target"].notna().any()
+    if has_actual:
+        ranked_nba = ranked_nba.copy()
+        ranked_nba["_err_abs"] = ranked_nba["rank_error"].abs()
+        top_misses = ranked_nba.nlargest(SEASON_CARD_TOP_MISSES, "_err_abs", keep="first").drop(columns=["_err_abs"], errors="ignore")
+        cols_miss = [c for c in ["player_name", "pred_mu", "actual_target", "pred_rank", "actual_rank", "rank_error"] if c in top_misses]
+        rec = top_misses[cols_miss].replace({np.nan: None}).to_dict(orient="records")
+        card["top_archetype_misses"] = rec
+        # Calibration by decile (pred_mu binned)
+        deciles = pd.qcut(ranked_nba["pred_mu"].rank(method="first"), 10, labels=False, duplicates="drop")
+        cal = ranked_nba.assign(decile=deciles).groupby("decile").agg(
+            mean_pred=("pred_mu", "mean"),
+            mean_actual=("actual_target", "mean"),
+            count=("pred_mu", "count"),
+        ).reset_index()
+        card["calibration_by_decile"] = cal.to_dict(orient="records")
+    else:
+        card["top_archetype_misses"] = []
+        card["calibration_by_decile"] = []
+    # Drift: feature means by cohort (draft_year_proxy) for this year's training cohort
+    cohort_df = supervised[supervised["draft_year_proxy"] <= year]
+    if REPLAY_STRATIFY_COL in cohort_df.columns and len(cohort_df) > 0:
+        drift_cols = [c for c in feat_cols if c in cohort_df.columns][:20]
+        if drift_cols:
+            by_cohort = cohort_df.groupby(REPLAY_STRATIFY_COL)[drift_cols].mean()
+            card["drift_feature_means_by_cohort"] = by_cohort.to_dict(orient="index")
+    return card
+
+
 def _year_gate(
     year: int,
     ranked_nba: pd.DataFrame,
@@ -163,6 +206,25 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         if len(train_df) < 100:
             continue
 
+        # Replay buffer: diverse past examples (draft_year_proxy <= year-2) to reduce forgetting
+        replay_df = pd.DataFrame()
+        if year - 2 >= start_year and REPLAY_STRATIFY_COL in supervised.columns:
+            past = supervised[supervised["draft_year_proxy"] <= (year - 2)].copy()
+            y_past = pd.to_numeric(past[TARGET_COL], errors="coerce")
+            keep_past = y_past.notna()
+            past = past.loc[keep_past]
+            if len(past) > 0:
+                n_replay = min(REPLAY_SIZE, len(past))
+                try:
+                    n_per = max(1, n_replay // max(1, past[REPLAY_STRATIFY_COL].nunique()))
+                    replay_df = past.groupby(REPLAY_STRATIFY_COL, group_keys=True).apply(
+                        lambda g: g.sample(n=min(len(g), n_per), replace=False), include_groups=False
+                    ).reset_index(level=0).sample(n=min(n_replay, len(past)), replace=False)
+                except Exception:
+                    replay_df = past.sample(n=n_replay, replace=False)
+        if len(replay_df) > 0:
+            train_df = pd.concat([train_df, replay_df], ignore_index=True)
+
         x_train = _as_numeric_matrix(train_df, feat_cols)
         x_train = (x_train - means) / stds
         y_raw = pd.to_numeric(train_df[TARGET_COL], errors="coerce").to_numpy(dtype=np.float32)
@@ -173,9 +235,13 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         y_train = ((y_raw - y_mean) / y_std).reshape(-1, 1)
         ctx_train = _extract_context(train_df, context_cols)
 
-        model = Stack2026Model(input_dim=input_dim, use_hypernetwork=len(context_cols) > 0)
-        prev_ckpt = torch.load(prev_ckpt_path, weights_only=False)
-        model.load_state_dict(prev_ckpt["model_state_dict"])
+        prev_ckpt = torch.load(prev_ckpt_path, weights_only=False) if prev_ckpt_path.exists() else {}
+        n_targets = int(prev_ckpt.get("n_targets", 1)) if prev_ckpt else 1
+        model = Stack2026Model(input_dim=input_dim, use_hypernetwork=len(context_cols) > 0, n_targets=max(1, n_targets))
+        if prev_ckpt:
+            model.load_state_dict(prev_ckpt["model_state_dict"])
+        prev_params = {n: p.clone().detach() for n, p in model.named_parameters()} if prev_ckpt and EWC_LAMBDA > 0 else {}
+
         model.train()
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
         x_t = torch.FloatTensor(x_train)
@@ -184,8 +250,16 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         for _ in range(epochs):
             mu, logvar = model(x_t, c_t)
             logvar = torch.clamp(logvar, -4.0, 4.0)
-            precision = torch.exp(-logvar)
-            loss = 0.5 * (precision * (y_t - mu) ** 2 + logvar).mean()
+            mu_primary = mu[:, 0:1] if mu.shape[1] > 1 else mu
+            logvar_primary = logvar[:, 0:1] if logvar.shape[1] > 1 else logvar
+            precision = torch.exp(-logvar_primary)
+            loss = 0.5 * (precision * (y_t - mu_primary) ** 2 + logvar_primary).mean()
+            if prev_params and EWC_LAMBDA > 0:
+                ewc = 0.0
+                for n, p in model.named_parameters():
+                    if n in prev_params:
+                        ewc = ewc + (p - prev_params[n]).pow(2).sum()
+                loss = loss + EWC_LAMBDA * 0.5 * ewc
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -200,6 +274,7 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
                 "stds": stds.tolist(),
                 "context_cols": context_cols,
                 "target_col": TARGET_COL,
+                "n_targets": n_targets,
                 "year": int(year),
                 "train_rows": int(len(train_df)),
             },
@@ -207,38 +282,40 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         )
         prev_ckpt_path = year_model_path
 
+        # Single cohort = full college board (foundation for this year). Merge in target from
+        # supervised so NBA-linked players get actual_target/actual_rank/rank_error. Then
+        # nba_mapped = same list filtered to rows with nba_id (same order, same pred_rank).
         model.eval()
+        all_df = foundation[pd.to_numeric(foundation["season"], errors="coerce") == year].copy()
+        if len(all_df) == 0:
+            continue
+        # Enrich with target from supervised so we have actual_* where available
+        sup_year = supervised[supervised["draft_year_proxy"] == year]
+        if len(sup_year) and "athlete_id" in all_df.columns and "athlete_id" in sup_year.columns:
+            tgt = sup_year[["athlete_id", TARGET_COL]].drop_duplicates(subset=["athlete_id"], keep="first")
+            all_df = all_df.merge(tgt, on="athlete_id", how="left", suffixes=("", "_sup"))
+            if f"{TARGET_COL}_sup" in all_df.columns:
+                all_df[TARGET_COL] = all_df[TARGET_COL].fillna(all_df[f"{TARGET_COL}_sup"])
+                all_df = all_df.drop(columns=[f"{TARGET_COL}_sup"])
+
         with torch.no_grad():
-            nba_df = supervised[supervised["draft_year_proxy"] == year].copy()
-            all_df = foundation[pd.to_numeric(foundation["season"], errors="coerce") == year].copy()
-
-            x_nba = _as_numeric_matrix(nba_df, feat_cols) if len(nba_df) else np.zeros((0, len(feat_cols)), dtype=np.float32)
-            x_all = _as_numeric_matrix(all_df, feat_cols) if len(all_df) else np.zeros((0, len(feat_cols)), dtype=np.float32)
-            x_nba = (x_nba - means) / stds if len(x_nba) else x_nba
-            x_all = (x_all - means) / stds if len(x_all) else x_all
-
-            ctx_nba = _extract_context(nba_df, context_cols) if len(nba_df) else np.zeros((0, 3), dtype=np.float32)
-            ctx_all = _extract_context(all_df, context_cols) if len(all_df) else np.zeros((0, 3), dtype=np.float32)
-
-            if len(nba_df):
-                mu_nba, lv_nba = model(torch.FloatTensor(x_nba), torch.FloatTensor(ctx_nba) if len(context_cols) > 0 else None)
-                pred_mu_nba = (mu_nba.numpy().flatten() * y_std) + y_mean
-                pred_sd_nba = np.exp(0.5 * lv_nba.numpy().flatten()) * y_std
-            else:
-                pred_mu_nba = np.array([])
-                pred_sd_nba = np.array([])
-
-            if len(all_df):
-                mu_all, lv_all = model(torch.FloatTensor(x_all), torch.FloatTensor(ctx_all) if len(context_cols) > 0 else None)
-                pred_mu_all = (mu_all.numpy().flatten() * y_std) + y_mean
-                pred_sd_all = np.exp(0.5 * lv_all.numpy().flatten()) * y_std
-            else:
-                pred_mu_all = np.array([])
-                pred_sd_all = np.array([])
+            x_all = _as_numeric_matrix(all_df, feat_cols)
+            x_all = (x_all - means) / stds
+            ctx_all = _extract_context(all_df, context_cols)
+            mu_all, lv_all = model(torch.FloatTensor(x_all), torch.FloatTensor(ctx_all) if len(context_cols) > 0 else None)
+            mu_primary = mu_all[:, 0] if mu_all.dim() > 1 and mu_all.shape[1] > 1 else mu_all.flatten()
+            lv_primary = lv_all[:, 0] if lv_all.dim() > 1 and lv_all.shape[1] > 1 else lv_all.flatten()
+            pred_mu_all = (mu_primary.numpy() * y_std) + y_mean
+            pred_sd_all = np.exp(0.5 * lv_primary.numpy()) * y_std
 
         id_cols = ["player_name", "nba_id", "athlete_id", "bbr_id", "draft_year_proxy", "college_final_season", "season"]
-        ranked_nba = _rank_export(nba_df, pred_mu_nba, pred_sd_nba, TARGET_COL, id_cols)
         ranked_all = _rank_export(all_df, pred_mu_all, pred_sd_all, TARGET_COL, id_cols)
+        # NBA-mapped = same board order, only rows with nba_id (so pred_rank is global rank on full board)
+        if "nba_id" in ranked_all.columns:
+            has_nba = pd.to_numeric(ranked_all["nba_id"], errors="coerce").notna()
+        else:
+            has_nba = pd.Series(False, index=ranked_all.index)
+        ranked_nba = ranked_all.loc[has_nba].copy()
 
         year_dir = OUT_DIR / str(year)
         year_dir.mkdir(parents=True, exist_ok=True)
@@ -257,6 +334,13 @@ def run(start_year: int, end_year: int, epochs: int, lr: float) -> None:
         with open(AUDIT_DIR / f"gate_{year}.json", "w", encoding="utf-8") as f:
             json.dump(gate, f, indent=2)
         summary_rows.append(gate)
+
+        # Season card: top misses, calibration, drift (for "pause and learn")
+        year_audit_dir = AUDIT_DIR / str(year)
+        year_audit_dir.mkdir(parents=True, exist_ok=True)
+        season_card = _run_year_diagnostics(year, ranked_nba, supervised, feat_cols)
+        with open(year_audit_dir / "season_card.json", "w", encoding="utf-8") as f:
+            json.dump(season_card, f, indent=2)
 
     if summary_rows:
         pd.DataFrame(summary_rows).sort_values("year").to_csv(AUDIT_DIR / "rolling_summary.csv", index=False)

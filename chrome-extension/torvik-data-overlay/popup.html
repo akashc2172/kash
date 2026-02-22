@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Torvik Overlay</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Torvik Overlay</h1>
+      <p class="sub">One-click setup from checkthesheets, or manual override below.</p>
+
+      <section>
+        <h2>Quick Setup</h2>
+        <div class="quick-actions">
+          <button id="load-remote-btn" type="button">Load Seasons From checkthesheets</button>
+          <button id="install-all-btn" type="button" class="secondary">Install All Seasons</button>
+        </div>
+        <p id="quick-status" class="status"></p>
+        <div id="remote-dataset-list"></div>
+      </section>
+
+      <form id="dataset-form">
+        <label>
+          Dataset name
+          <input id="name" type="text" placeholder="Intl 2026 v1" required />
+        </label>
+        <label>
+          Season year
+          <input id="season" type="number" min="2000" max="2100" placeholder="2026" required />
+        </label>
+        <label>
+          Dataset URL (JSON or CSV)
+          <input id="url" type="url" placeholder="https://checkthesheets.com/torvik-datasets/2026.json" required />
+        </label>
+        <label>
+          Match key in your dataset
+          <input id="matchKey" type="text" placeholder="player" value="player" required />
+        </label>
+        <label>
+          Team key in your dataset (optional)
+          <input id="teamKey" type="text" placeholder="team" value="team" />
+        </label>
+        <label>
+          Columns to inject (comma separated)
+          <input id="columns" type="text" placeholder="conf,g,mpg,ppg,usg,ast_pct,tov_pct,oreb_pct,dreb_pct,ftr,efg,ts,porpag,bpm,per" required />
+        </label>
+        <button type="submit">Save dataset</button>
+      </form>
+
+      <section>
+        <h2>Saved datasets</h2>
+        <div id="dataset-list"></div>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

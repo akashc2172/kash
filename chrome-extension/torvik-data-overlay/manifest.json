@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Torvik Data Overlay",
+  "description": "Load your hosted season datasets and inject matching columns into Bart Torvik player tables.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://barttorvik.com/*",
+    "https://*.barttorvik.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "Torvik Overlay",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://barttorvik.com/playerstat.php*",
+        "https://www.barttorvik.com/playerstat.php*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

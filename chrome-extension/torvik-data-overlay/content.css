@@ -1,0 +1,22 @@
+#torvik-overlay-banner {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid #0f766e;
+  background: #f0fdfa;
+  color: #134e4a;
+  font: 12px/1.4 "Segoe UI", Tahoma, sans-serif;
+}
+
+#torvik-overlay-banner.error {
+  border-color: #be123c;
+  background: #fff1f2;
+  color: #881337;
+}
+
+.torvik-overlay-col {
+  background: inherit;
+  font-weight: inherit;
+}

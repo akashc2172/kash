@@ -929,12 +929,24 @@ def load_nba_targets() -> pd.DataFrame:
     peak_epm_path = WAREHOUSE_V2 / "fact_player_peak_epm.parquet"
     if peak_epm_path.exists():
         pepm = pd.read_parquet(peak_epm_path)
-        p_cols = [c for c in ['nba_id', 'y_peak_epm_1y', 'y_peak_epm_2y', 'y_peak_epm_3y', 'y_peak_epm_window', 'epm_obs_seasons', 'epm_obs_minutes', 'epm_peak_window_end_year'] if c in pepm.columns]
+        p_cols = [c for c in ['nba_id', 'y_peak_epm_1y', 'y_peak_epm_1y_60gp', 'y_peak_epm_2y', 'y_peak_epm_3y', 'y_peak_epm_window', 'epm_obs_seasons', 'epm_obs_minutes', 'epm_peak_window_end_year'] if c in pepm.columns]
         if targets.empty:
             targets = pepm[p_cols].copy()
         else:
             targets = targets.merge(pepm[p_cols], on='nba_id', how='outer')
         logger.info(f"Loaded {len(pepm):,} peak/rolling EPM targets")
+
+    # Horizon-bounded EPM trajectory (no future leakage): latent peak, slope, plateau, censor
+    traj_path = WAREHOUSE_V2 / "fact_player_epm_trajectory_horizon.parquet"
+    if traj_path.exists():
+        traj = pd.read_parquet(traj_path)
+        t_cols = [c for c in ['nba_id', 'latent_peak_within_7y', 'slope_last_2y', 'plateau_flag', 'epm_trajectory_n_seasons_used', 'epm_trajectory_censored'] if c in traj.columns]
+        if t_cols:
+            if targets.empty:
+                targets = traj[t_cols].copy()
+            else:
+                targets = targets.merge(traj[t_cols], on='nba_id', how='outer')
+            logger.info(f"Loaded {len(traj):,} horizon-bounded EPM trajectory targets")
     
     # Gaps (auxiliary targets)
     gaps_path = WAREHOUSE_V2 / "fact_player_nba_college_gaps.parquet"
@@ -2150,6 +2162,15 @@ def build_unified_training_table(
         if src in df.columns and dst not in df.columns:
             df[dst] = pd.to_numeric(df[src], errors="coerce")
 
+    # Teammate quality proxy when on court (team-level fallback; lineup-level can be added later).
+    if "college_teammate_quality_on" not in df.columns:
+        if "college_team_srs" in df.columns:
+            df["college_teammate_quality_on"] = pd.to_numeric(df["college_team_srs"], errors="coerce")
+        elif "team_strength_srs" in df.columns:
+            df["college_teammate_quality_on"] = pd.to_numeric(df["team_strength_srs"], errors="coerce")
+        else:
+            df["college_teammate_quality_on"] = np.nan
+
     # Activity provenance + masks (contract-enforced columns).
     core_cols = [
         "college_dunk_rate", "college_dunk_freq", "college_putback_rate",
@@ -2367,7 +2388,7 @@ def build_unified_training_table(
     # Availability masks must reference real column names on this table.
     rapm_src = df['y_peak_ovr'] if 'y_peak_ovr' in df.columns else pd.Series(np.nan, index=df.index)
     df['has_peak_rapm_target'] = pd.to_numeric(rapm_src, errors='coerce').notna().astype(int)
-    peak_epm_cols = [c for c in ['y_peak_epm_window', 'y_peak_epm_3y', 'y_peak_epm_2y', 'y_peak_epm_1y'] if c in df.columns]
+    peak_epm_cols = [c for c in ['y_peak_epm_window', 'y_peak_epm_3y', 'y_peak_epm_2y', 'y_peak_epm_1y', 'y_peak_epm_1y_60gp'] if c in df.columns]
     if peak_epm_cols:
         df['has_peak_epm_target'] = (
             pd.concat([pd.to_numeric(df[c], errors='coerce') for c in peak_epm_cols], axis=1).notna().any(axis=1).astype(int)

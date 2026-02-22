@@ -8,6 +8,7 @@ Output:
 Columns:
   nba_id
   y_peak_epm_1y
+  y_peak_epm_1y_60gp   # peak single-season EPM in seasons with games_played > 60
   y_peak_epm_2y
   y_peak_epm_3y
   y_peak_epm_window
@@ -39,12 +40,13 @@ def _first(df: pd.DataFrame, candidates: list[str]) -> str:
     raise KeyError(f"Missing any of required columns: {candidates}")
 
 
-def build(min_seasons_for_3y: int = 2) -> pd.DataFrame:
+def build(min_seasons_for_3y: int = 2, min_games_1y_60gp: int = 60) -> pd.DataFrame:
     df = pd.read_parquet(NBA_MERGED)
     id_col = _first(df, ["nba_id", "nid", "epm__player_id", "player_id"])
     season_col = _first(df, ["season_year", "epm__season"])
     epm_col = _first(df, ["epm__tot", "tot"])
     mp_col = _first(df, ["minutes", "epm__mp", "mp"])
+    gp_col = _first(df, ["gp", "g", "games_played", "games"])  # games played per season
 
     d = pd.DataFrame(
         {
@@ -52,6 +54,7 @@ def build(min_seasons_for_3y: int = 2) -> pd.DataFrame:
             "season_year": pd.to_numeric(df[season_col], errors="coerce"),
             "epm_tot": pd.to_numeric(df[epm_col], errors="coerce"),
             "minutes": pd.to_numeric(df[mp_col], errors="coerce"),
+            "games": pd.to_numeric(df[gp_col], errors="coerce").fillna(0).clip(lower=0),
         }
     )
     d = d.dropna(subset=["nba_id", "season_year", "epm_tot"]).copy()
@@ -63,7 +66,12 @@ def build(min_seasons_for_3y: int = 2) -> pd.DataFrame:
     d["epm_num"] = d["epm_tot"] * d["minutes"]
     grp = (
         d.groupby(["nba_id", "season_year"], as_index=False)
-        .agg(epm_num=("epm_num", "sum"), minutes=("minutes", "sum"), epm_fallback=("epm_tot", "mean"))
+        .agg(
+            epm_num=("epm_num", "sum"),
+            minutes=("minutes", "sum"),
+            epm_fallback=("epm_tot", "mean"),
+            games=("games", "sum"),
+        )
     )
     grp["epm_tot"] = np.where(grp["minutes"] > 0, grp["epm_num"] / grp["minutes"], grp["epm_fallback"])
     grp = grp.sort_values(["nba_id", "season_year"])
@@ -73,11 +81,16 @@ def build(min_seasons_for_3y: int = 2) -> pd.DataFrame:
         s = g["epm_tot"].astype(float).reset_index(drop=True)
         years = g["season_year"].astype(int).reset_index(drop=True)
         mins = g["minutes"].astype(float).reset_index(drop=True)
+        gps = g["games"].astype(float).reset_index(drop=True)
 
         r1 = float(s.max()) if len(s) else np.nan
         r2 = float(s.rolling(window=2, min_periods=2).mean().max()) if len(s) >= 2 else np.nan
         r3_series = s.rolling(window=3, min_periods=max(2, int(min_seasons_for_3y))).mean()
         r3 = float(r3_series.max()) if len(s) >= 2 else np.nan
+
+        # Peak 1y EPM in seasons with > min_games_1y_60gp games (e.g. 60)
+        qualified = gps > min_games_1y_60gp
+        r1_60gp = float(s[qualified].max()) if qualified.any() else np.nan
 
         # choose best available window priority 3y > 2y > 1y
         y = r3 if np.isfinite(r3) else (r2 if np.isfinite(r2) else r1)
@@ -93,6 +106,7 @@ def build(min_seasons_for_3y: int = 2) -> pd.DataFrame:
             {
                 "nba_id": int(pid),
                 "y_peak_epm_1y": r1,
+                "y_peak_epm_1y_60gp": r1_60gp,
                 "y_peak_epm_2y": r2,
                 "y_peak_epm_3y": r3,
                 "y_peak_epm_window": y,
@@ -108,13 +122,15 @@ def build(min_seasons_for_3y: int = 2) -> pd.DataFrame:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build peak/rolling EPM target fact table")
     ap.add_argument("--min-seasons-for-3y", type=int, default=2)
+    ap.add_argument("--min-games-1y-60gp", type=int, default=60, help="Min games for y_peak_epm_1y_60gp")
     args = ap.parse_args()
 
-    out = build(min_seasons_for_3y=args.min_seasons_for_3y)
+    out = build(min_seasons_for_3y=args.min_seasons_for_3y, min_games_1y_60gp=args.min_games_1y_60gp)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(OUT, index=False)
     logger.info("Saved %s rows to %s", len(out), OUT)
     logger.info("Coverage y_peak_epm_3y: %.2f%%", 100.0 * out["y_peak_epm_3y"].notna().mean())
+    logger.info("Coverage y_peak_epm_1y_60gp: %.2f%%", 100.0 * out["y_peak_epm_1y_60gp"].notna().mean())
 
 
 if __name__ == "__main__":
