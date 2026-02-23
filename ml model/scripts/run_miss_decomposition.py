@@ -23,9 +23,8 @@ import pandas as pd
 
 
 BASE = Path(__file__).resolve().parent.parent
-ROLLING_DIR = BASE / "data" / "inference" / "rolling_yearly"
+DEFAULT_OUTPUT_SUBDIR = "rolling_yearly"
 SUPERVISED_PATH = BASE / "data" / "training" / "unified_training_table_supervised.parquet"
-OUT_DIR = BASE / "data" / "audit" / "rolling_yearly"
 WATCHLIST_NAMES = [
     "rob dillingham",
     "reed sheppard",
@@ -54,13 +53,19 @@ def _safe_numeric(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
 
-def _year_files(years: Iterable[int]) -> List[Path]:
+def _year_files(years: Iterable[int], rolling_dir: Path) -> List[Path]:
     out = []
     for y in years:
-        p = ROLLING_DIR / str(y) / f"rankings_{y}_nba_mapped.csv"
+        p = rolling_dir / str(y) / f"rankings_{y}_nba_mapped.csv"
         if p.exists():
             out.append(p)
     return out
+
+
+def _safe_mean_abs_err(x: pd.Series) -> float:
+    if len(x) == 0 or not np.any(np.isfinite(x)):
+        return np.nan
+    return float(np.nanmean(np.abs(x)))
 
 
 def _slice_stats(df: pd.DataFrame, year: int) -> pd.DataFrame:
@@ -115,7 +120,7 @@ def _slice_stats(df: pd.DataFrame, year: int) -> pd.DataFrame:
                 "n": int(len(df)),
                 "mean_rank_error": float(np.nanmean(df["rank_error"])),
                 "median_rank_error": float(np.nanmedian(df["rank_error"])),
-                "mean_abs_rank_error": float(np.nanmean(np.abs(df["rank_error"]))),
+                "mean_abs_rank_error": _safe_mean_abs_err(df["rank_error"]),
             }]))
     if "ctx_vel_net_yoy" in df.columns:
         x = _safe_numeric(df["ctx_vel_net_yoy"])
@@ -131,7 +136,7 @@ def _slice_stats(df: pd.DataFrame, year: int) -> pd.DataFrame:
                 "n": int(len(df)),
                 "mean_rank_error": float(np.nanmean(df["rank_error"])),
                 "median_rank_error": float(np.nanmedian(df["rank_error"])),
-                "mean_abs_rank_error": float(np.nanmean(np.abs(df["rank_error"]))),
+                "mean_abs_rank_error": _safe_mean_abs_err(df["rank_error"]),
             }]))
 
     w = df.copy()
@@ -143,12 +148,12 @@ def _slice_stats(df: pd.DataFrame, year: int) -> pd.DataFrame:
         if col not in w.columns:
             continue
         g = (
-            w.groupby(col, dropna=False)
+            w.groupby(col, dropna=False, observed=False)
             .agg(
                 n=("rank_error", "size"),
                 mean_rank_error=("rank_error", "mean"),
                 median_rank_error=("rank_error", "median"),
-                mean_abs_rank_error=("rank_error", lambda x: float(np.nanmean(np.abs(x)))),
+                mean_abs_rank_error=("rank_error", _safe_mean_abs_err),
             )
             .reset_index()
             .rename(columns={col: "slice_value"})
@@ -165,8 +170,10 @@ def _norm_name(x: str) -> str:
     return "".join(ch for ch in str(x).lower().strip() if ch.isalnum() or ch == " ")
 
 
-def run(start_year: int, end_year: int, top_n: int) -> None:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+def run(start_year: int, end_year: int, top_n: int, output_subdir: str = DEFAULT_OUTPUT_SUBDIR) -> None:
+    rolling_dir = BASE / "data" / "inference" / output_subdir
+    out_dir = BASE / "data" / "audit" / output_subdir
+    out_dir.mkdir(parents=True, exist_ok=True)
     sup = pd.read_parquet(SUPERVISED_PATH)
     join_cols = [c for c in [
         "nba_id",
@@ -202,16 +209,23 @@ def run(start_year: int, end_year: int, top_n: int) -> None:
     all_slices = []
     all_frames = []
 
-    for p in _year_files(range(start_year, end_year + 1)):
+    for p in _year_files(range(start_year, end_year + 1), rolling_dir):
         year = int(p.parent.name)
         df = pd.read_csv(p)
         if "rank_error" not in df.columns:
             continue
 
-        df["rank_error"] = _safe_numeric(df["rank_error"])
         df["actual_rank"] = _safe_numeric(df.get("actual_rank", pd.Series(np.nan, index=df.index)))
         df["pred_rank"] = _safe_numeric(df.get("pred_rank", pd.Series(np.nan, index=df.index)))
         df["actual_target"] = _safe_numeric(df.get("actual_target", pd.Series(np.nan, index=df.index)))
+        # Use pred_rank_nba_only for comparable eval when present (rank within NBA cohort)
+        if "pred_rank_nba_only" in df.columns:
+            pn = _safe_numeric(df["pred_rank_nba_only"])
+            df["rank_error"] = pn - df["actual_rank"]
+            df["pred_rank_display"] = pn
+        else:
+            df["rank_error"] = _safe_numeric(df["rank_error"])
+            df["pred_rank_display"] = df["pred_rank"]
         df = df[df["actual_rank"].notna()].copy()
         if df.empty:
             continue
@@ -232,7 +246,7 @@ def run(start_year: int, end_year: int, top_n: int) -> None:
         report = pd.concat([over, under], ignore_index=True)
         report_cols = [c for c in [
             "miss_type", "player_name", "nba_id", "athlete_id",
-            "pred_rank", "actual_rank", "rank_error", "actual_target",
+            "pred_rank", "pred_rank_nba_only", "actual_rank", "rank_error", "actual_target",
             "age_at_season", "class_year", "is_power_conf",
             "recruiting_stars", "college_height_in", "college_weight_lbs",
             "college_minutes_total", "college_poss_proxy", "transfer_event_count",
@@ -242,20 +256,20 @@ def run(start_year: int, end_year: int, top_n: int) -> None:
             "path_onoff_tov_diff_per100", "path_onoff_transition_diff_per100",
             "path_onoff_dunk_pressure_diff",
         ] if c in report.columns]
-        report = report[report_cols]
-        report.to_csv(OUT_DIR / f"miss_report_{year}.csv", index=False)
+        report = report[[c for c in report_cols if c in report.columns]]
+        report.to_csv(out_dir / f"miss_report_{year}.csv", index=False)
 
         slices = _slice_stats(df, year)
-        slices.to_csv(OUT_DIR / f"miss_slices_{year}.csv", index=False)
+        slices.to_csv(out_dir / f"miss_slices_{year}.csv", index=False)
         all_slices.append(slices)
 
-        top_pred15 = df[df["pred_rank"] <= 15].copy()
+        top_pred15 = df[df["pred_rank_display"] <= 15].copy()
         top_actual15 = df[df["actual_rank"] <= 15].copy()
         bust_regret_top15 = float(
             np.nanmean(np.clip(_safe_numeric(top_pred15["actual_rank"]) - 15.0, 0.0, None))
         ) if len(top_pred15) else np.nan
         sleeper_regret_top15 = float(
-            np.nanmean(np.clip(_safe_numeric(top_actual15["pred_rank"]) - 15.0, 0.0, None))
+            np.nanmean(np.clip(_safe_numeric(top_actual15["pred_rank_display"]) - 15.0, 0.0, None))
         ) if len(top_actual15) else np.nan
 
         summaries.append({
@@ -271,9 +285,9 @@ def run(start_year: int, end_year: int, top_n: int) -> None:
         })
 
     if summaries:
-        pd.DataFrame(summaries).sort_values("year").to_csv(OUT_DIR / "miss_summary_all_years.csv", index=False)
+        pd.DataFrame(summaries).sort_values("year").to_csv(out_dir / "miss_summary_all_years.csv", index=False)
     if all_slices:
-        pd.concat(all_slices, ignore_index=True).to_csv(OUT_DIR / "miss_slices_all_years.csv", index=False)
+        pd.concat(all_slices, ignore_index=True).to_csv(out_dir / "miss_slices_all_years.csv", index=False)
     if all_frames:
         full = pd.concat(all_frames, ignore_index=True)
         top15 = full[
@@ -285,7 +299,7 @@ def run(start_year: int, end_year: int, top_n: int) -> None:
         top15["abs_rank_error"] = np.abs(_safe_numeric(top15["rank_error"]))
         top15 = top15.sort_values(["season", "abs_rank_error"], ascending=[True, False])
         top15_cols = [c for c in [
-            "season", "player_name", "nba_id", "athlete_id", "pred_rank", "actual_rank",
+            "season", "player_name", "nba_id", "athlete_id", "pred_rank", "pred_rank_nba_only", "actual_rank",
             "rank_error", "actual_target", "ctx_adj_onoff_net", "ctx_vel_net_yoy",
             "ctx_adj_onoff_off", "ctx_adj_onoff_def", "ctx_quality_flag",
             "path_onoff_ast_diff_per100", "path_onoff_reb_diff_per100",
@@ -293,36 +307,39 @@ def run(start_year: int, end_year: int, top_n: int) -> None:
             "path_onoff_tov_diff_per100", "path_onoff_transition_diff_per100",
             "path_onoff_dunk_pressure_diff",
         ] if c in top15.columns]
-        top15[top15_cols].to_csv(OUT_DIR / "top15_regret_2021_2024.csv", index=False)
+        top15[top15_cols].to_csv(out_dir / "top15_regret_2021_2024.csv", index=False)
 
         watch = full.copy()
         watch["player_name_norm"] = watch.get("player_name", "").map(_norm_name)
         keep = {_norm_name(n) for n in WATCHLIST_NAMES}
         watch = watch[watch["player_name_norm"].isin(keep)].copy()
         watch_cols = [c for c in [
-            "season", "player_name", "nba_id", "athlete_id", "pred_rank", "actual_rank",
+            "season", "player_name", "nba_id", "athlete_id", "pred_rank", "pred_rank_nba_only", "actual_rank",
             "rank_error", "actual_target", "ctx_adj_onoff_net", "ctx_vel_net_yoy",
             "college_minutes_total", "college_poss_proxy", "age_at_season", "class_year",
         ] if c in watch.columns]
         watch[watch_cols].sort_values(["season", "player_name"]).to_csv(
-            OUT_DIR / "watchlist_players_miss_context.csv", index=False
+            out_dir / "watchlist_players_miss_context.csv", index=False
         )
 
         y23 = full[full["season"] == 2023].copy()
-        y23 = y23[y23["actual_rank"].notna() & y23["pred_rank"].notna()].copy()
+        pred_col = "pred_rank_display" if "pred_rank_display" in y23.columns else "pred_rank"
+        y23 = y23[y23["actual_rank"].notna() & y23[pred_col].notna()].copy()
         sleepers = y23.sort_values("rank_error", ascending=False).head(5)
         busts = y23.sort_values("rank_error", ascending=True).head(5)
         print("\nTop 5 Sleeper Misses (2023):")
         for _, r in sleepers.iterrows():
+            p = int(r.get("pred_rank_display", r["pred_rank"]))
             print(
-                f"  {r.get('player_name','?')}: pred={int(r['pred_rank'])}, actual={int(r['actual_rank'])}, "
+                f"  {r.get('player_name','?')}: pred={p}, actual={int(r['actual_rank'])}, "
                 f"err={float(r['rank_error']):.1f}, ctx_onoff={r.get('ctx_adj_onoff_net', np.nan)}, "
                 f"ctx_vel={r.get('ctx_vel_net_yoy', np.nan)}"
             )
         print("\nTop 5 Bust Misses (2023):")
         for _, r in busts.iterrows():
+            p = int(r.get("pred_rank_display", r["pred_rank"]))
             print(
-                f"  {r.get('player_name','?')}: pred={int(r['pred_rank'])}, actual={int(r['actual_rank'])}, "
+                f"  {r.get('player_name','?')}: pred={p}, actual={int(r['actual_rank'])}, "
                 f"err={float(r['rank_error']):.1f}, ctx_onoff={r.get('ctx_adj_onoff_net', np.nan)}, "
                 f"ctx_vel={r.get('ctx_vel_net_yoy', np.nan)}"
             )
@@ -333,8 +350,14 @@ def main() -> None:
     parser.add_argument("--start-year", type=int, default=2011)
     parser.add_argument("--end-year", type=int, default=2024)
     parser.add_argument("--top-n", type=int, default=50)
+    parser.add_argument(
+        "--output-subdir",
+        type=str,
+        default=DEFAULT_OUTPUT_SUBDIR,
+        help="Subdir under data/inference and data/audit (e.g. rolling_yearly or other_rolling)",
+    )
     args = parser.parse_args()
-    run(args.start_year, args.end_year, args.top_n)
+    run(args.start_year, args.end_year, args.top_n, args.output_subdir)
 
 
 if __name__ == "__main__":
